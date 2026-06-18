@@ -200,6 +200,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         groups: allowedGroups,
         nodes: _nodes.where((node) => !node.isSelf).toList(),
         selfNode: _selfNode,
+        waypoints: _waypoints,
         selectedGroupIndex: _selectedGroupIndex,
         onGroupSelected: (index) => _selectGroup(index, allowedGroups),
         onSend: (draft) => _sendMeshText(draft, allowedGroups),
@@ -226,6 +227,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         groups: allowedGroups,
         nodes: _nodes.where((node) => !node.isSelf).toList(),
         selfNode: _selfNode,
+        waypoints: _waypoints,
         selectedGroupIndex: _selectedGroupIndex,
         onGroupSelected: (index) => _selectGroup(index, allowedGroups),
         onSend: (draft) => _sendMeshText(draft, allowedGroups),
@@ -2079,6 +2081,7 @@ class MessagesPage extends StatefulWidget {
     required this.groups,
     required this.nodes,
     required this.selfNode,
+    required this.waypoints,
     required this.selectedGroupIndex,
     required this.onGroupSelected,
     required this.onSend,
@@ -2089,6 +2092,7 @@ class MessagesPage extends StatefulWidget {
   final List<CommunicationGroup> groups;
   final List<MeshNode> nodes;
   final MeshNode selfNode;
+  final List<TacticalWaypoint> waypoints;
   final int selectedGroupIndex;
   final ValueChanged<int> onGroupSelected;
   final Future<void> Function(MeshMessageDraft draft) onSend;
@@ -2210,6 +2214,29 @@ class _MessagesPageState extends State<MessagesPage> {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: ReportActionButton(
+                  label: 'CONTACT',
+                  icon: Icons.radar_outlined,
+                  onPressed: _showContactReportSheet,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ReportActionButton(
+                  label: 'MEDEVAC',
+                  icon: Icons.medical_services_outlined,
+                  danger: true,
+                  onPressed: _showMedevacReportSheet,
+                ),
+              ),
+            ],
+          ),
+        ),
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -2257,6 +2284,226 @@ class _MessagesPageState extends State<MessagesPage> {
     final text =
         'NA POZICI | MGRS ${self.mgrs} | LAT ${self.latitude.toStringAsFixed(6)} | LON ${self.longitude.toStringAsFixed(6)}';
     await _sendQuickMessage(text);
+  }
+
+  Future<void> _showContactReportSheet() async {
+    final bearingController = TextEditingController(text: '090');
+    final distanceController = TextEditingController(text: '300');
+    final sizeController = TextEditingController(text: '2-4');
+    final noteController = TextEditingController(text: 'pozorovano, bez palby');
+    var contactType = 'OSOBA';
+    final sent = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: panelGreen,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          return TacticalReportSheet(
+            title: 'CONTACT',
+            icon: Icons.radar_outlined,
+            danger: true,
+            children: [
+              ReportField(controller: bearingController, label: 'Směr'),
+              ReportField(
+                controller: distanceController,
+                label: 'Vzdálenost m',
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: contactType,
+                decoration: const InputDecoration(
+                  labelText: 'Typ kontaktu',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'OSOBA', child: Text('OSOBA')),
+                  DropdownMenuItem(value: 'VOZIDLO', child: Text('VOZIDLO')),
+                  DropdownMenuItem(value: 'DRON', child: Text('DRON')),
+                  DropdownMenuItem(value: 'NEZNÁMÝ', child: Text('NEZNÁMÝ')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setSheetState(() => contactType = value);
+                  }
+                },
+              ),
+              ReportField(controller: sizeController, label: 'Síla / počet'),
+              ReportField(controller: noteController, label: 'Poznámka'),
+            ],
+            onSend: () => Navigator.of(context).pop(true),
+          );
+        },
+      ),
+    );
+    if (sent == true) {
+      final text =
+          'CONTACT | MGRS ${widget.selfNode.mgrs} | DIR ${bearingController.text.trim()} | DIST ${distanceController.text.trim()} m | TYPE $contactType | SIZE ${sizeController.text.trim()} | ${noteController.text.trim()}';
+      await _sendQuickMessage(text, priority: true);
+    }
+    bearingController.dispose();
+    distanceController.dispose();
+    sizeController.dispose();
+    noteController.dispose();
+  }
+
+  Future<void> _showMedevacReportSheet() async {
+    final casualtyController = TextEditingController(text: '1');
+    final noteController = TextEditingController(text: 'nutny odsun');
+    final medevacWaypoint = widget.waypoints.firstWhere(
+      (waypoint) => waypoint.type == TacticalWaypointType.medevac,
+      orElse: () => widget.waypoints.first,
+    );
+    var status = 'URGENT';
+    final sent = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: panelGreen,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          return TacticalReportSheet(
+            title: 'MEDEVAC',
+            icon: Icons.medical_services_outlined,
+            danger: true,
+            children: [
+              _ReportStaticLine(label: 'Bod', value: medevacWaypoint.code),
+              _ReportStaticLine(label: 'MGRS', value: medevacWaypoint.mgrs),
+              ReportField(controller: casualtyController, label: 'Zranění'),
+              DropdownButtonFormField<String>(
+                initialValue: status,
+                decoration: const InputDecoration(
+                  labelText: 'Priorita',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'URGENT', child: Text('URGENT')),
+                  DropdownMenuItem(value: 'PRIORITY', child: Text('PRIORITY')),
+                  DropdownMenuItem(value: 'ROUTINE', child: Text('ROUTINE')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setSheetState(() => status = value);
+                  }
+                },
+              ),
+              ReportField(controller: noteController, label: 'Poznámka'),
+            ],
+            onSend: () => Navigator.of(context).pop(true),
+          );
+        },
+      ),
+    );
+    if (sent == true) {
+      final text =
+          'MEDEVAC | WP ${medevacWaypoint.code} | MGRS ${medevacWaypoint.mgrs} | WIA ${casualtyController.text.trim()} | STATUS $status | ${noteController.text.trim()}';
+      await _sendQuickMessage(text, priority: true);
+    }
+    casualtyController.dispose();
+    noteController.dispose();
+  }
+}
+
+class TacticalReportSheet extends StatelessWidget {
+  const TacticalReportSheet({
+    required this.title,
+    required this.icon,
+    required this.children,
+    required this.onSend,
+    this.danger = false,
+    super.key,
+  });
+
+  final String title;
+  final IconData icon;
+  final List<Widget> children;
+  final VoidCallback onSend;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? dangerRed : sand;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 14,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (final child in children) ...[
+              child,
+              const SizedBox(height: 10),
+            ],
+            FilledButton.icon(
+              onPressed: onSend,
+              style: FilledButton.styleFrom(
+                backgroundColor: danger ? dangerRed : rangerGreen,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: const Icon(Icons.send),
+              label: Text('Odeslat $title'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ReportField extends StatelessWidget {
+  const ReportField({required this.controller, required this.label, super.key});
+
+  final TextEditingController controller;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+    );
+  }
+}
+
+class _ReportStaticLine extends StatelessWidget {
+  const _ReportStaticLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return MonoLine(label: label, value: value, allowWrap: true);
   }
 }
 
@@ -2930,6 +3177,37 @@ class QuickActionButton extends StatelessWidget {
         backgroundColor: color,
         foregroundColor: Colors.white,
         minimumSize: const Size.fromHeight(46),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      icon: Icon(icon, size: 18),
+      label: Text(label, overflow: TextOverflow.ellipsis),
+    );
+  }
+}
+
+class ReportActionButton extends StatelessWidget {
+  const ReportActionButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.danger = false,
+    super.key,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = danger ? dangerRed : tacticalKhaki;
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: color,
+        minimumSize: const Size.fromHeight(44),
+        side: BorderSide(color: color.withValues(alpha: 0.72)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       icon: Icon(icon, size: 18),

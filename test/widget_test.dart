@@ -150,6 +150,55 @@ void main() {
     expect(find.textContaining('33U VR 58009 48063'), findsOneWidget);
   });
 
+  testWidgets('sends structured CONTACT report', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await login(tester);
+
+    await tester.tap(find.text('Zprávy'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('CONTACT'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Odeslat CONTACT'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('CONTACT | MGRS 33U VR 58470 48210'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('DIR 090 | DIST 300 m'), findsOneWidget);
+  });
+
+  testWidgets('sends structured MEDEVAC report', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await login(tester);
+
+    await tester.tap(find.text('Zprávy'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('MEDEVAC'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Odeslat MEDEVAC'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('MEDEVAC | WP MED-POINT'), findsOneWidget);
+    expect(find.textContaining('33U VR 58967 47810'), findsOneWidget);
+  });
+
   testWidgets('commander can access command group', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(430, 932);
