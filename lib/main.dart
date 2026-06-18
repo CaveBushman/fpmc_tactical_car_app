@@ -113,6 +113,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   final List<MeshNode> _nodes = [...MeshNode.demoNodes];
   final List<MeshMessage> _messages = [...MeshMessage.demoMessages];
   final List<CommunicationGroup> _groups = CommunicationGroup.demoGroups;
+  final List<TacticalWaypoint> _waypoints = TacticalWaypoint.demoWaypoints;
 
   @override
   void initState() {
@@ -187,7 +188,12 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     }
 
     final portraitPages = [
-      MapPage(nodes: _nodes, pttActive: _pttActive),
+      MapPage(
+        nodes: _nodes,
+        waypoints: _waypoints,
+        pttActive: _pttActive,
+        onShareWaypoint: (waypoint) => _shareWaypoint(waypoint, allowedGroups),
+      ),
       TeamPage(nodes: _nodes),
       MessagesPage(
         messages: _messages,
@@ -278,8 +284,11 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
                             flex: fullMapMode ? 1 : 7,
                             child: MapPage(
                               nodes: _nodes,
+                              waypoints: _waypoints,
                               pttActive: _pttActive,
                               compact: true,
+                              onShareWaypoint: (waypoint) =>
+                                  _shareWaypoint(waypoint, allowedGroups),
                             ),
                           ),
                           if (!fullMapMode)
@@ -605,6 +614,22 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       }
     });
     unawaited(_persistState());
+  }
+
+  Future<void> _shareWaypoint(
+    TacticalWaypoint waypoint,
+    List<CommunicationGroup> groups,
+  ) async {
+    final text =
+        'WP ${waypoint.code} | ${waypoint.typeLabel} | MGRS ${waypoint.mgrs} | LAT ${waypoint.latitude.toStringAsFixed(6)} | LON ${waypoint.longitude.toStringAsFixed(6)} | ${waypoint.note}';
+    await _sendMeshText(
+      MeshMessageDraft(
+        text: text,
+        groupId: groups[_selectedGroupIndex].id,
+        priority: waypoint.priority,
+      ),
+      groups,
+    );
   }
 
   Future<void> _restorePersistedState() async {
@@ -1196,13 +1221,17 @@ class StatusChip extends StatelessWidget {
 class MapPage extends StatelessWidget {
   const MapPage({
     required this.nodes,
+    required this.waypoints,
     required this.pttActive,
+    required this.onShareWaypoint,
     this.compact = false,
     super.key,
   });
 
   final List<MeshNode> nodes;
+  final List<TacticalWaypoint> waypoints;
   final bool pttActive;
+  final ValueChanged<TacticalWaypoint> onShareWaypoint;
   final bool compact;
 
   @override
@@ -1218,7 +1247,9 @@ class MapPage extends StatelessWidget {
                 clipBehavior: Clip.antiAlias,
                 child: Stack(
                   children: [
-                    Positioned.fill(child: MeshMap(nodes: nodes)),
+                    Positioned.fill(
+                      child: MeshMap(nodes: nodes, waypoints: waypoints),
+                    ),
                     Positioned(
                       left: 12,
                       top: 12,
@@ -1277,6 +1308,15 @@ class MapPage extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 112,
+              child: WaypointStrip(
+                waypoints: waypoints,
+                onShareWaypoint: onShareWaypoint,
+                compact: true,
+              ),
+            ),
           ],
         ),
       );
@@ -1291,7 +1331,9 @@ class MapPage extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: Stack(
               children: [
-                Positioned.fill(child: MeshMap(nodes: nodes)),
+                Positioned.fill(
+                  child: MeshMap(nodes: nodes, waypoints: waypoints),
+                ),
                 Positioned(
                   left: 12,
                   top: 12,
@@ -1333,6 +1375,8 @@ class MapPage extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        WaypointStrip(waypoints: waypoints, onShareWaypoint: onShareWaypoint),
       ],
     );
   }
@@ -1345,9 +1389,10 @@ class MapPage extends StatelessWidget {
 }
 
 class MeshMap extends StatelessWidget {
-  const MeshMap({required this.nodes, super.key});
+  const MeshMap({required this.nodes, required this.waypoints, super.key});
 
   final List<MeshNode> nodes;
+  final List<TacticalWaypoint> waypoints;
 
   @override
   Widget build(BuildContext context) {
@@ -1416,6 +1461,13 @@ class MeshMap extends StatelessWidget {
             ),
             MarkerLayer(
               markers: [
+                for (final waypoint in waypoints)
+                  Marker(
+                    point: waypoint.latLng,
+                    width: 112,
+                    height: 62,
+                    child: WaypointMapMarker(waypoint: waypoint),
+                  ),
                 for (final node in nodes)
                   Marker(
                     point: node.latLng,
@@ -1549,6 +1601,57 @@ class MapNodeMarker extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class WaypointMapMarker extends StatelessWidget {
+  const WaypointMapMarker({required this.waypoint, super.key});
+
+  final TacticalWaypoint waypoint;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = waypoint.priority ? dangerRed : signalAmber;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          height: 24,
+          width: 24,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.78),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: color, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.28),
+                blurRadius: 12,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Icon(waypoint.icon, size: 15, color: color),
+        ),
+        const SizedBox(height: 3),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.78),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: color.withValues(alpha: 0.5)),
+          ),
+          child: Text(
+            waypoint.code,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
               fontSize: 10,
               fontWeight: FontWeight.w900,
             ),
@@ -1750,6 +1853,145 @@ class MapLegend extends StatelessWidget {
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class WaypointStrip extends StatelessWidget {
+  const WaypointStrip({
+    required this.waypoints,
+    required this.onShareWaypoint,
+    this.compact = false,
+    super.key,
+  });
+
+  final List<TacticalWaypoint> waypoints;
+  final ValueChanged<TacticalWaypoint> onShareWaypoint;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (compact) {
+      return ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: waypoints.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) => SizedBox(
+          width: 235,
+          child: WaypointCard(
+            waypoint: waypoints[index],
+            onShare: () => onShareWaypoint(waypoints[index]),
+            compact: true,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Body mise',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        for (final waypoint in waypoints) ...[
+          WaypointCard(
+            waypoint: waypoint,
+            onShare: () => onShareWaypoint(waypoint),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class WaypointCard extends StatelessWidget {
+  const WaypointCard({
+    required this.waypoint,
+    required this.onShare,
+    this.compact = false,
+    super.key,
+  });
+
+  final TacticalWaypoint waypoint;
+  final VoidCallback onShare;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = waypoint.priority ? dangerRed : sand;
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(compact ? 9 : 12),
+        child: Row(
+          children: [
+            Container(
+              height: compact ? 34 : 40,
+              width: compact ? 34 : 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: color.withValues(alpha: 0.38)),
+              ),
+              child: Icon(waypoint.icon, color: color, size: compact ? 18 : 21),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${waypoint.code} | ${waypoint.typeLabel}',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: compact ? 12 : 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    waypoint.mgrs,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: sand,
+                      fontSize: compact ? 11 : 12,
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if (!compact) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      waypoint.note,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.66),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            IconButton.filled(
+              tooltip: 'Sdílet ${waypoint.code}',
+              onPressed: onShare,
+              style: IconButton.styleFrom(
+                backgroundColor: rangerGreen,
+                foregroundColor: Colors.white,
+                fixedSize: Size(compact ? 38 : 42, compact ? 38 : 42),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: const Icon(Icons.send, size: 18),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2944,6 +3186,78 @@ class MeshNode {
     ),
   ];
 }
+
+class TacticalWaypoint {
+  const TacticalWaypoint({
+    required this.code,
+    required this.type,
+    required this.latitude,
+    required this.longitude,
+    required this.mgrs,
+    required this.note,
+    this.priority = false,
+  });
+
+  final String code;
+  final TacticalWaypointType type;
+  final double latitude;
+  final double longitude;
+  final String mgrs;
+  final String note;
+  final bool priority;
+
+  LatLng get latLng => LatLng(latitude, longitude);
+
+  IconData get icon {
+    return switch (type) {
+      TacticalWaypointType.rally => Icons.flag_outlined,
+      TacticalWaypointType.medevac => Icons.medical_services_outlined,
+      TacticalWaypointType.danger => Icons.warning_amber_outlined,
+      TacticalWaypointType.observation => Icons.visibility_outlined,
+      TacticalWaypointType.supply => Icons.inventory_2_outlined,
+    };
+  }
+
+  String get typeLabel {
+    return switch (type) {
+      TacticalWaypointType.rally => 'RALLY',
+      TacticalWaypointType.medevac => 'MEDEVAC',
+      TacticalWaypointType.danger => 'DANGER',
+      TacticalWaypointType.observation => 'OBS',
+      TacticalWaypointType.supply => 'SUPPLY',
+    };
+  }
+
+  static const demoWaypoints = [
+    TacticalWaypoint(
+      code: 'RALLY-1',
+      type: TacticalWaypointType.rally,
+      latitude: 50.086138,
+      longitude: 14.414208,
+      mgrs: '33U VR 58009 48063',
+      note: 'primarni shromazdiste',
+    ),
+    TacticalWaypoint(
+      code: 'MED-POINT',
+      type: TacticalWaypointType.medevac,
+      latitude: 50.083846,
+      longitude: 14.427594,
+      mgrs: '33U VR 58967 47810',
+      note: 'vyzvednuti zranenych',
+      priority: true,
+    ),
+    TacticalWaypoint(
+      code: 'OBS-2',
+      type: TacticalWaypointType.observation,
+      latitude: 50.091922,
+      longitude: 14.432875,
+      mgrs: '33U VR 59347 48708',
+      note: 'pozorovaci bod sever',
+    ),
+  ];
+}
+
+enum TacticalWaypointType { rally, medevac, danger, observation, supply }
 
 class MeshMessage {
   const MeshMessage({
