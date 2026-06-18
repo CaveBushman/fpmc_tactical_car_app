@@ -194,7 +194,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         pttActive: _pttActive,
         onShareWaypoint: (waypoint) => _shareWaypoint(waypoint, allowedGroups),
       ),
-      TeamPage(nodes: _nodes),
+      TeamPage(
+        nodes: _nodes,
+        onCheckIn: (node) => _sendCheckIn(node, allowedGroups),
+      ),
       MessagesPage(
         messages: _messages,
         groups: allowedGroups,
@@ -221,7 +224,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
 
     final landscapePages = [
       const SizedBox.shrink(),
-      TeamPage(nodes: _nodes),
+      TeamPage(
+        nodes: _nodes,
+        onCheckIn: (node) => _sendCheckIn(node, allowedGroups),
+      ),
       MessagesPage(
         messages: _messages,
         groups: allowedGroups,
@@ -629,6 +635,23 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         text: text,
         groupId: groups[_selectedGroupIndex].id,
         priority: waypoint.priority,
+      ),
+      groups,
+    );
+  }
+
+  Future<void> _sendCheckIn(
+    MeshNode node,
+    List<CommunicationGroup> groups,
+  ) async {
+    final text =
+        'CHECK-IN | ${node.callSign} | LAST ${node.lastSeenMinutes} min | MGRS ${node.mgrs} | STATUS ${node.linkStatus.label}';
+    await _sendMeshText(
+      MeshMessageDraft(
+        text: text,
+        groupId: groups[_selectedGroupIndex].id,
+        directNode: node,
+        priority: node.linkStatus != MeshNodeLinkStatus.ok,
       ),
       groups,
     );
@@ -1239,6 +1262,7 @@ class MapPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final self = nodes.firstWhere((node) => node.isSelf);
+    final health = NodeHealthSummary.fromNodes(nodes);
     if (compact) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 8, 12),
@@ -1273,8 +1297,8 @@ class MapPage extends StatelessWidget {
                 children: [
                   Expanded(
                     child: MetricTile(
-                      label: 'Uzly',
-                      value: '${nodes.length}',
+                      label: 'OK',
+                      value: '${health.ok}',
                       icon: Icons.hub_outlined,
                       compact: true,
                     ),
@@ -1291,19 +1315,18 @@ class MapPage extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: MetricTile(
-                      label: 'Nejbližší',
-                      value:
-                          '${_nearest(nodes).distanceKm.toStringAsFixed(1)} km',
-                      icon: Icons.near_me_outlined,
+                      label: 'STALE',
+                      value: '${health.stale}',
+                      icon: Icons.schedule_outlined,
                       compact: true,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: MetricTile(
-                      label: 'Fallback',
-                      value: 'LoRa',
-                      icon: Icons.sms_outlined,
+                      label: 'LOST',
+                      value: '${health.lost}',
+                      icon: Icons.signal_wifi_connected_no_internet_4_outlined,
                       compact: true,
                     ),
                   ),
@@ -1360,20 +1383,24 @@ class MapPage extends StatelessWidget {
           childAspectRatio: 2.7,
           children: [
             MetricTile(
-              label: 'Aktivní uzly',
-              value: '${nodes.length}',
+              label: 'OK uzly',
+              value: '${health.ok}/${nodes.length}',
               icon: Icons.hub_outlined,
             ),
-            const MetricTile(label: 'Kanál', value: 'ALPHA', icon: Icons.radio),
+            MetricTile(
+              label: 'Stale',
+              value: '${health.stale}',
+              icon: Icons.schedule_outlined,
+            ),
+            MetricTile(
+              label: 'Lost',
+              value: '${health.lost}',
+              icon: Icons.signal_wifi_connected_no_internet_4_outlined,
+            ),
             MetricTile(
               label: 'Nejbližší',
               value: '${_nearest(nodes).distanceKm.toStringAsFixed(1)} km',
               icon: Icons.near_me_outlined,
-            ),
-            const MetricTile(
-              label: 'Fallback',
-              value: 'LoRa text',
-              icon: Icons.sms_outlined,
             ),
           ],
         ),
@@ -1567,7 +1594,7 @@ class MapNodeMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = node.isSelf ? tacticalKhaki : blueForce;
+    final color = node.isSelf ? tacticalKhaki : node.linkStatus.color;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1598,18 +1625,106 @@ class MapNodeMarker extends StatelessWidget {
             borderRadius: BorderRadius.circular(4),
             border: Border.all(color: color.withValues(alpha: 0.42)),
           ),
-          child: Text(
-            node.callSign,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w900,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                node.callSign,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              if (!node.isSelf)
+                Text(
+                  node.linkStatus.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+            ],
           ),
         ),
       ],
     );
+  }
+}
+
+class NodeStatusBadge extends StatelessWidget {
+  const NodeStatusBadge({required this.status, super.key});
+
+  final MeshNodeLinkStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+      decoration: BoxDecoration(
+        color: status.color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: status.color.withValues(alpha: 0.38)),
+      ),
+      child: Text(
+        status.label,
+        style: TextStyle(
+          color: status.color,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class NodeHealthSummary {
+  const NodeHealthSummary({
+    required this.ok,
+    required this.stale,
+    required this.lost,
+  });
+
+  final int ok;
+  final int stale;
+  final int lost;
+
+  static NodeHealthSummary fromNodes(List<MeshNode> nodes) {
+    var ok = 0;
+    var stale = 0;
+    var lost = 0;
+    for (final node in nodes) {
+      switch (node.linkStatus) {
+        case MeshNodeLinkStatus.ok:
+          ok++;
+        case MeshNodeLinkStatus.stale:
+          stale++;
+        case MeshNodeLinkStatus.lost:
+          lost++;
+      }
+    }
+    return NodeHealthSummary(ok: ok, stale: stale, lost: lost);
+  }
+}
+
+extension MeshNodeLinkStatusStyle on MeshNodeLinkStatus {
+  String get label {
+    return switch (this) {
+      MeshNodeLinkStatus.ok => 'OK',
+      MeshNodeLinkStatus.stale => 'STALE',
+      MeshNodeLinkStatus.lost => 'LOST',
+    };
+  }
+
+  Color get color {
+    return switch (this) {
+      MeshNodeLinkStatus.ok => blueForce,
+      MeshNodeLinkStatus.stale => signalAmber,
+      MeshNodeLinkStatus.lost => dangerRed,
+    };
   }
 }
 
@@ -2000,9 +2115,10 @@ class WaypointCard extends StatelessWidget {
 }
 
 class TeamPage extends StatelessWidget {
-  const TeamPage({required this.nodes, super.key});
+  const TeamPage({required this.nodes, required this.onCheckIn, super.key});
 
   final List<MeshNode> nodes;
+  final ValueChanged<MeshNode> onCheckIn;
 
   @override
   Widget build(BuildContext context) {
@@ -2010,25 +2126,30 @@ class TeamPage extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       itemCount: nodes.length,
       separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => NodeCard(node: nodes[index]),
+      itemBuilder: (context, index) => NodeCard(
+        node: nodes[index],
+        onCheckIn: nodes[index].isSelf ? null : () => onCheckIn(nodes[index]),
+      ),
     );
   }
 }
 
 class NodeCard extends StatelessWidget {
-  const NodeCard({required this.node, super.key});
+  const NodeCard({required this.node, this.onCheckIn, super.key});
 
   final MeshNode node;
+  final VoidCallback? onCheckIn;
 
   @override
   Widget build(BuildContext context) {
+    final status = node.linkStatus;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: node.isSelf ? signalAmber : blueForce,
+              backgroundColor: node.isSelf ? signalAmber : status.color,
               foregroundColor: Colors.black,
               child: Text(
                 node.callSign.characters.first,
@@ -2067,7 +2188,30 @@ class NodeCard extends StatelessWidget {
                 ],
               ),
             ),
-            BatteryBadge(percent: node.batteryPercent),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                NodeStatusBadge(status: status),
+                const SizedBox(height: 6),
+                BatteryBadge(percent: node.batteryPercent),
+                if (onCheckIn != null) ...[
+                  const SizedBox(height: 6),
+                  IconButton.filledTonal(
+                    tooltip: 'CHECK-IN ${node.callSign}',
+                    onPressed: onCheckIn,
+                    style: IconButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: status.color.withValues(alpha: 0.28),
+                      fixedSize: const Size(38, 34),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.mark_chat_unread_outlined, size: 18),
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
@@ -3340,6 +3484,16 @@ class MeshNode {
 
   LatLng get latLng => LatLng(latitude, longitude);
 
+  MeshNodeLinkStatus get linkStatus {
+    if (isSelf || lastSeenMinutes <= 5) {
+      return MeshNodeLinkStatus.ok;
+    }
+    if (lastSeenMinutes <= 15) {
+      return MeshNodeLinkStatus.stale;
+    }
+    return MeshNodeLinkStatus.lost;
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'nodeNum': nodeNum,
@@ -3444,7 +3598,7 @@ class MeshNode {
       altitudeM: 219,
       mgrs: '33U VR 59728 47517',
       batteryPercent: 61,
-      lastSeenMinutes: 3,
+      lastSeenMinutes: 7,
       distanceKm: 1.5,
       bearingDeg: 119,
       mapOffset: Offset(0.47, 0.34),
@@ -3457,13 +3611,15 @@ class MeshNode {
       altitudeM: 236,
       mgrs: '33U VR 57821 47302',
       batteryPercent: 22,
-      lastSeenMinutes: 8,
+      lastSeenMinutes: 18,
       distanceKm: 1.1,
       bearingDeg: 221,
       mapOffset: Offset(-0.26, 0.41),
     ),
   ];
 }
+
+enum MeshNodeLinkStatus { ok, stale, lost }
 
 class TacticalWaypoint {
   const TacticalWaypoint({

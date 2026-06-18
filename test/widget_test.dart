@@ -150,6 +150,33 @@ void main() {
     expect(find.textContaining('33U VR 58009 48063'), findsOneWidget);
   });
 
+  testWidgets('highlights stale/lost nodes and sends check-in', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await login(tester);
+
+    await tester.tap(find.text('Tým'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('STALE'), findsOneWidget);
+    expect(find.text('LOST'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('CHECK-IN MED-4'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Zprávy'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('CHECK-IN | MED-4'), findsOneWidget);
+    expect(find.textContaining('STATUS LOST'), findsOneWidget);
+    expect(find.textContaining('DM MED-4'), findsOneWidget);
+  });
+
   testWidgets('sends structured CONTACT report', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(430, 932);
