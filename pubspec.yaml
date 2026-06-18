@@ -40,6 +40,7 @@ dependencies:
   flutter_map: ^8.3.0
   latlong2: ^0.9.1
   mgrs_dart: ^3.0.0
+  shared_preferences: ^2.5.5
 dev_dependencies:
   flutter_test:
     sdk: flutter

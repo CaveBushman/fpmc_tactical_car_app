@@ -13,6 +13,7 @@ import 'services/meshtastic_packet_decoder.dart';
 import 'services/meshtastic_message_encoder.dart';
 import 'services/meshtastic_ble_service.dart';
 import 'services/ptt_access_service.dart';
+import 'services/tactical_state_store.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -87,6 +88,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   late final MeshtasticMessageEncoder _messageEncoder;
   late final MeshPacketRepository _meshPacketRepository;
   late final EncryptedPttService _pttService;
+  late final TacticalStateStore _stateStore;
   StreamSubscription<MeshtasticBleState>? _bleStateSubscription;
   StreamSubscription<MeshtasticBlePacket>? _blePacketSubscription;
   StreamSubscription<MeshPacketDiagnostics>? _packetDiagnosticsSubscription;
@@ -121,6 +123,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     _messageEncoder = const MeshtasticMessageEncoder();
     _meshPacketRepository = MeshPacketRepository();
     _pttService = EncryptedPttService(channel: 'ALPHA');
+    _stateStore = const TacticalStateStore();
+    unawaited(_restorePersistedState());
     _bleStateSubscription = _meshtasticBleService.stateStream.listen((state) {
       if (!mounted) {
         return;
@@ -411,26 +415,30 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       return;
     }
 
+    var changed = false;
     setState(() {
       for (final event in events) {
         switch (event.type) {
           case DecodedMeshEventType.nodeInfo:
           case DecodedMeshEventType.position:
-            _upsertMeshNode(event);
+            changed = _upsertMeshNode(event) || changed;
           case DecodedMeshEventType.textMessage:
-            _appendIncomingMeshMessage(event);
+            changed = _appendIncomingMeshMessage(event) || changed;
           case DecodedMeshEventType.encrypted:
           case DecodedMeshEventType.unknown:
             break;
         }
       }
     });
+    if (changed) {
+      unawaited(_persistState());
+    }
   }
 
-  void _upsertMeshNode(DecodedMeshEvent event) {
+  bool _upsertMeshNode(DecodedMeshEvent event) {
     final nodeNum = event.nodeNum ?? event.from;
     if (nodeNum == null || nodeNum == _selfNode.nodeNum) {
-      return;
+      return false;
     }
 
     final existingIndex = _nodes.indexWhere((node) => node.nodeNum == nodeNum);
@@ -438,7 +446,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     final latitude = event.latitude ?? existing?.latitude;
     final longitude = event.longitude ?? existing?.longitude;
     if (latitude == null || longitude == null) {
-      return;
+      return false;
     }
 
     final callSign = event.shortName?.trim().isNotEmpty == true
@@ -463,6 +471,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         batteryPercent: existing!.batteryPercent,
       );
     }
+    return true;
   }
 
   MeshNode _buildNodeTelemetry({
@@ -504,10 +513,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     );
   }
 
-  void _appendIncomingMeshMessage(DecodedMeshEvent event) {
+  bool _appendIncomingMeshMessage(DecodedMeshEvent event) {
     final text = event.text?.trim();
     if (text == null || text.isEmpty) {
-      return;
+      return false;
     }
 
     final group = _groups.firstWhere(
@@ -528,6 +537,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         targetLabel: target,
       ),
     );
+    return true;
   }
 
   Future<void> _sendMeshText(
@@ -562,6 +572,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     setState(() {
       _messages.insert(0, outgoingMessage);
     });
+    unawaited(_persistState());
 
     try {
       await _meshtasticBleService.writeToRadio(bytes);
@@ -593,6 +604,49 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         );
       }
     });
+    unawaited(_persistState());
+  }
+
+  Future<void> _restorePersistedState() async {
+    try {
+      final snapshot = await _stateStore.load();
+      if (!mounted || snapshot == null) {
+        return;
+      }
+
+      final restoredNodes = snapshot.nodes
+          .map(MeshNode.fromJson)
+          .where((node) => node.isSelf || node.nodeNum != _selfNode.nodeNum)
+          .toList();
+      final restoredMessages = snapshot.messages
+          .map(MeshMessage.fromJson)
+          .toList();
+      if (restoredNodes.isEmpty && restoredMessages.isEmpty) {
+        return;
+      }
+
+      setState(() {
+        if (restoredNodes.any((node) => node.isSelf)) {
+          _nodes
+            ..clear()
+            ..addAll(restoredNodes);
+        }
+        if (restoredMessages.isNotEmpty) {
+          _messages
+            ..clear()
+            ..addAll(restoredMessages);
+        }
+      });
+    } catch (_) {
+      // Ignore corrupt or incompatible local state and keep demo defaults.
+    }
+  }
+
+  Future<void> _persistState() async {
+    await _stateStore.save(
+      nodes: [for (final node in _nodes) node.toJson()],
+      messages: [for (final message in _messages.take(150)) message.toJson()],
+    );
   }
 
   String _clockLabel(DateTime value) {
@@ -2766,6 +2820,44 @@ class MeshNode {
 
   LatLng get latLng => LatLng(latitude, longitude);
 
+  Map<String, dynamic> toJson() {
+    return {
+      'nodeNum': nodeNum,
+      'callSign': callSign,
+      'latitude': latitude,
+      'longitude': longitude,
+      'altitudeM': altitudeM,
+      'mgrs': mgrs,
+      'batteryPercent': batteryPercent,
+      'lastSeenMinutes': lastSeenMinutes,
+      'distanceKm': distanceKm,
+      'bearingDeg': bearingDeg,
+      'mapOffsetX': mapOffset.dx,
+      'mapOffsetY': mapOffset.dy,
+      'isSelf': isSelf,
+    };
+  }
+
+  static MeshNode fromJson(Map<String, dynamic> json) {
+    return MeshNode(
+      nodeNum: (json['nodeNum'] as num).toInt(),
+      callSign: json['callSign']?.toString() ?? 'UNKNOWN',
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+      altitudeM: (json['altitudeM'] as num?)?.toInt() ?? 0,
+      mgrs: json['mgrs']?.toString() ?? '',
+      batteryPercent: (json['batteryPercent'] as num?)?.toInt() ?? 100,
+      lastSeenMinutes: (json['lastSeenMinutes'] as num?)?.toInt() ?? 0,
+      distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+      bearingDeg: (json['bearingDeg'] as num?)?.toDouble() ?? 0,
+      mapOffset: Offset(
+        (json['mapOffsetX'] as num?)?.toDouble() ?? 0,
+        (json['mapOffsetY'] as num?)?.toDouble() ?? 0,
+      ),
+      isSelf: json['isSelf'] == true,
+    );
+  }
+
   MeshNode copyWith({
     int? nodeNum,
     String? callSign,
@@ -2873,6 +2965,32 @@ class MeshMessage {
   final bool pending;
   final bool priority;
   final bool internetVoice;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'sender': sender,
+      'body': body,
+      'time': time,
+      'groupId': groupId,
+      'targetLabel': targetLabel,
+      'pending': pending,
+      'priority': priority,
+      'internetVoice': internetVoice,
+    };
+  }
+
+  static MeshMessage fromJson(Map<String, dynamic> json) {
+    return MeshMessage(
+      sender: json['sender']?.toString() ?? 'UNKNOWN',
+      body: json['body']?.toString() ?? '',
+      time: json['time']?.toString() ?? '--:--',
+      groupId: json['groupId']?.toString() ?? 'alpha',
+      targetLabel: json['targetLabel']?.toString(),
+      pending: json['pending'] == true,
+      priority: json['priority'] == true,
+      internetVoice: json['internetVoice'] == true,
+    );
+  }
 
   static const demoMessages = [
     MeshMessage(
