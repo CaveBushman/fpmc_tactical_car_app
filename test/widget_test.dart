@@ -226,6 +226,32 @@ void main() {
     expect(find.textContaining('33U VR 58967 47810'), findsOneWidget);
   });
 
+  testWidgets('sends structured SITREP report', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await login(tester);
+
+    await tester.tap(find.text('Zprávy'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('SITREP'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Odeslat SITREP'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('SITREP | MGRS 33U VR 58470 48210'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('TEAM GREEN | BAT 88%'), findsOneWidget);
+  });
+
   testWidgets('commander can access command group', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(430, 932);

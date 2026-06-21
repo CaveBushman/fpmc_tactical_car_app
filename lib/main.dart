@@ -2381,6 +2381,14 @@ class _MessagesPageState extends State<MessagesPage> {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: ReportActionButton(
+            label: 'SITREP',
+            icon: Icons.assignment_turned_in_outlined,
+            onPressed: _showSitrepReportSheet,
+          ),
+        ),
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -2547,6 +2555,66 @@ class _MessagesPageState extends State<MessagesPage> {
       await _sendQuickMessage(text, priority: true);
     }
     casualtyController.dispose();
+    noteController.dispose();
+  }
+
+  Future<void> _showSitrepReportSheet() async {
+    final batteryController = TextEditingController(
+      text: '${widget.selfNode.batteryPercent}%',
+    );
+    final ammoController = TextEditingController(text: 'OK');
+    final fuelController = TextEditingController(text: 'OK');
+    final noteController = TextEditingController(text: 'bez zmen');
+    var teamStatus = 'GREEN';
+    final sent = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: panelGreen,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          return TacticalReportSheet(
+            title: 'SITREP',
+            icon: Icons.assignment_turned_in_outlined,
+            children: [
+              _ReportStaticLine(label: 'MGRS', value: widget.selfNode.mgrs),
+              DropdownButtonFormField<String>(
+                initialValue: teamStatus,
+                decoration: const InputDecoration(
+                  labelText: 'Stav týmu',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'GREEN', child: Text('GREEN')),
+                  DropdownMenuItem(value: 'AMBER', child: Text('AMBER')),
+                  DropdownMenuItem(value: 'RED', child: Text('RED')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setSheetState(() => teamStatus = value);
+                  }
+                },
+              ),
+              ReportField(controller: batteryController, label: 'Baterie'),
+              ReportField(controller: ammoController, label: 'Munice'),
+              ReportField(controller: fuelController, label: 'Palivo'),
+              ReportField(controller: noteController, label: 'Poznámka'),
+            ],
+            onSend: () => Navigator.of(context).pop(true),
+          );
+        },
+      ),
+    );
+    if (sent == true) {
+      final text =
+          'SITREP | MGRS ${widget.selfNode.mgrs} | TEAM $teamStatus | BAT ${batteryController.text.trim()} | AMMO ${ammoController.text.trim()} | FUEL ${fuelController.text.trim()} | ${noteController.text.trim()}';
+      await _sendQuickMessage(text, priority: teamStatus != 'GREEN');
+    }
+    batteryController.dispose();
+    ammoController.dispose();
+    fuelController.dispose();
     noteController.dispose();
   }
 }
