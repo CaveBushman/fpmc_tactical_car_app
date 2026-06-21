@@ -1263,6 +1263,11 @@ class MapPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final self = nodes.firstWhere((node) => node.isSelf);
     final health = NodeHealthSummary.fromNodes(nodes);
+    final navSolutions = TacticalNavSolution.fromMission(
+      self: self,
+      nodes: nodes,
+      waypoints: waypoints,
+    );
     if (compact) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 8, 12),
@@ -1285,6 +1290,11 @@ class MapPage extends StatelessWidget {
                       right: 12,
                       bottom: 12,
                       child: MapLegend(pttActive: pttActive),
+                    ),
+                    Positioned(
+                      right: 12,
+                      top: 52,
+                      child: NavigationCueBadge(solution: navSolutions.first),
                     ),
                   ],
                 ),
@@ -1403,6 +1413,11 @@ class MapPage extends StatelessWidget {
               icon: Icons.near_me_outlined,
             ),
           ],
+        ),
+        const SizedBox(height: 10),
+        NavigationTargetStrip(
+          solutions: navSolutions,
+          onShareWaypoint: onShareWaypoint,
         ),
         const SizedBox(height: 10),
         WaypointStrip(waypoints: waypoints, onShareWaypoint: onShareWaypoint),
@@ -1975,6 +1990,265 @@ class MapLegend extends StatelessWidget {
   }
 }
 
+class NavigationTargetStrip extends StatelessWidget {
+  const NavigationTargetStrip({
+    required this.solutions,
+    this.onShareWaypoint,
+    this.compact = false,
+    super.key,
+  });
+
+  final List<TacticalNavSolution> solutions;
+  final ValueChanged<TacticalWaypoint>? onShareWaypoint;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleSolutions = solutions.take(compact ? 4 : 5).toList();
+    if (compact) {
+      return ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: visibleSolutions.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) => SizedBox(
+          width: 245,
+          child: NavigationTargetCard(
+            solution: visibleSolutions[index],
+            onShareWaypoint: onShareWaypoint,
+            compact: true,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Navigace',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 136,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: visibleSolutions.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemBuilder: (context, index) => SizedBox(
+              width: 260,
+              child: NavigationTargetCard(
+                solution: visibleSolutions[index],
+                onShareWaypoint: onShareWaypoint,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class NavigationCueBadge extends StatelessWidget {
+  const NavigationCueBadge({required this.solution, super.key});
+
+  final TacticalNavSolution solution;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = solution.priority ? dangerRed : solution.kind.color;
+    return Container(
+      width: 160,
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.76),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.42)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.near_me_outlined, size: 15, color: color),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  solution.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'AZ ${solution.bearingDeg.toStringAsFixed(0)}° | ${solution.distanceKm.toStringAsFixed(1)} km',
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class NavigationTargetCard extends StatelessWidget {
+  const NavigationTargetCard({
+    required this.solution,
+    this.onShareWaypoint,
+    this.compact = false,
+    super.key,
+  });
+
+  final TacticalNavSolution solution;
+  final ValueChanged<TacticalWaypoint>? onShareWaypoint;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = solution.priority ? dangerRed : solution.kind.color;
+    final waypoint = solution.waypoint;
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(compact ? 9 : 11),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  height: compact ? 30 : 34,
+                  width: compact ? 30 : 34,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: color.withValues(alpha: 0.4)),
+                  ),
+                  child: Icon(solution.icon, color: color, size: 18),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${solution.label} | ${solution.kind.label}',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: compact ? 12 : 13,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        solution.mgrs,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: sand,
+                          fontSize: compact ? 10 : 11,
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (waypoint != null && onShareWaypoint != null) ...[
+                  const SizedBox(width: 6),
+                  IconButton.filledTonal(
+                    key: ValueKey('share-nav-${waypoint.code}'),
+                    tooltip: 'Sdílet ${waypoint.code}',
+                    onPressed: () => onShareWaypoint!(waypoint),
+                    style: IconButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: rangerGreen.withValues(alpha: 0.68),
+                      fixedSize: Size(compact ? 32 : 34, compact ? 32 : 34),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                    ),
+                    icon: const Icon(Icons.send, size: 16),
+                  ),
+                ],
+              ],
+            ),
+            SizedBox(height: compact ? 7 : 9),
+            Row(
+              children: [
+                Expanded(
+                  child: _NavMetric(
+                    label: 'AZ',
+                    value: '${solution.bearingDeg.toStringAsFixed(0)}°',
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _NavMetric(
+                    label: 'DIST',
+                    value: '${solution.distanceKm.toStringAsFixed(1)} km',
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _NavMetric(label: 'ETA', value: solution.etaLabel),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavMetric extends StatelessWidget {
+  const _NavMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.54),
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          Text(
+            value,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class WaypointStrip extends StatelessWidget {
   const WaypointStrip({
     required this.waypoints,
@@ -2095,6 +2369,7 @@ class WaypointCard extends StatelessWidget {
               ),
             ),
             IconButton.filled(
+              key: ValueKey('share-waypoint-${waypoint.code}'),
               tooltip: 'Sdílet ${waypoint.code}',
               onPressed: onShare,
               style: IconButton.styleFrom(
@@ -3689,6 +3964,127 @@ class MeshNode {
 
 enum MeshNodeLinkStatus { ok, stale, lost }
 
+enum TacticalNavTargetKind { team, rally, medevac, danger, observation, supply }
+
+extension TacticalNavTargetKindStyle on TacticalNavTargetKind {
+  String get label {
+    return switch (this) {
+      TacticalNavTargetKind.team => 'TEAM',
+      TacticalNavTargetKind.rally => 'RALLY',
+      TacticalNavTargetKind.medevac => 'MEDEVAC',
+      TacticalNavTargetKind.danger => 'DANGER',
+      TacticalNavTargetKind.observation => 'OBS',
+      TacticalNavTargetKind.supply => 'SUPPLY',
+    };
+  }
+
+  Color get color {
+    return switch (this) {
+      TacticalNavTargetKind.team => blueForce,
+      TacticalNavTargetKind.rally => sand,
+      TacticalNavTargetKind.medevac => dangerRed,
+      TacticalNavTargetKind.danger => dangerRed,
+      TacticalNavTargetKind.observation => signalAmber,
+      TacticalNavTargetKind.supply => tacticalKhaki,
+    };
+  }
+}
+
+class TacticalNavSolution {
+  const TacticalNavSolution({
+    required this.label,
+    required this.kind,
+    required this.icon,
+    required this.mgrs,
+    required this.distanceKm,
+    required this.bearingDeg,
+    this.waypoint,
+    this.priority = false,
+  });
+
+  final String label;
+  final TacticalNavTargetKind kind;
+  final IconData icon;
+  final String mgrs;
+  final double distanceKm;
+  final double bearingDeg;
+  final TacticalWaypoint? waypoint;
+  final bool priority;
+
+  String get etaLabel {
+    final minutes = (distanceKm / 5.0 * 60).round().clamp(1, 999);
+    return '${minutes}m';
+  }
+
+  static List<TacticalNavSolution> fromMission({
+    required MeshNode self,
+    required List<MeshNode> nodes,
+    required List<TacticalWaypoint> waypoints,
+  }) {
+    final solutions = [
+      for (final node in nodes.where((node) => !node.isSelf))
+        TacticalNavSolution(
+          label: node.callSign,
+          kind: TacticalNavTargetKind.team,
+          icon: Icons.person_pin_circle_outlined,
+          mgrs: node.mgrs,
+          distanceKm: _distanceKm(self.latLng, node.latLng),
+          bearingDeg: _bearingDeg(self.latLng, node.latLng),
+          priority: node.linkStatus != MeshNodeLinkStatus.ok,
+        ),
+      for (final waypoint in waypoints)
+        TacticalNavSolution(
+          label: waypoint.code,
+          kind: waypoint.navKind,
+          icon: waypoint.icon,
+          mgrs: waypoint.mgrs,
+          distanceKm: _distanceKm(self.latLng, waypoint.latLng),
+          bearingDeg: _bearingDeg(self.latLng, waypoint.latLng),
+          waypoint: waypoint,
+          priority: waypoint.priority,
+        ),
+    ];
+    solutions.sort((a, b) {
+      if (a.priority != b.priority) {
+        return a.priority ? -1 : 1;
+      }
+      return a.distanceKm.compareTo(b.distanceKm);
+    });
+    return solutions;
+  }
+
+  static double _distanceKm(LatLng from, LatLng to) {
+    const earthRadiusKm = 6371.0088;
+    final lat1 = _degToRad(from.latitude);
+    final lat2 = _degToRad(to.latitude);
+    final deltaLat = _degToRad(to.latitude - from.latitude);
+    final deltaLon = _degToRad(to.longitude - from.longitude);
+    final a =
+        math.sin(deltaLat / 2) * math.sin(deltaLat / 2) +
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(deltaLon / 2) *
+            math.sin(deltaLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadiusKm * c;
+  }
+
+  static double _bearingDeg(LatLng from, LatLng to) {
+    final lat1 = _degToRad(from.latitude);
+    final lat2 = _degToRad(to.latitude);
+    final deltaLon = _degToRad(to.longitude - from.longitude);
+    final y = math.sin(deltaLon) * math.cos(lat2);
+    final x =
+        math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(deltaLon);
+    return (_radToDeg(math.atan2(y, x)) + 360) % 360;
+  }
+
+  static double _degToRad(double degrees) => degrees * math.pi / 180;
+
+  static double _radToDeg(double radians) => radians * 180 / math.pi;
+}
+
 class TacticalWaypoint {
   const TacticalWaypoint({
     required this.code,
@@ -3727,6 +4123,16 @@ class TacticalWaypoint {
       TacticalWaypointType.danger => 'DANGER',
       TacticalWaypointType.observation => 'OBS',
       TacticalWaypointType.supply => 'SUPPLY',
+    };
+  }
+
+  TacticalNavTargetKind get navKind {
+    return switch (type) {
+      TacticalWaypointType.rally => TacticalNavTargetKind.rally,
+      TacticalWaypointType.medevac => TacticalNavTargetKind.medevac,
+      TacticalWaypointType.danger => TacticalNavTargetKind.danger,
+      TacticalWaypointType.observation => TacticalNavTargetKind.observation,
+      TacticalWaypointType.supply => TacticalNavTargetKind.supply,
     };
   }
 

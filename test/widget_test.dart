@@ -137,17 +137,49 @@ void main() {
 
     await login(tester);
 
-    await tester.drag(find.byType(ListView).first, const Offset(0, -520));
+    await tester.scrollUntilVisible(
+      find.text('Navigace'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Sdílet RALLY-1'));
+    final medPointShareButton = find.byKey(
+      const ValueKey('share-nav-MED-POINT'),
+    );
+
+    await tester.tap(medPointShareButton);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Zprávy'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('WP RALLY-1 | RALLY'), findsOneWidget);
-    expect(find.textContaining('33U VR 58009 48063'), findsOneWidget);
+    expect(find.textContaining('WP MED-POINT | MEDEVAC'), findsOneWidget);
+    expect(find.textContaining('33U VR 58967 47810'), findsOneWidget);
+  });
+
+  testWidgets('shows tactical navigation cards on map', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await login(tester);
+
+    await tester.scrollUntilVisible(
+      find.text('Navigace'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Navigace'), findsOneWidget);
+    expect(find.textContaining('MED-POINT | MEDEVAC'), findsWidgets);
+    expect(find.text('AZ'), findsWidgets);
+    expect(find.text('DIST'), findsWidgets);
+    expect(find.text('ETA'), findsWidgets);
   });
 
   testWidgets('highlights stale/lost nodes and sends check-in', (tester) async {
