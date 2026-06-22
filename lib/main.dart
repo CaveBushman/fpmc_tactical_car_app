@@ -2389,21 +2389,149 @@ class WaypointCard extends StatelessWidget {
   }
 }
 
-class TeamPage extends StatelessWidget {
+class TeamPage extends StatefulWidget {
   const TeamPage({required this.nodes, required this.onCheckIn, super.key});
 
   final List<MeshNode> nodes;
   final ValueChanged<MeshNode> onCheckIn;
 
   @override
+  State<TeamPage> createState() => _TeamPageState();
+}
+
+class _TeamPageState extends State<TeamPage> {
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      itemCount: nodes.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => NodeCard(
-        node: nodes[index],
-        onCheckIn: nodes[index].isSelf ? null : () => onCheckIn(nodes[index]),
+    final query = _searchController.text;
+    final filteredNodes = widget.nodes
+        .where((node) => node.matchesSearch(query))
+        .toList();
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: TacticalSearchField(
+            controller: _searchController,
+            label: 'Vyhledat uživatele',
+            hint: 'Callsign, MGRS, node ID, stav',
+          ),
+        ),
+        Expanded(
+          child: filteredNodes.isEmpty
+              ? EmptySearchState(query: query)
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  itemCount: filteredNodes.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final node = filteredNodes[index];
+                    return NodeCard(
+                      node: node,
+                      onCheckIn: node.isSelf
+                          ? null
+                          : () => widget.onCheckIn(node),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class TacticalSearchField extends StatelessWidget {
+  const TacticalSearchField({
+    required this.controller,
+    required this.label,
+    required this.hint,
+    super.key,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        return TextField(
+          controller: controller,
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: label,
+            hintText: hint,
+            prefixIcon: const Icon(Icons.manage_search, color: sand),
+            suffixIcon: value.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: 'Vymazat hledání',
+                    onPressed: controller.clear,
+                    icon: const Icon(Icons.close),
+                  ),
+            border: const OutlineInputBorder(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class EmptySearchState extends StatelessWidget {
+  const EmptySearchState({required this.query, super.key});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.person_search_outlined,
+              color: sand.withValues(alpha: 0.75),
+              size: 38,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Nenalezen žádný uživatel',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.82),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              query,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: sand,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2522,13 +2650,25 @@ class MessagesPage extends StatefulWidget {
 
 class _MessagesPageState extends State<MessagesPage> {
   final TextEditingController _textController = TextEditingController();
+  final TextEditingController _nodeSearchController = TextEditingController();
   bool _directMode = false;
   int _selectedNodeIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _nodeSearchController.addListener(() {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _selectedNodeIndex = 0);
+    });
+  }
+
+  @override
   void didUpdateWidget(covariant MessagesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_selectedNodeIndex >= widget.nodes.length) {
+    if (_selectedNodeIndex >= _filteredDirectNodes.length) {
       _selectedNodeIndex = 0;
     }
   }
@@ -2536,7 +2676,14 @@ class _MessagesPageState extends State<MessagesPage> {
   @override
   void dispose() {
     _textController.dispose();
+    _nodeSearchController.dispose();
     super.dispose();
+  }
+
+  List<MeshNode> get _filteredDirectNodes {
+    return widget.nodes
+        .where((node) => node.matchesSearch(_nodeSearchController.text))
+        .toList();
   }
 
   @override
@@ -2545,6 +2692,7 @@ class _MessagesPageState extends State<MessagesPage> {
     final filteredMessages = widget.messages
         .where((message) => message.groupId == selectedGroup.id)
         .toList();
+    final filteredDirectNodes = _filteredDirectNodes;
     return Column(
       children: [
         SizedBox(
@@ -2594,8 +2742,9 @@ class _MessagesPageState extends State<MessagesPage> {
         ),
         MessageComposer(
           controller: _textController,
+          nodeSearchController: _nodeSearchController,
           directMode: _directMode,
-          nodes: widget.nodes,
+          nodes: filteredDirectNodes,
           selectedNodeIndex: _selectedNodeIndex,
           selectedGroup: selectedGroup,
           onModeChanged: (value) => setState(() => _directMode = value),
@@ -2683,8 +2832,12 @@ class _MessagesPageState extends State<MessagesPage> {
       return;
     }
 
-    final directNode = _directMode && widget.nodes.isNotEmpty
-        ? widget.nodes[_selectedNodeIndex]
+    final filteredDirectNodes = _filteredDirectNodes;
+    if (_directMode && filteredDirectNodes.isEmpty) {
+      return;
+    }
+    final directNode = _directMode
+        ? filteredDirectNodes[_selectedNodeIndex]
         : null;
     await widget.onSend(
       MeshMessageDraft(
@@ -2997,6 +3150,7 @@ class _ReportStaticLine extends StatelessWidget {
 class MessageComposer extends StatelessWidget {
   const MessageComposer({
     required this.controller,
+    required this.nodeSearchController,
     required this.directMode,
     required this.nodes,
     required this.selectedNodeIndex,
@@ -3008,6 +3162,7 @@ class MessageComposer extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final TextEditingController nodeSearchController;
   final bool directMode;
   final List<MeshNode> nodes;
   final int selectedNodeIndex;
@@ -3020,6 +3175,7 @@ class MessageComposer extends StatelessWidget {
   Widget build(BuildContext context) {
     final canSendDirect = nodes.isNotEmpty;
     final selectedNode = canSendDirect ? nodes[selectedNodeIndex] : null;
+    final canSend = !directMode || canSendDirect;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: Container(
@@ -3066,30 +3222,39 @@ class MessageComposer extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: directMode
-                      ? DropdownButtonFormField<int>(
-                          initialValue: selectedNodeIndex,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            labelText: 'Adresát',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: [
-                            for (var index = 0; index < nodes.length; index++)
-                              DropdownMenuItem(
-                                value: index,
-                                child: Text(
-                                  '${nodes[index].callSign} / !${nodes[index].nodeNum.toRadixString(16).padLeft(8, '0').toUpperCase()}',
-                                  overflow: TextOverflow.ellipsis,
+                      ? canSendDirect
+                            ? DropdownButtonFormField<int>(
+                                initialValue: selectedNodeIndex,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  labelText: 'Adresát',
+                                  border: OutlineInputBorder(),
                                 ),
-                              ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              onNodeChanged(value);
-                            }
-                          },
-                        )
+                                items: [
+                                  for (
+                                    var index = 0;
+                                    index < nodes.length;
+                                    index++
+                                  )
+                                    DropdownMenuItem(
+                                      value: index,
+                                      child: Text(
+                                        '${nodes[index].callSign} / !${nodes[index].nodeNumHex}',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    onNodeChanged(value);
+                                  }
+                                },
+                              )
+                            : const _TargetPill(
+                                icon: Icons.person_off_outlined,
+                                label: 'Adresát nenalezen',
+                              )
                       : _TargetPill(
                           icon: Icons.radio,
                           label:
@@ -3098,6 +3263,14 @@ class MessageComposer extends StatelessWidget {
                 ),
               ],
             ),
+            if (directMode) ...[
+              const SizedBox(height: 8),
+              TacticalSearchField(
+                controller: nodeSearchController,
+                label: 'Vyhledat adresáta',
+                hint: 'Callsign, MGRS, node ID, stav',
+              ),
+            ],
             const SizedBox(height: 8),
             Row(
               children: [
@@ -3112,6 +3285,8 @@ class MessageComposer extends StatelessWidget {
                       isDense: true,
                       hintText: directMode && selectedNode != null
                           ? 'Zpráva pro ${selectedNode.callSign}'
+                          : directMode
+                          ? 'Vyber adresáta'
                           : 'Zpráva skupině ${selectedGroup.name}',
                       border: const OutlineInputBorder(),
                     ),
@@ -3119,7 +3294,7 @@ class MessageComposer extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  onPressed: onSend,
+                  onPressed: canSend ? onSend : null,
                   tooltip: 'Odeslat přes Meshtastic',
                   style: IconButton.styleFrom(
                     backgroundColor: rangerGreen,
@@ -3827,6 +4002,9 @@ class MeshNode {
 
   LatLng get latLng => LatLng(latitude, longitude);
 
+  String get nodeNumHex =>
+      nodeNum.toRadixString(16).padLeft(8, '0').toUpperCase();
+
   MeshNodeLinkStatus get linkStatus {
     if (isSelf || lastSeenMinutes <= 5) {
       return MeshNodeLinkStatus.ok;
@@ -3835,6 +4013,19 @@ class MeshNode {
       return MeshNodeLinkStatus.stale;
     }
     return MeshNodeLinkStatus.lost;
+  }
+
+  bool matchesSearch(String query) {
+    final normalizedQuery = _normalizeSearchText(query);
+    if (normalizedQuery.isEmpty) {
+      return true;
+    }
+    final searchable = _normalizeSearchText(
+      '$callSign $mgrs $nodeNumHex ${linkStatus.label} '
+      '${distanceKm.toStringAsFixed(1)} ${bearingDeg.toStringAsFixed(0)} '
+      '$lastSeenMinutes',
+    );
+    return searchable.contains(normalizedQuery);
   }
 
   Map<String, dynamic> toJson() {
@@ -3963,6 +4154,14 @@ class MeshNode {
 }
 
 enum MeshNodeLinkStatus { ok, stale, lost }
+
+String _normalizeSearchText(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll('!', '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
 
 enum TacticalNavTargetKind { team, rally, medevac, danger, observation, supply }
 

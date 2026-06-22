@@ -3,6 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tactical_car_app/main.dart';
 
+Finder _textFieldWithLabel(String label) {
+  return find.byWidgetPredicate(
+    (widget) => widget is TextField && widget.decoration?.labelText == label,
+  );
+}
+
+Finder _textFieldWithHint(String hint) {
+  return find.byWidgetPredicate(
+    (widget) => widget is TextField && widget.decoration?.hintText == hint,
+  );
+}
+
 void main() {
   Future<void> login(
     WidgetTester tester, {
@@ -207,6 +219,55 @@ void main() {
     expect(find.textContaining('CHECK-IN | MED-4'), findsOneWidget);
     expect(find.textContaining('STATUS LOST'), findsOneWidget);
     expect(find.textContaining('DM MED-4'), findsOneWidget);
+  });
+
+  testWidgets('filters team users by callsign', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await login(tester);
+
+    await tester.tap(find.text('Tým'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(_textFieldWithLabel('Vyhledat uživatele'), 'med');
+    await tester.pumpAndSettle();
+
+    expect(find.text('MED-4'), findsOneWidget);
+    expect(find.text('RAVEN-2'), findsNothing);
+  });
+
+  testWidgets('searches direct message recipient', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await login(tester);
+
+    await tester.tap(find.text('Zprávy'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Osoba'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(_textFieldWithLabel('Vyhledat adresáta'), 'scout');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('SCOUT-3 / !A1100003'), findsOneWidget);
+
+    await tester.enterText(_textFieldWithHint('Zpráva pro SCOUT-3'), 'Test DM');
+    await tester.tap(find.byTooltip('Odeslat přes Meshtastic'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('DM SCOUT-3'), findsOneWidget);
+    expect(find.text('Test DM'), findsOneWidget);
   });
 
   testWidgets('sends structured CONTACT report', (tester) async {
