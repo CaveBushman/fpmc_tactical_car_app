@@ -25,6 +25,7 @@ class DecodedMeshEvent {
     this.longitude,
     this.altitude,
     this.text,
+    this.heardAt,
   });
 
   final DecodedMeshEventType type;
@@ -40,6 +41,10 @@ class DecodedMeshEvent {
   final double? longitude;
   final int? altitude;
   final String? text;
+
+  /// Radio-reported receive time (MeshPacket.rx_time / NodeInfo.last_heard),
+  /// null when the T-Beam has no valid clock.
+  final DateTime? heardAt;
 
   String get label {
     final name = longName ?? shortName ?? _nodeLabel(nodeNum ?? from);
@@ -109,6 +114,7 @@ class MeshtasticPacketDecoder {
     int? to;
     int? channelIndex;
     int? packetId;
+    DateTime? heardAt;
     _DataPayload? data;
     var encrypted = false;
 
@@ -128,6 +134,8 @@ class MeshtasticPacketDecoder {
           encrypted = true;
         case 6:
           packetId = reader.readFixed32();
+        case 7:
+          heardAt = _epochSeconds(reader.readFixed32());
         default:
           reader.skipField(field);
       }
@@ -140,6 +148,7 @@ class MeshtasticPacketDecoder {
         to: to,
         packetId: packetId,
         channelIndex: channelIndex,
+        heardAt: heardAt,
       );
     }
 
@@ -151,6 +160,7 @@ class MeshtasticPacketDecoder {
         to: to,
         packetId: packetId,
         channelIndex: channelIndex,
+        heardAt: heardAt,
       );
     }
 
@@ -162,6 +172,7 @@ class MeshtasticPacketDecoder {
           to: to,
           packetId: packetId,
           channelIndex: channelIndex,
+          heardAt: heardAt,
           portNum: payload.portNum,
           text: utf8.decode(payload.payload, allowMalformed: true),
         );
@@ -173,6 +184,7 @@ class MeshtasticPacketDecoder {
           to: to,
           packetId: packetId,
           channelIndex: channelIndex,
+          heardAt: heardAt,
           portNum: payload.portNum,
           latitude: position.latitude,
           longitude: position.longitude,
@@ -186,6 +198,7 @@ class MeshtasticPacketDecoder {
           to: to,
           packetId: packetId,
           channelIndex: channelIndex,
+          heardAt: heardAt,
           portNum: payload.portNum,
           nodeNum: from,
           longName: user.longName,
@@ -198,6 +211,7 @@ class MeshtasticPacketDecoder {
           to: to,
           packetId: packetId,
           channelIndex: channelIndex,
+          heardAt: heardAt,
           portNum: payload.portNum,
         );
     }
@@ -227,6 +241,7 @@ class MeshtasticPacketDecoder {
     int? nodeNum;
     _UserInfo? user;
     _PositionInfo? position;
+    DateTime? lastHeard;
 
     while (!reader.isDone) {
       final field = reader.readField();
@@ -237,6 +252,8 @@ class MeshtasticPacketDecoder {
           user = _readUser(reader.readLengthDelimited());
         case 3:
           position = _readPosition(reader.readLengthDelimited());
+        case 5:
+          lastHeard = _epochSeconds(reader.readFixed32());
         default:
           reader.skipField(field);
       }
@@ -250,7 +267,16 @@ class MeshtasticPacketDecoder {
       latitude: position?.latitude,
       longitude: position?.longitude,
       altitude: position?.altitude,
+      heardAt: lastHeard,
     );
+  }
+
+  static DateTime? _epochSeconds(int seconds) {
+    // 0 means the radio had no clock; anything before 2020 is equally bogus.
+    if (seconds < 1577836800) {
+      return null;
+    }
+    return DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
   }
 
   _UserInfo _readUser(List<int> bytes) {

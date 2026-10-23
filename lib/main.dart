@@ -108,7 +108,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   int _selectedIndex = 0;
   bool _pttActive = false;
   bool _internetVoiceOnline = true;
-  bool _meshConnected = true;
+  bool _meshConnected = false;
   AuthSession? _session;
   int _selectedGroupIndex = 0;
   double _fontScale = 1.0;
@@ -120,7 +120,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     encrypted: true,
   );
 
-  final List<MeshNode> _nodes = [...MeshNode.demoNodes];
+  final List<MeshNode> _nodes = MeshNode.demoNodes(DateTime.now());
   final List<MeshMessage> _messages = [...MeshMessage.demoMessages];
   final List<CommunicationGroup> _groups = CommunicationGroup.demoGroups;
   final List<TacticalWaypoint> _waypoints = TacticalWaypoint.demoWaypoints;
@@ -233,7 +233,6 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       SystemsPage(
         meshConnected: _meshConnected,
         internetVoiceOnline: _internetVoiceOnline,
-        onMeshChanged: (value) => setState(() => _meshConnected = value),
         onVoiceChanged: (value) => setState(() => _internetVoiceOnline = value),
         onBleConnect: _meshtasticBleService.startAutoConnect,
         bleState: _bleState,
@@ -266,7 +265,6 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       SystemsPage(
         meshConnected: _meshConnected,
         internetVoiceOnline: _internetVoiceOnline,
-        onMeshChanged: (value) => setState(() => _meshConnected = value),
         onVoiceChanged: (value) => setState(() => _internetVoiceOnline = value),
         onBleConnect: _meshtasticBleService.startAutoConnect,
         bleState: _bleState,
@@ -472,7 +470,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         longitude: fix.longitude,
         altitudeM: fix.altitudeM.round(),
         mgrs: _mgrsLabel(fix.latitude, fix.longitude),
-        lastSeenMinutes: 0,
+        lastSeenAt: fix.timestamp,
       );
       _nodes[selfIndex] = self;
       for (var i = 0; i < _nodes.length; i++) {
@@ -559,6 +557,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       latitude: latitude,
       longitude: longitude,
       altitudeM: altitude,
+      heardAt: _latest(event.heardAt ?? DateTime.now(), existing?.lastSeenAt),
       existingBattery: existing?.batteryPercent,
     );
 
@@ -578,6 +577,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     required double latitude,
     required double longitude,
     required int altitudeM,
+    required DateTime heardAt,
     int? existingBattery,
   }) {
     final self = _selfNode;
@@ -601,7 +601,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       altitudeM: altitudeM,
       mgrs: _mgrsLabel(latitude, longitude),
       batteryPercent: existingBattery ?? 100,
-      lastSeenMinutes: 0,
+      lastSeenAt: heardAt,
       distanceKm: distanceKm,
       bearingDeg: bearingDeg,
       mapOffset: Offset(
@@ -609,6 +609,13 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         ((self.latitude - latitude) * 18).clamp(-1.0, 1.0),
       ),
     );
+  }
+
+  DateTime _latest(DateTime value, DateTime? other) {
+    if (other == null || value.isAfter(other)) {
+      return value;
+    }
+    return other;
   }
 
   bool _appendIncomingMeshMessage(DecodedMeshEvent event) {
@@ -1262,7 +1269,7 @@ class StatusStrip extends StatelessWidget {
           Expanded(
             child: StatusChip(
               icon: Icons.cloud_done_outlined,
-              label: 'PTT server',
+              label: 'PTT demo',
               ok: voiceOnline,
             ),
           ),
@@ -3667,7 +3674,6 @@ class SystemsPage extends StatelessWidget {
   const SystemsPage({
     required this.meshConnected,
     required this.internetVoiceOnline,
-    required this.onMeshChanged,
     required this.onVoiceChanged,
     required this.onBleConnect,
     required this.bleState,
@@ -3683,7 +3689,6 @@ class SystemsPage extends StatelessWidget {
 
   final bool meshConnected;
   final bool internetVoiceOnline;
-  final ValueChanged<bool> onMeshChanged;
   final ValueChanged<bool> onVoiceChanged;
   final VoidCallback onBleConnect;
   final MeshtasticBleState bleState;
@@ -3784,12 +3789,19 @@ class SystemsPage extends StatelessWidget {
           title: 'Meshtastic',
           icon: Icons.settings_input_antenna,
           children: [
-            SwitchListTile(
-              value: meshConnected,
-              onChanged: onMeshChanged,
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                meshConnected
+                    ? Icons.bluetooth_connected
+                    : Icons.bluetooth_disabled,
+                color: meshConnected ? sand : dangerRed,
+              ),
               title: const Text('LILYGO T-Beam 868 MHz přes Bluetooth'),
-              subtitle: const Text(
-                'Přijímá NodeInfo, Position a textové zprávy',
+              subtitle: Text(
+                meshConnected
+                    ? 'Připojeno: přijímá NodeInfo, Position a zprávy'
+                    : 'Nepřipojeno: zprávy se odesílají jen lokálně',
               ),
             ),
             FilledButton.icon(
@@ -3842,10 +3854,12 @@ class SystemsPage extends StatelessWidget {
             SwitchListTile(
               value: internetVoiceOnline,
               onChanged: onVoiceChanged,
-              title: const Text('PTT server online'),
-              subtitle: const Text('WebRTC/LiveKit hlas mimo LoRa síť'),
+              title: const Text('Simulace PTT'),
+              subtitle: const Text(
+                'Hlasový server (WebRTC/LiveKit) zatím není napojen',
+              ),
             ),
-            const MonoLine(label: 'Kanál', value: 'ALPHA'),
+            MonoLine(label: 'Kanál', value: pttState.channel),
             MonoLine(
               label: 'Šifrování',
               value: pttState.encrypted ? 'AES-GCM 256 aktivní' : 'vypnuto',
@@ -4266,7 +4280,7 @@ class MeshNode {
     required this.altitudeM,
     required this.mgrs,
     required this.batteryPercent,
-    required this.lastSeenMinutes,
+    required this.lastSeenAt,
     required this.distanceKm,
     required this.bearingDeg,
     required this.mapOffset,
@@ -4280,7 +4294,7 @@ class MeshNode {
   final int altitudeM;
   final String mgrs;
   final int batteryPercent;
-  final int lastSeenMinutes;
+  final DateTime lastSeenAt;
   final double distanceKm;
   final double bearingDeg;
   final Offset mapOffset;
@@ -4290,6 +4304,13 @@ class MeshNode {
 
   String get nodeNumHex =>
       nodeNum.toRadixString(16).padLeft(8, '0').toUpperCase();
+
+  /// Whole minutes since the node was last heard, aged against wall clock so
+  /// the link status degrades on its own when packets stop arriving.
+  int get lastSeenMinutes {
+    final minutes = DateTime.now().difference(lastSeenAt).inMinutes;
+    return minutes < 0 ? 0 : minutes;
+  }
 
   MeshNodeLinkStatus get linkStatus {
     if (isSelf || lastSeenMinutes <= 5) {
@@ -4323,7 +4344,7 @@ class MeshNode {
       'altitudeM': altitudeM,
       'mgrs': mgrs,
       'batteryPercent': batteryPercent,
-      'lastSeenMinutes': lastSeenMinutes,
+      'lastSeenAt': lastSeenAt.toUtc().toIso8601String(),
       'distanceKm': distanceKm,
       'bearingDeg': bearingDeg,
       'mapOffsetX': mapOffset.dx,
@@ -4341,7 +4362,11 @@ class MeshNode {
       altitudeM: (json['altitudeM'] as num?)?.toInt() ?? 0,
       mgrs: json['mgrs']?.toString() ?? '',
       batteryPercent: (json['batteryPercent'] as num?)?.toInt() ?? 100,
-      lastSeenMinutes: (json['lastSeenMinutes'] as num?)?.toInt() ?? 0,
+      // Snapshots without a timestamp are treated as long lost rather than
+      // freshly heard.
+      lastSeenAt:
+          DateTime.tryParse(json['lastSeenAt']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
       distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
       bearingDeg: (json['bearingDeg'] as num?)?.toDouble() ?? 0,
       mapOffset: Offset(
@@ -4360,7 +4385,7 @@ class MeshNode {
     int? altitudeM,
     String? mgrs,
     int? batteryPercent,
-    int? lastSeenMinutes,
+    DateTime? lastSeenAt,
     double? distanceKm,
     double? bearingDeg,
     Offset? mapOffset,
@@ -4374,7 +4399,7 @@ class MeshNode {
       altitudeM: altitudeM ?? this.altitudeM,
       mgrs: mgrs ?? this.mgrs,
       batteryPercent: batteryPercent ?? this.batteryPercent,
-      lastSeenMinutes: lastSeenMinutes ?? this.lastSeenMinutes,
+      lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       distanceKm: distanceKm ?? this.distanceKm,
       bearingDeg: bearingDeg ?? this.bearingDeg,
       mapOffset: mapOffset ?? this.mapOffset,
@@ -4382,7 +4407,7 @@ class MeshNode {
     );
   }
 
-  static const demoNodes = [
+  static List<MeshNode> demoNodes(DateTime now) => [
     MeshNode(
       nodeNum: 0xA1100001,
       callSign: 'RAVEN-1',
@@ -4391,7 +4416,7 @@ class MeshNode {
       altitudeM: 241,
       mgrs: '33U VR 58470 48210',
       batteryPercent: 88,
-      lastSeenMinutes: 0,
+      lastSeenAt: now.subtract(const Duration(minutes: 0)),
       distanceKm: 0,
       bearingDeg: 0,
       mapOffset: Offset.zero,
@@ -4405,10 +4430,10 @@ class MeshNode {
       altitudeM: 252,
       mgrs: '33U VR 57541 48958',
       batteryPercent: 76,
-      lastSeenMinutes: 1,
+      lastSeenAt: now.subtract(const Duration(minutes: 1)),
       distanceKm: 1.2,
       bearingDeg: 313,
-      mapOffset: Offset(-0.42, -0.31),
+      mapOffset: const Offset(-0.42, -0.31),
     ),
     MeshNode(
       nodeNum: 0xA1100003,
@@ -4418,10 +4443,10 @@ class MeshNode {
       altitudeM: 219,
       mgrs: '33U VR 59728 47517',
       batteryPercent: 61,
-      lastSeenMinutes: 7,
+      lastSeenAt: now.subtract(const Duration(minutes: 7)),
       distanceKm: 1.5,
       bearingDeg: 119,
-      mapOffset: Offset(0.47, 0.34),
+      mapOffset: const Offset(0.47, 0.34),
     ),
     MeshNode(
       nodeNum: 0xA1100004,
@@ -4431,10 +4456,10 @@ class MeshNode {
       altitudeM: 236,
       mgrs: '33U VR 57821 47302',
       batteryPercent: 22,
-      lastSeenMinutes: 18,
+      lastSeenAt: now.subtract(const Duration(minutes: 18)),
       distanceKm: 1.1,
       bearingDeg: 221,
-      mapOffset: Offset(-0.26, 0.41),
+      mapOffset: const Offset(-0.26, 0.41),
     ),
   ];
 }

@@ -85,6 +85,34 @@ void main() {
     expect(events.single.channelIndex, 2);
     expect(events.single.text, 'Na pozici');
     expect(events.single.packetId, 0x00000042);
+    expect(events.single.heardAt, isNull);
+  });
+
+  test('decodes radio receive time and NodeInfo last_heard', () {
+    const decoder = MeshtasticPacketDecoder();
+    const rxTime = 1792750000; // 2026-10-23
+    final packet = _message(2, [
+      ..._fixed32(1, 0x1234ABCD),
+      ..._fixed32(2, 0xFFFFFFFF),
+      ..._message(4, [
+        ..._varint(1, MeshtasticPacketDecoder.textMessageApp),
+        ..._bytes(2, utf8.encode('OK')),
+      ]),
+      ..._fixed32(7, rxTime),
+    ]);
+    final nodeInfo = _message(4, [
+      ..._varint(1, 0x1234ABCD),
+      ..._fixed32(5, rxTime),
+    ]);
+    final noClock = _message(4, [..._varint(1, 0x1234ABCD), ..._fixed32(5, 0)]);
+
+    final expected = DateTime.fromMillisecondsSinceEpoch(
+      rxTime * 1000,
+      isUtc: true,
+    );
+    expect(decoder.decodeFromRadio(packet).single.heardAt, expected);
+    expect(decoder.decodeFromRadio(nodeInfo).single.heardAt, expected);
+    expect(decoder.decodeFromRadio(noClock).single.heardAt, isNull);
   });
 }
 
