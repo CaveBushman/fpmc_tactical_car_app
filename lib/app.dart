@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:mgrs_dart/mgrs_dart.dart';
 
 import 'models/mesh_node.dart';
 import 'models/messaging.dart';
@@ -23,7 +22,6 @@ import 'services/ptt_access_service.dart';
 import 'services/tactical_state_store.dart';
 import 'theme.dart';
 import 'widgets/common_widgets.dart';
-import 'widgets/node_widgets.dart';
 
 class TacticalCarApp extends StatelessWidget {
   const TacticalCarApp({
@@ -525,34 +523,13 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       return;
     }
     setState(() {
-      final self = _nodes[selfIndex].copyWith(
+      _nodes[selfIndex] = _nodes[selfIndex].copyWith(
         latitude: fix.latitude,
         longitude: fix.longitude,
         altitudeM: fix.altitudeM.round(),
-        mgrs: _mgrsLabel(fix.latitude, fix.longitude),
         lastSeenAt: fix.timestamp,
       );
-      _nodes[selfIndex] = self;
-      for (var i = 0; i < _nodes.length; i++) {
-        final node = _nodes[i];
-        if (node.isSelf) {
-          continue;
-        }
-        _nodes[i] = node.copyWith(
-          distanceKm: _distanceKm(
-            self.latitude,
-            self.longitude,
-            node.latitude,
-            node.longitude,
-          ),
-          bearingDeg: _bearingDeg(
-            self.latitude,
-            self.longitude,
-            node.latitude,
-            node.longitude,
-          ),
-        );
-      }
+      _replaceNodes(MeshNode.relativeToSelf(_nodes));
     });
 
     // GPS can fire every few metres; persist the last known position at most
@@ -682,35 +659,21 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     required DateTime heardAt,
     int? existingBattery,
   }) {
-    final self = _selfNode;
-    final distanceKm = _distanceKm(
-      self.latitude,
-      self.longitude,
-      latitude,
-      longitude,
-    );
-    final bearingDeg = _bearingDeg(
-      self.latitude,
-      self.longitude,
-      latitude,
-      longitude,
-    );
     return MeshNode(
       nodeNum: nodeNum,
       callSign: callSign,
       latitude: latitude,
       longitude: longitude,
       altitudeM: altitudeM,
-      mgrs: _mgrsLabel(latitude, longitude),
       batteryPercent: existingBattery ?? 100,
       lastSeenAt: heardAt,
-      distanceKm: distanceKm,
-      bearingDeg: bearingDeg,
-      mapOffset: Offset(
-        ((longitude - self.longitude) * 18).clamp(-1.0, 1.0),
-        ((self.latitude - latitude) * 18).clamp(-1.0, 1.0),
-      ),
-    );
+    ).relativeTo(_selfNode);
+  }
+
+  void _replaceNodes(List<MeshNode> nodes) {
+    _nodes
+      ..clear()
+      ..addAll(nodes);
   }
 
   DateTime _latest(DateTime value, DateTime? other) {
@@ -968,9 +931,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
 
       setState(() {
         if (restoredNodes.any((node) => node.isSelf)) {
-          _nodes
-            ..clear()
-            ..addAll(restoredNodes);
+          _replaceNodes(MeshNode.relativeToSelf(restoredNodes));
         }
         if (restoredMessages.isNotEmpty) {
           _messages
@@ -1025,53 +986,6 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       return '!UNKNOWN';
     }
     return '!${nodeNum.toRadixString(16).padLeft(8, '0').toUpperCase()}';
-  }
-
-  String _mgrsLabel(double latitude, double longitude) {
-    final raw = Mgrs.forward([longitude, latitude], 5).toUpperCase();
-    final match = RegExp(
-      r'^(\d{1,2}[C-X])([A-Z]{2})(\d{5})(\d{5})$',
-    ).firstMatch(raw);
-    if (match == null) {
-      return raw;
-    }
-    return '${match.group(1)} ${match.group(2)} ${match.group(3)} ${match.group(4)}';
-  }
-
-  double _distanceKm(
-    double fromLat,
-    double fromLon,
-    double toLat,
-    double toLon,
-  ) {
-    const earthRadiusKm = 6371.0;
-    final dLat = radians(toLat - fromLat);
-    final dLon = radians(toLon - fromLon);
-    final lat1 = radians(fromLat);
-    final lat2 = radians(toLat);
-    final a =
-        math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1) *
-            math.cos(lat2) *
-            math.sin(dLon / 2) *
-            math.sin(dLon / 2);
-    return earthRadiusKm * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-  }
-
-  double _bearingDeg(
-    double fromLat,
-    double fromLon,
-    double toLat,
-    double toLon,
-  ) {
-    final lat1 = radians(fromLat);
-    final lat2 = radians(toLat);
-    final dLon = radians(toLon - fromLon);
-    final y = math.sin(dLon) * math.cos(lat2);
-    final x =
-        math.cos(lat1) * math.sin(lat2) -
-        math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
-    return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
   }
 }
 

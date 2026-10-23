@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../models/mesh_node.dart';
@@ -60,14 +59,6 @@ class NodeHealthSummary {
 }
 
 extension MeshNodeLinkStatusStyle on MeshNodeLinkStatus {
-  String get label {
-    return switch (this) {
-      MeshNodeLinkStatus.ok => 'OK',
-      MeshNodeLinkStatus.stale => 'STALE',
-      MeshNodeLinkStatus.lost => 'LOST',
-    };
-  }
-
   Color get color {
     return switch (this) {
       MeshNodeLinkStatus.ok => blueForce,

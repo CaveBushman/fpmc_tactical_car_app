@@ -1,37 +1,36 @@
-import 'dart:math' as math;
-
-import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../widgets/node_widgets.dart';
+import 'geo.dart' as geo;
 
 class MeshNode {
-  const MeshNode({
+  MeshNode({
     required this.nodeNum,
     required this.callSign,
     required this.latitude,
     required this.longitude,
     required this.altitudeM,
-    required this.mgrs,
     required this.batteryPercent,
     required this.lastSeenAt,
-    required this.distanceKm,
-    required this.bearingDeg,
-    required this.mapOffset,
+    this.distanceKm = 0,
+    this.bearingDeg = 0,
     this.isSelf = false,
-  });
+  }) : mgrs = geo.formatMgrs(latitude, longitude);
 
   final int nodeNum;
   final String callSign;
   final double latitude;
   final double longitude;
   final int altitudeM;
+
+  /// Always derived from [latitude]/[longitude] so it cannot drift.
   final String mgrs;
   final int batteryPercent;
   final DateTime lastSeenAt;
+
+  /// Relative to the self node; derived state, recomputed whenever either
+  /// position changes and never persisted.
   final double distanceKm;
   final double bearingDeg;
-  final Offset mapOffset;
   final bool isSelf;
 
   LatLng get latLng => LatLng(latitude, longitude);
@@ -56,6 +55,17 @@ class MeshNode {
     return MeshNodeLinkStatus.lost;
   }
 
+  /// Copy with distance and bearing measured from [self].
+  MeshNode relativeTo(MeshNode self) {
+    if (isSelf) {
+      return copyWith(distanceKm: 0, bearingDeg: 0);
+    }
+    return copyWith(
+      distanceKm: geo.distanceKm(self.latLng, latLng),
+      bearingDeg: geo.bearingDeg(self.latLng, latLng),
+    );
+  }
+
   bool matchesSearch(String query) {
     final normalizedQuery = _normalizeSearchText(query);
     if (normalizedQuery.isEmpty) {
@@ -76,13 +86,8 @@ class MeshNode {
       'latitude': latitude,
       'longitude': longitude,
       'altitudeM': altitudeM,
-      'mgrs': mgrs,
       'batteryPercent': batteryPercent,
       'lastSeenAt': lastSeenAt.toUtc().toIso8601String(),
-      'distanceKm': distanceKm,
-      'bearingDeg': bearingDeg,
-      'mapOffsetX': mapOffset.dx,
-      'mapOffsetY': mapOffset.dy,
       'isSelf': isSelf,
     };
   }
@@ -94,19 +99,12 @@ class MeshNode {
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       altitudeM: (json['altitudeM'] as num?)?.toInt() ?? 0,
-      mgrs: json['mgrs']?.toString() ?? '',
       batteryPercent: (json['batteryPercent'] as num?)?.toInt() ?? 100,
       // Snapshots without a timestamp are treated as long lost rather than
       // freshly heard.
       lastSeenAt:
           DateTime.tryParse(json['lastSeenAt']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
-      distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
-      bearingDeg: (json['bearingDeg'] as num?)?.toDouble() ?? 0,
-      mapOffset: Offset(
-        (json['mapOffsetX'] as num?)?.toDouble() ?? 0,
-        (json['mapOffsetY'] as num?)?.toDouble() ?? 0,
-      ),
       isSelf: json['isSelf'] == true,
     );
   }
@@ -117,12 +115,10 @@ class MeshNode {
     double? latitude,
     double? longitude,
     int? altitudeM,
-    String? mgrs,
     int? batteryPercent,
     DateTime? lastSeenAt,
     double? distanceKm,
     double? bearingDeg,
-    Offset? mapOffset,
     bool? isSelf,
   }) {
     return MeshNode(
@@ -131,29 +127,32 @@ class MeshNode {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       altitudeM: altitudeM ?? this.altitudeM,
-      mgrs: mgrs ?? this.mgrs,
       batteryPercent: batteryPercent ?? this.batteryPercent,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       distanceKm: distanceKm ?? this.distanceKm,
       bearingDeg: bearingDeg ?? this.bearingDeg,
-      mapOffset: mapOffset ?? this.mapOffset,
       isSelf: isSelf ?? this.isSelf,
     );
   }
 
-  static List<MeshNode> demoNodes(DateTime now) => [
+  /// Recomputes distance/bearing of every node from the self node.
+  static List<MeshNode> relativeToSelf(List<MeshNode> nodes) {
+    final self = nodes.where((node) => node.isSelf).firstOrNull;
+    if (self == null) {
+      return nodes;
+    }
+    return [for (final node in nodes) node.relativeTo(self)];
+  }
+
+  static List<MeshNode> demoNodes(DateTime now) => relativeToSelf([
     MeshNode(
       nodeNum: 0xA1100001,
       callSign: 'RAVEN-1',
       latitude: 50.087451,
       longitude: 14.420671,
       altitudeM: 241,
-      mgrs: '33U VR 58470 48210',
       batteryPercent: 88,
-      lastSeenAt: now.subtract(const Duration(minutes: 0)),
-      distanceKm: 0,
-      bearingDeg: 0,
-      mapOffset: Offset.zero,
+      lastSeenAt: now,
       isSelf: true,
     ),
     MeshNode(
@@ -162,12 +161,8 @@ class MeshNode {
       latitude: 50.094220,
       longitude: 14.407812,
       altitudeM: 252,
-      mgrs: '33U VR 57541 48958',
       batteryPercent: 76,
       lastSeenAt: now.subtract(const Duration(minutes: 1)),
-      distanceKm: 1.2,
-      bearingDeg: 313,
-      mapOffset: const Offset(-0.42, -0.31),
     ),
     MeshNode(
       nodeNum: 0xA1100003,
@@ -175,12 +170,8 @@ class MeshNode {
       latitude: 50.081312,
       longitude: 14.438220,
       altitudeM: 219,
-      mgrs: '33U VR 59728 47517',
       batteryPercent: 61,
       lastSeenAt: now.subtract(const Duration(minutes: 7)),
-      distanceKm: 1.5,
-      bearingDeg: 119,
-      mapOffset: const Offset(0.47, 0.34),
     ),
     MeshNode(
       nodeNum: 0xA1100004,
@@ -188,17 +179,21 @@ class MeshNode {
       latitude: 50.079502,
       longitude: 14.411871,
       altitudeM: 236,
-      mgrs: '33U VR 57821 47302',
       batteryPercent: 22,
       lastSeenAt: now.subtract(const Duration(minutes: 18)),
-      distanceKm: 1.1,
-      bearingDeg: 221,
-      mapOffset: const Offset(-0.26, 0.41),
     ),
-  ];
+  ]);
 }
 
-enum MeshNodeLinkStatus { ok, stale, lost }
+enum MeshNodeLinkStatus {
+  ok('OK'),
+  stale('STALE'),
+  lost('LOST');
+
+  const MeshNodeLinkStatus(this.label);
+
+  final String label;
+}
 
 String _normalizeSearchText(String value) {
   return value
@@ -207,5 +202,3 @@ String _normalizeSearchText(String value) {
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 }
-
-double radians(double degrees) => degrees * math.pi / 180;

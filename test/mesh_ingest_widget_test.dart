@@ -118,7 +118,7 @@ void main() {
             'callSign': 'RAVEN-1',
             'latitude': 50.087451,
             'longitude': 14.420671,
-            'mgrs': '33U VR 58470 48210',
+            'mgrs': '33U VR 58556 48514',
             'lastSeenAt': DateTime.now().toUtc().toIso8601String(),
             'isSelf': true,
           },

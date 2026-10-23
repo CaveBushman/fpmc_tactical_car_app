@@ -108,7 +108,7 @@ void main() {
       find.textContaining('LAT 49.195060 | LON 16.606837'),
       findsOneWidget,
     );
-    expect(find.textContaining('33U VR 58470 48210'), findsNothing);
+    expect(find.textContaining('33U VR 58556 48514'), findsNothing);
   });
 
   testWidgets('team distances are recomputed from GPS fix', (tester) async {

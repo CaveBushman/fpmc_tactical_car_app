@@ -138,7 +138,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('NA POZICI | MGRS'), findsOneWidget);
-    expect(find.textContaining('33U VR 58470 48210'), findsOneWidget);
+    expect(find.textContaining('33U VR 58556 48514'), findsOneWidget);
   });
 
   testWidgets('shares waypoint to current Meshtastic group', (tester) async {
@@ -169,7 +169,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('WP MED-POINT | MEDEVAC'), findsOneWidget);
-    expect(find.textContaining('33U VR 58967 47810'), findsOneWidget);
+    expect(find.textContaining('33U VR 59048 48110'), findsOneWidget);
   });
 
   testWidgets('shows tactical navigation cards on map', (tester) async {
@@ -292,7 +292,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.textContaining('CONTACT | MGRS 33U VR 58470 48210'),
+      find.textContaining('CONTACT | MGRS 33U VR 58556 48514'),
       findsOneWidget,
     );
     expect(find.textContaining('DIR 090 | DIST 300 m'), findsOneWidget);
@@ -318,7 +318,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('MEDEVAC | WP MED-POINT'), findsOneWidget);
-    expect(find.textContaining('33U VR 58967 47810'), findsOneWidget);
+    expect(find.textContaining('33U VR 59048 48110'), findsOneWidget);
   });
 
   testWidgets('sends structured SITREP report', (tester) async {
@@ -341,7 +341,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.textContaining('SITREP | MGRS 33U VR 58470 48210'),
+      find.textContaining('SITREP | MGRS 33U VR 58556 48514'),
       findsOneWidget,
     );
     expect(find.textContaining('TEAM GREEN | BAT 88%'), findsOneWidget);

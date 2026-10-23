@@ -1,9 +1,8 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../theme.dart';
+import 'geo.dart' as geo;
 import 'mesh_node.dart';
 
 enum TacticalNavTargetKind { team, rally, medevac, danger, observation, supply }
@@ -70,8 +69,8 @@ class TacticalNavSolution {
           kind: TacticalNavTargetKind.team,
           icon: Icons.person_pin_circle_outlined,
           mgrs: node.mgrs,
-          distanceKm: _distanceKm(self.latLng, node.latLng),
-          bearingDeg: _bearingDeg(self.latLng, node.latLng),
+          distanceKm: geo.distanceKm(self.latLng, node.latLng),
+          bearingDeg: geo.bearingDeg(self.latLng, node.latLng),
           priority: node.linkStatus != MeshNodeLinkStatus.ok,
         ),
       for (final waypoint in waypoints)
@@ -80,8 +79,8 @@ class TacticalNavSolution {
           kind: waypoint.navKind,
           icon: waypoint.icon,
           mgrs: waypoint.mgrs,
-          distanceKm: _distanceKm(self.latLng, waypoint.latLng),
-          bearingDeg: _bearingDeg(self.latLng, waypoint.latLng),
+          distanceKm: geo.distanceKm(self.latLng, waypoint.latLng),
+          bearingDeg: geo.bearingDeg(self.latLng, waypoint.latLng),
           waypoint: waypoint,
           priority: waypoint.priority,
         ),
@@ -94,37 +93,6 @@ class TacticalNavSolution {
     });
     return solutions;
   }
-
-  static double _distanceKm(LatLng from, LatLng to) {
-    const earthRadiusKm = 6371.0088;
-    final lat1 = _degToRad(from.latitude);
-    final lat2 = _degToRad(to.latitude);
-    final deltaLat = _degToRad(to.latitude - from.latitude);
-    final deltaLon = _degToRad(to.longitude - from.longitude);
-    final a =
-        math.sin(deltaLat / 2) * math.sin(deltaLat / 2) +
-        math.cos(lat1) *
-            math.cos(lat2) *
-            math.sin(deltaLon / 2) *
-            math.sin(deltaLon / 2);
-    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    return earthRadiusKm * c;
-  }
-
-  static double _bearingDeg(LatLng from, LatLng to) {
-    final lat1 = _degToRad(from.latitude);
-    final lat2 = _degToRad(to.latitude);
-    final deltaLon = _degToRad(to.longitude - from.longitude);
-    final y = math.sin(deltaLon) * math.cos(lat2);
-    final x =
-        math.cos(lat1) * math.sin(lat2) -
-        math.sin(lat1) * math.cos(lat2) * math.cos(deltaLon);
-    return (_radToDeg(math.atan2(y, x)) + 360) % 360;
-  }
-
-  static double _degToRad(double degrees) => degrees * math.pi / 180;
-
-  static double _radToDeg(double radians) => radians * 180 / math.pi;
 }
 
 class TacticalWaypoint {
@@ -133,7 +101,6 @@ class TacticalWaypoint {
     required this.type,
     required this.latitude,
     required this.longitude,
-    required this.mgrs,
     required this.note,
     this.priority = false,
   });
@@ -142,7 +109,10 @@ class TacticalWaypoint {
   final TacticalWaypointType type;
   final double latitude;
   final double longitude;
-  final String mgrs;
+
+  /// Derived from the coordinates so shared reports never disagree with
+  /// the map position.
+  String get mgrs => geo.formatMgrs(latitude, longitude);
   final String note;
   final bool priority;
 
@@ -184,7 +154,6 @@ class TacticalWaypoint {
       type: TacticalWaypointType.rally,
       latitude: 50.086138,
       longitude: 14.414208,
-      mgrs: '33U VR 58009 48063',
       note: 'primarni shromazdiste',
     ),
     TacticalWaypoint(
@@ -192,7 +161,6 @@ class TacticalWaypoint {
       type: TacticalWaypointType.medevac,
       latitude: 50.083846,
       longitude: 14.427594,
-      mgrs: '33U VR 58967 47810',
       note: 'vyzvednuti zranenych',
       priority: true,
     ),
@@ -201,7 +169,6 @@ class TacticalWaypoint {
       type: TacticalWaypointType.observation,
       latitude: 50.091922,
       longitude: 14.432875,
-      mgrs: '33U VR 59347 48708',
       note: 'pozorovaci bod sever',
     ),
   ];
