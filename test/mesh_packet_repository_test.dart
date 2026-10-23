@@ -114,6 +114,20 @@ void main() {
     expect(decoder.decodeFromRadio(nodeInfo).single.heardAt, expected);
     expect(decoder.decodeFromRadio(noClock).single.heardAt, isNull);
   });
+
+  test('decodes MyNodeInfo and config_complete_id', () {
+    const decoder = MeshtasticPacketDecoder();
+    final events = decoder.decodeFromRadio([
+      ..._message(3, _varint(1, 0x0BADBEEF)),
+      ..._varint(7, 4242),
+    ]);
+
+    expect(events, hasLength(2));
+    expect(events.first.type, DecodedMeshEventType.myInfo);
+    expect(events.first.nodeNum, 0x0BADBEEF);
+    expect(events.last.type, DecodedMeshEventType.configComplete);
+    expect(events.last.configId, 4242);
+  });
 }
 
 List<int> _message(int field, List<int> value) => _bytes(field, value);

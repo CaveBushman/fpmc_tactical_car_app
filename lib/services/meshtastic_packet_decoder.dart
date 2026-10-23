@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'protobuf_wire_reader.dart';
 
 enum DecodedMeshEventType {
+  myInfo,
+  configComplete,
   nodeInfo,
   position,
   textMessage,
@@ -26,6 +28,7 @@ class DecodedMeshEvent {
     this.altitude,
     this.text,
     this.heardAt,
+    this.configId,
   });
 
   final DecodedMeshEventType type;
@@ -46,9 +49,16 @@ class DecodedMeshEvent {
   /// null when the T-Beam has no valid clock.
   final DateTime? heardAt;
 
+  /// FromRadio.config_complete_id echoed back after a want_config request.
+  final int? configId;
+
   String get label {
     final name = longName ?? shortName ?? _nodeLabel(nodeNum ?? from);
     switch (type) {
+      case DecodedMeshEventType.myInfo:
+        return 'MyNodeInfo ${_nodeLabel(nodeNum)}';
+      case DecodedMeshEventType.configComplete:
+        return 'Konfigurace načtena';
       case DecodedMeshEventType.nodeInfo:
         final position = _positionLabel;
         return position == null
@@ -99,8 +109,17 @@ class MeshtasticPacketDecoder {
       switch (field.number) {
         case 2:
           events.add(_readMeshPacket(reader.readLengthDelimited()));
+        case 3:
+          events.add(_readMyInfo(reader.readLengthDelimited()));
         case 4:
           events.add(_readNodeInfo(reader.readLengthDelimited()));
+        case 7:
+          events.add(
+            DecodedMeshEvent(
+              type: DecodedMeshEventType.configComplete,
+              configId: reader.readVarint(),
+            ),
+          );
         default:
           reader.skipField(field);
       }
@@ -215,6 +234,24 @@ class MeshtasticPacketDecoder {
           portNum: payload.portNum,
         );
     }
+  }
+
+  DecodedMeshEvent _readMyInfo(List<int> bytes) {
+    final reader = ProtobufWireReader(bytes);
+    int? myNodeNum;
+    while (!reader.isDone) {
+      final field = reader.readField();
+      switch (field.number) {
+        case 1:
+          myNodeNum = reader.readVarint();
+        default:
+          reader.skipField(field);
+      }
+    }
+    return DecodedMeshEvent(
+      type: DecodedMeshEventType.myInfo,
+      nodeNum: myNodeNum,
+    );
   }
 
   _DataPayload _readData(List<int> bytes) {

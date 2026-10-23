@@ -8,6 +8,12 @@ const meshtasticBroadcastNode = 0xFFFFFFFF;
 class MeshtasticMessageEncoder {
   const MeshtasticMessageEncoder();
 
+  /// ToRadio.want_config_id: asks the radio to stream MyNodeInfo, the node
+  /// DB and config, terminated by FromRadio.config_complete_id == [configId].
+  List<int> encodeWantConfig(int configId) {
+    return (ProtobufWireWriter()..writeVarint(3, configId & 0xFFFFFFFF)).bytes;
+  }
+
   List<int> encodeGroupText({required String text, required int channelIndex}) {
     return _encodeTextPacket(
       text: text,

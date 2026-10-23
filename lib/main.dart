@@ -37,9 +37,14 @@ const pmcLogoAsset = 'assets/branding/1stpmc_logo_ral6031.png';
 const tacticalMapUrlTemplate = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 class TacticalCarApp extends StatelessWidget {
-  const TacticalCarApp({this.locationService, super.key});
+  const TacticalCarApp({
+    this.locationService,
+    this.meshPacketRepository,
+    super.key,
+  });
 
   final LocationService? locationService;
+  final MeshPacketRepository? meshPacketRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -71,15 +76,23 @@ class TacticalCarApp extends StatelessWidget {
           ),
         ),
       ),
-      home: TacticalHomeScreen(locationService: locationService),
+      home: TacticalHomeScreen(
+        locationService: locationService,
+        meshPacketRepository: meshPacketRepository,
+      ),
     );
   }
 }
 
 class TacticalHomeScreen extends StatefulWidget {
-  const TacticalHomeScreen({this.locationService, super.key});
+  const TacticalHomeScreen({
+    this.locationService,
+    this.meshPacketRepository,
+    super.key,
+  });
 
   final LocationService? locationService;
+  final MeshPacketRepository? meshPacketRepository;
 
   @override
   State<TacticalHomeScreen> createState() => _TacticalHomeScreenState();
@@ -132,7 +145,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     _pttAccessService = const PttAccessService();
     _meshtasticBleService = MeshtasticBleService();
     _messageEncoder = const MeshtasticMessageEncoder();
-    _meshPacketRepository = MeshPacketRepository();
+    _meshPacketRepository =
+        widget.meshPacketRepository ?? MeshPacketRepository();
     _pttService = EncryptedPttService(channel: 'ALPHA');
     _stateStore = const TacticalStateStore();
     _locationService = widget.locationService ?? GeolocatorLocationService();
@@ -515,6 +529,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     setState(() {
       for (final event in events) {
         switch (event.type) {
+          case DecodedMeshEventType.myInfo:
+            changed = _adoptRadioNodeNum(event.nodeNum) || changed;
+          case DecodedMeshEventType.configComplete:
+            break;
           case DecodedMeshEventType.nodeInfo:
           case DecodedMeshEventType.position:
             changed = _upsertMeshNode(event) || changed;
@@ -531,10 +549,37 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     }
   }
 
+  /// MyNodeInfo tells us which node number the connected T-Beam uses; the
+  /// self node must carry it so our own echoes are not shown as a peer.
+  bool _adoptRadioNodeNum(int? nodeNum) {
+    if (nodeNum == null) {
+      return false;
+    }
+    final selfIndex = _nodes.indexWhere((node) => node.isSelf);
+    if (selfIndex == -1 || _nodes[selfIndex].nodeNum == nodeNum) {
+      return false;
+    }
+    final self = _nodes[selfIndex].copyWith(nodeNum: nodeNum);
+    _nodes.removeWhere((node) => node.isSelf || node.nodeNum == nodeNum);
+    _nodes.insert(0, self);
+    return true;
+  }
+
   bool _upsertMeshNode(DecodedMeshEvent event) {
     final nodeNum = event.nodeNum ?? event.from;
-    if (nodeNum == null || nodeNum == _selfNode.nodeNum) {
+    if (nodeNum == null) {
       return false;
+    }
+    if (nodeNum == _selfNode.nodeNum) {
+      // Our own NodeInfo from the radio carries the configured callsign;
+      // position stays driven by the phone GPS.
+      final name = _eventCallSign(event);
+      if (name == null || name == _selfNode.callSign) {
+        return false;
+      }
+      final selfIndex = _nodes.indexWhere((node) => node.isSelf);
+      _nodes[selfIndex] = _selfNode.copyWith(callSign: name);
+      return true;
     }
 
     final existingIndex = _nodes.indexWhere((node) => node.nodeNum == nodeNum);
@@ -545,11 +590,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       return false;
     }
 
-    final callSign = event.shortName?.trim().isNotEmpty == true
-        ? event.shortName!.trim()
-        : event.longName?.trim().isNotEmpty == true
-        ? event.longName!.trim()
-        : existing?.callSign ?? _nodeHex(nodeNum);
+    final callSign =
+        _eventCallSign(event) ?? existing?.callSign ?? _nodeHex(nodeNum);
     final altitude = event.altitude ?? existing?.altitudeM ?? 0;
     final calculated = _buildNodeTelemetry(
       nodeNum: nodeNum,
@@ -569,6 +611,18 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       );
     }
     return true;
+  }
+
+  String? _eventCallSign(DecodedMeshEvent event) {
+    final shortName = event.shortName?.trim();
+    if (shortName != null && shortName.isNotEmpty) {
+      return shortName;
+    }
+    final longName = event.longName?.trim();
+    if (longName != null && longName.isNotEmpty) {
+      return longName;
+    }
+    return null;
   }
 
   MeshNode _buildNodeTelemetry({

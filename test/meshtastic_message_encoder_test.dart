@@ -59,4 +59,18 @@ void main() {
       0x01,
     ]);
   });
+
+  test('encodes want_config_id request', () {
+    const encoder = MeshtasticMessageEncoder();
+
+    // ToRadio field 3 (varint) = 0x12345678
+    expect(encoder.encodeWantConfig(0x12345678), [
+      0x18,
+      0xF8,
+      0xAC,
+      0xD1,
+      0x91,
+      0x01,
+    ]);
+  });
 }
