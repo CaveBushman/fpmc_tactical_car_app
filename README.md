@@ -64,7 +64,18 @@ Current packet support:
 
 ## Map Data
 
-The prototype currently uses public OpenStreetMap raster tiles for local development. Do not use public OSM tile servers as the default production tile backend. For field use, prepare offline tile packs or a controlled tile service such as MapTiler, Mapbox, Thunderforest, or a private tile server.
+By default the app uses public OpenStreetMap raster tiles, which is fine for development only. Viewed tiles go to flutter_map's HTTP cache (512 MB, 30 days); stale cached tiles are **not** shown offline.
+
+Offline packs (System → Mapy → Stáhnout oblast) download the area around your position (2–25 km, zoom 10–16, max 25 000 tiles) into permanent app storage that never expires; the map reads them before the network. Bulk download is disabled for public OSM tiles ([tile usage policy](https://operations.osmfoundation.org/policies/tiles/)), so configure a provider that allows it:
+
+```sh
+flutter run \
+  --dart-define=TILE_URL='https://api.maptiler.com/maps/outdoor-v2/256/{z}/{x}/{y}.png?key=YOUR_KEY' \
+  --dart-define=TILE_NAME=MapTiler \
+  --dart-define=TILE_ATTRIBUTION='MapTiler, OpenStreetMap contributors'
+```
+
+Optional: `TILE_MAX_ZOOM` (default 18), `TILE_ALLOW_BULK=false` to disable packs for a custom source. Offline packs are not available on web.
 
 ## Security Notes
 

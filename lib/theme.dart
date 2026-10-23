@@ -17,5 +17,3 @@ const dangerRed = Color(0xFFE2504C);
 const blueForce = Color(0xFF5FA8D3);
 
 const pmcLogoAsset = 'assets/branding/1stpmc_logo_ral6031.png';
-
-const tacticalMapUrlTemplate = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';

@@ -5,6 +5,9 @@ import 'package:latlong2/latlong.dart';
 import '../models/mesh_node.dart';
 import '../models/navigation.dart';
 import '../services/location_service.dart';
+import '../services/offline_tiles/offline_first_tile_provider.dart';
+import '../services/offline_tiles/offline_tile_store.dart';
+import '../services/offline_tiles/tile_source.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/navigation_widgets.dart';
@@ -23,6 +26,8 @@ class MapPage extends StatefulWidget {
     required this.onShareWaypoint,
     this.onCreateWaypoint,
     this.onDeleteWaypoint,
+    this.tileSource = TileSource.openStreetMap,
+    this.offlineStore,
     this.locationState = LocationState.idle,
     this.channelLabel = 'ALPHA',
     this.showDetailsSheet = true,
@@ -35,6 +40,8 @@ class MapPage extends StatefulWidget {
   final ValueChanged<TacticalWaypoint> onShareWaypoint;
   final ValueChanged<WaypointDraft>? onCreateWaypoint;
   final ValueChanged<TacticalWaypoint>? onDeleteWaypoint;
+  final TileSource tileSource;
+  final OfflineTileStore? offlineStore;
   final LocationState locationState;
   final String channelLabel;
 
@@ -99,6 +106,8 @@ class _MapPageState extends State<MapPage> {
                 onLongPress: widget.onCreateWaypoint == null
                     ? null
                     : _createWaypointAt,
+                tileSource: widget.tileSource,
+                offlineStore: widget.offlineStore,
               ),
             ),
             Positioned(
@@ -327,12 +336,18 @@ class MeshMap extends StatefulWidget {
     required this.nodes,
     required this.waypoints,
     this.onLongPress,
+    this.tileSource = TileSource.openStreetMap,
+    this.offlineStore,
     super.key,
   });
 
   final List<MeshNode> nodes;
   final List<TacticalWaypoint> waypoints;
   final ValueChanged<LatLng>? onLongPress;
+  final TileSource tileSource;
+
+  /// Offline packs to prefer over the network; null = network only.
+  final OfflineTileStore? offlineStore;
 
   @override
   State<MeshMap> createState() => _MeshMapState();
@@ -340,6 +355,13 @@ class MeshMap extends StatefulWidget {
 
 class _MeshMapState extends State<MeshMap> {
   final MapController _mapController = MapController();
+
+  // One provider per map: TileLayer disposes it together with the map.
+  late final TileProvider _tileProvider = widget.offlineStore == null
+      ? NetworkTileProvider(
+          cachingProvider: BuiltInMapCachingProvider.getOrCreateInstance(),
+        )
+      : OfflineFirstTileProvider(store: widget.offlineStore!);
   bool _mapReady = false;
   bool _followSelf = true;
   LatLng? _lastSelfPoint;
@@ -407,12 +429,10 @@ class _MeshMapState extends State<MeshMap> {
           ),
           children: [
             TileLayer(
-              urlTemplate: tacticalMapUrlTemplate,
+              urlTemplate: widget.tileSource.urlTemplate,
+              maxNativeZoom: widget.tileSource.maxZoom,
               userAgentPackageName: 'first_pmc_tactical_car_app',
-              tileProvider: NetworkTileProvider(
-                cachingProvider:
-                    BuiltInMapCachingProvider.getOrCreateInstance(),
-              ),
+              tileProvider: _tileProvider,
               tileBuilder: _tacticalTileBuilder,
             ),
             PolylineLayer(
@@ -465,8 +485,10 @@ class _MeshMapState extends State<MeshMap> {
                   ),
               ],
             ),
-            const RichAttributionWidget(
-              attributions: [TextSourceAttribution('OpenStreetMap')],
+            RichAttributionWidget(
+              attributions: [
+                TextSourceAttribution(widget.tileSource.attribution),
+              ],
               alignment: AttributionAlignment.bottomLeft,
             ),
           ],

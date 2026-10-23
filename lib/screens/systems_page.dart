@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
+
+import '../controllers/offline_maps_controller.dart';
+import '../widgets/offline_maps_section.dart';
 
 import '../services/encrypted_ptt_service.dart';
 import '../services/location_service.dart';
@@ -22,6 +26,8 @@ class SystemsPage extends StatelessWidget {
     this.locationState = LocationState.idle,
     this.onLocationStart,
     this.onLocationSettings,
+    this.offlineMaps,
+    this.mapCenter,
     super.key,
   });
 
@@ -37,6 +43,10 @@ class SystemsPage extends StatelessWidget {
   final LocationState locationState;
   final VoidCallback? onLocationStart;
   final VoidCallback? onLocationSettings;
+  final OfflineMapsController? offlineMaps;
+
+  /// Centre for offline area downloads (own position).
+  final LatLng? mapCenter;
 
   @override
   Widget build(BuildContext context) {
@@ -219,15 +229,8 @@ class SystemsPage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
-        const SystemSection(
-          title: 'Mapy',
-          icon: Icons.map_outlined,
-          children: [
-            MonoLine(label: 'Podklad', value: 'OpenStreetMap raster tiles'),
-            MonoLine(label: 'Cache', value: 'automatická, 512 MB, 30 dní'),
-            MonoLine(label: 'Offline', value: 'použije uložené dlaždice'),
-          ],
-        ),
+        if (offlineMaps != null && mapCenter != null)
+          OfflineMapsSection(controller: offlineMaps!, center: mapCenter!),
       ],
     );
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'controllers/offline_maps_controller.dart';
 import 'controllers/tactical_controller.dart';
 import 'screens/login_screen.dart';
 import 'screens/map_page.dart';
@@ -19,12 +20,14 @@ class TacticalCarApp extends StatelessWidget {
     this.locationService,
     this.meshPacketRepository,
     this.meshtasticBleService,
+    this.offlineMaps,
     super.key,
   });
 
   final LocationService? locationService;
   final MeshPacketRepository? meshPacketRepository;
   final MeshtasticBleService? meshtasticBleService;
+  final OfflineMapsController? offlineMaps;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +63,7 @@ class TacticalCarApp extends StatelessWidget {
         locationService: locationService,
         meshPacketRepository: meshPacketRepository,
         meshtasticBleService: meshtasticBleService,
+        offlineMaps: offlineMaps,
       ),
     );
   }
@@ -70,12 +74,14 @@ class TacticalHomeScreen extends StatefulWidget {
     this.locationService,
     this.meshPacketRepository,
     this.meshtasticBleService,
+    this.offlineMaps,
     super.key,
   });
 
   final LocationService? locationService;
   final MeshPacketRepository? meshPacketRepository;
   final MeshtasticBleService? meshtasticBleService;
+  final OfflineMapsController? offlineMaps;
 
   @override
   State<TacticalHomeScreen> createState() => _TacticalHomeScreenState();
@@ -83,6 +89,7 @@ class TacticalHomeScreen extends StatefulWidget {
 
 class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   late final TacticalController _controller;
+  late final OfflineMapsController _offlineMaps;
   late final StreamSubscription<String> _noticeSubscription;
   int _selectedIndex = 0;
 
@@ -94,6 +101,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       meshPacketRepository: widget.meshPacketRepository,
       meshtasticBleService: widget.meshtasticBleService,
     );
+    _offlineMaps = widget.offlineMaps ?? OfflineMapsController();
+    unawaited(_offlineMaps.init());
     _noticeSubscription = _controller.notices.listen((message) {
       if (!mounted) {
         return;
@@ -108,6 +117,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   void dispose() {
     unawaited(_noticeSubscription.cancel());
     _controller.dispose();
+    _offlineMaps.dispose();
     super.dispose();
   }
 
@@ -136,6 +146,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       pttActive: controller.pttActive,
       locationState: controller.locationState,
       channelLabel: controller.selectedGroup.name,
+      tileSource: _offlineMaps.source,
+      offlineStore: _offlineMaps.store,
       showDetailsSheet: showDetailsSheet,
       onShareWaypoint: controller.shareWaypoint,
       onDeleteWaypoint: controller.removeWaypoint,
@@ -179,6 +191,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         onLocationSettings: controller.openLocationSettings,
         fontScale: controller.fontScale,
         onFontScaleChanged: controller.setFontScale,
+        offlineMaps: _offlineMaps,
+        mapCenter: selfNode.latLng,
       ),
     ];
 
