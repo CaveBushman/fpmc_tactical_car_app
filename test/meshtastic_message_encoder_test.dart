@@ -73,4 +73,19 @@ void main() {
       0x01,
     ]);
   });
+
+  test('writes client packet id when given', () {
+    const encoder = MeshtasticMessageEncoder();
+
+    final withId = encoder.encodeGroupText(
+      text: 'OK',
+      channelIndex: 2,
+      packetId: 0x01020304,
+    );
+    final withoutId = encoder.encodeGroupText(text: 'OK', channelIndex: 2);
+
+    // MeshPacket grows by key 0x35 + 4 bytes little-endian id.
+    expect(withId.length, withoutId.length + 5);
+    expect(withId.sublist(withId.length - 5), [0x35, 0x04, 0x03, 0x02, 0x01]);
+  });
 }

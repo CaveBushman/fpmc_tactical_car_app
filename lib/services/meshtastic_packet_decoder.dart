@@ -8,6 +8,7 @@ enum DecodedMeshEventType {
   nodeInfo,
   position,
   textMessage,
+  routing,
   encrypted,
   unknown,
 }
@@ -29,6 +30,8 @@ class DecodedMeshEvent {
     this.text,
     this.heardAt,
     this.configId,
+    this.requestId,
+    this.routingError,
   });
 
   final DecodedMeshEventType type;
@@ -52,6 +55,11 @@ class DecodedMeshEvent {
   /// FromRadio.config_complete_id echoed back after a want_config request.
   final int? configId;
 
+  /// ROUTING_APP: id of the packet being acknowledged and its
+  /// Routing.error_reason (0 = delivered).
+  final int? requestId;
+  final int? routingError;
+
   String get label {
     final name = longName ?? shortName ?? _nodeLabel(nodeNum ?? from);
     switch (type) {
@@ -68,6 +76,10 @@ class DecodedMeshEvent {
         return 'Pozice $name / ${_positionLabel ?? 'bez souřadnic'}';
       case DecodedMeshEventType.textMessage:
         return 'Zpráva $name: ${text ?? ''}';
+      case DecodedMeshEventType.routing:
+        return routingError == 0
+            ? 'ACK ${_nodeLabel(requestId)} od ${_nodeLabel(from)}'
+            : 'NAK ${_nodeLabel(requestId)} chyba $routingError';
       case DecodedMeshEventType.encrypted:
         return 'Šifrovaný MeshPacket ${_nodeLabel(from)}';
       case DecodedMeshEventType.unknown:
@@ -98,6 +110,7 @@ class MeshtasticPacketDecoder {
   const MeshtasticPacketDecoder();
 
   static const textMessageApp = 1;
+  static const routingApp = 5;
   static const positionApp = 3;
   static const nodeInfoApp = 4;
 
@@ -209,6 +222,18 @@ class MeshtasticPacketDecoder {
           longitude: position.longitude,
           altitude: position.altitude,
         );
+      case routingApp:
+        return DecodedMeshEvent(
+          type: DecodedMeshEventType.routing,
+          from: from,
+          to: to,
+          packetId: packetId,
+          channelIndex: channelIndex,
+          heardAt: heardAt,
+          portNum: payload.portNum,
+          requestId: payload.requestId,
+          routingError: _readRoutingError(payload.payload),
+        );
       case nodeInfoApp:
         final user = _readUser(payload.payload);
         return DecodedMeshEvent(
@@ -236,6 +261,21 @@ class MeshtasticPacketDecoder {
     }
   }
 
+  int _readRoutingError(List<int> bytes) {
+    final reader = ProtobufWireReader(bytes);
+    var errorReason = 0;
+    while (!reader.isDone) {
+      final field = reader.readField();
+      switch (field.number) {
+        case 3:
+          errorReason = reader.readVarint();
+        default:
+          reader.skipField(field);
+      }
+    }
+    return errorReason;
+  }
+
   DecodedMeshEvent _readMyInfo(List<int> bytes) {
     final reader = ProtobufWireReader(bytes);
     int? myNodeNum;
@@ -258,6 +298,7 @@ class MeshtasticPacketDecoder {
     final reader = ProtobufWireReader(bytes);
     var portNum = 0;
     var payload = const <int>[];
+    int? requestId;
 
     while (!reader.isDone) {
       final field = reader.readField();
@@ -266,11 +307,17 @@ class MeshtasticPacketDecoder {
           portNum = reader.readVarint();
         case 2:
           payload = reader.readLengthDelimited();
+        case 6:
+          requestId = reader.readFixed32();
         default:
           reader.skipField(field);
       }
     }
-    return _DataPayload(portNum: portNum, payload: payload);
+    return _DataPayload(
+      portNum: portNum,
+      payload: payload,
+      requestId: requestId,
+    );
   }
 
   DecodedMeshEvent _readNodeInfo(List<int> bytes) {
@@ -369,10 +416,15 @@ class MeshtasticPacketDecoder {
 }
 
 class _DataPayload {
-  const _DataPayload({required this.portNum, required this.payload});
+  const _DataPayload({
+    required this.portNum,
+    required this.payload,
+    this.requestId,
+  });
 
   final int portNum;
   final List<int> payload;
+  final int? requestId;
 }
 
 class _UserInfo {

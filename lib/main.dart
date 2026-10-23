@@ -40,11 +40,13 @@ class TacticalCarApp extends StatelessWidget {
   const TacticalCarApp({
     this.locationService,
     this.meshPacketRepository,
+    this.meshtasticBleService,
     super.key,
   });
 
   final LocationService? locationService;
   final MeshPacketRepository? meshPacketRepository;
+  final MeshtasticBleService? meshtasticBleService;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +81,7 @@ class TacticalCarApp extends StatelessWidget {
       home: TacticalHomeScreen(
         locationService: locationService,
         meshPacketRepository: meshPacketRepository,
+        meshtasticBleService: meshtasticBleService,
       ),
     );
   }
@@ -88,11 +91,13 @@ class TacticalHomeScreen extends StatefulWidget {
   const TacticalHomeScreen({
     this.locationService,
     this.meshPacketRepository,
+    this.meshtasticBleService,
     super.key,
   });
 
   final LocationService? locationService;
   final MeshPacketRepository? meshPacketRepository;
+  final MeshtasticBleService? meshtasticBleService;
 
   @override
   State<TacticalHomeScreen> createState() => _TacticalHomeScreenState();
@@ -112,6 +117,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   StreamSubscription<LocationFix>? _locationFixSubscription;
   LocationState _locationState = LocationState.idle;
   DateTime? _lastLocationPersistAt;
+  final math.Random _packetIdRandom = math.Random.secure();
   StreamSubscription<MeshtasticBleState>? _bleStateSubscription;
   StreamSubscription<MeshtasticBlePacket>? _blePacketSubscription;
   StreamSubscription<MeshPacketDiagnostics>? _packetDiagnosticsSubscription;
@@ -143,7 +149,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     super.initState();
     _authService = AuthService();
     _pttAccessService = const PttAccessService();
-    _meshtasticBleService = MeshtasticBleService();
+    _meshtasticBleService =
+        widget.meshtasticBleService ?? MeshtasticBleService();
     _messageEncoder = const MeshtasticMessageEncoder();
     _meshPacketRepository =
         widget.meshPacketRepository ?? MeshPacketRepository();
@@ -243,6 +250,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         selectedGroupIndex: _selectedGroupIndex,
         onGroupSelected: (index) => _selectGroup(index, allowedGroups),
         onSend: (draft) => _sendMeshText(draft, allowedGroups),
+        onRetry: _retryMessage,
       ),
       SystemsPage(
         meshConnected: _meshConnected,
@@ -275,6 +283,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         selectedGroupIndex: _selectedGroupIndex,
         onGroupSelected: (index) => _selectGroup(index, allowedGroups),
         onSend: (draft) => _sendMeshText(draft, allowedGroups),
+        onRetry: _retryMessage,
       ),
       SystemsPage(
         meshConnected: _meshConnected,
@@ -538,6 +547,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
             changed = _upsertMeshNode(event) || changed;
           case DecodedMeshEventType.textMessage:
             changed = _appendIncomingMeshMessage(event) || changed;
+          case DecodedMeshEventType.routing:
+            changed = _applyRoutingResult(event) || changed;
           case DecodedMeshEventType.encrypted:
           case DecodedMeshEventType.unknown:
             break;
@@ -684,7 +695,9 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         packetId != 0 &&
         _messages.any(
           (message) =>
-              message.packetId == packetId && message.fromNode == event.from,
+              message.delivery == MessageDelivery.received &&
+              message.packetId == packetId &&
+              message.fromNode == event.from,
         )) {
       return false;
     }
@@ -722,17 +735,6 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     List<CommunicationGroup> groups,
   ) async {
     final group = groups.firstWhere((item) => item.id == draft.groupId);
-    final bytes = draft.directNode == null
-        ? _messageEncoder.encodeGroupText(
-            text: draft.text,
-            channelIndex: group.channelIndex,
-          )
-        : _messageEncoder.encodeDirectText(
-            text: draft.text,
-            destinationNode: draft.directNode!.nodeNum,
-            channelIndex: group.channelIndex,
-          );
-
     final directNode = draft.directNode;
     final target = directNode == null
         ? group.name
@@ -743,46 +745,131 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       time: _clockLabel(DateTime.now()),
       groupId: draft.groupId,
       targetLabel: target,
-      pending: true,
+      delivery: MessageDelivery.sending,
       priority: draft.priority,
+      packetId: _newPacketId(),
+      fromNode: _selfNode.nodeNum,
+      toNode: directNode?.nodeNum,
     );
     setState(() {
       _messages.insert(0, outgoingMessage);
     });
+    await _transmit(outgoingMessage);
+  }
+
+  Future<void> _retryMessage(MeshMessage message) async {
+    final packetId = message.packetId;
+    if (!message.canRetry || packetId == null) {
+      return;
+    }
+    // A fresh id so a late ACK for the previous attempt cannot be confused
+    // with this one.
+    final retry = message.copyWith(
+      delivery: MessageDelivery.sending,
+      packetId: _newPacketId(),
+    );
+    final replaced = _replaceOutgoing(packetId, (_) => retry);
+    if (replaced) {
+      await _transmit(retry);
+    }
+  }
+
+  Future<void> _transmit(MeshMessage message) async {
+    final packetId = message.packetId!;
+    final channelIndex = _groups
+        .firstWhere(
+          (group) => group.id == message.groupId,
+          orElse: () => _groups.first,
+        )
+        .channelIndex;
+    final toNode = message.toNode;
+    final bytes = toNode == null
+        ? _messageEncoder.encodeGroupText(
+            text: message.body,
+            channelIndex: channelIndex,
+            packetId: packetId,
+          )
+        : _messageEncoder.encodeDirectText(
+            text: message.body,
+            destinationNode: toNode,
+            channelIndex: channelIndex,
+            packetId: packetId,
+          );
     unawaited(_persistState());
 
+    var delivery = MessageDelivery.sent;
     try {
       await _meshtasticBleService.writeToRadio(bytes);
     } catch (error) {
+      delivery = MessageDelivery.notSent;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('T-Beam není připojen: zpráva je jen lokálně.'),
+          const SnackBar(
+            content: Text(
+              'T-Beam není připojen: zprávu lze odeslat znovu ze seznamu.',
+            ),
             backgroundColor: dangerRed,
           ),
         );
       }
-      return;
     }
 
     if (!mounted) {
       return;
     }
-    setState(() {
-      final index = _messages.indexOf(outgoingMessage);
-      if (index != -1) {
-        _messages[index] = MeshMessage(
-          sender: outgoingMessage.sender,
-          body: outgoingMessage.body,
-          time: outgoingMessage.time,
-          groupId: outgoingMessage.groupId,
-          targetLabel: outgoingMessage.targetLabel,
-          priority: outgoingMessage.priority,
-        );
-      }
-    });
-    unawaited(_persistState());
+    _replaceOutgoing(
+      packetId,
+      (current) => current.delivery == MessageDelivery.sending
+          ? current.copyWith(delivery: delivery)
+          : current,
+    );
   }
+
+  /// Replaces our own outgoing message carrying [packetId]; returns false
+  /// when it is no longer in the list.
+  bool _replaceOutgoing(
+    int packetId,
+    MeshMessage Function(MeshMessage current) update,
+  ) {
+    final index = _messages.indexWhere(
+      (message) =>
+          message.packetId == packetId &&
+          message.delivery != MessageDelivery.received,
+    );
+    if (index == -1) {
+      return false;
+    }
+    setState(() => _messages[index] = update(_messages[index]));
+    unawaited(_persistState());
+    return true;
+  }
+
+  bool _applyRoutingResult(DecodedMeshEvent event) {
+    final requestId = event.requestId;
+    if (requestId == null || requestId == 0) {
+      return false;
+    }
+    final index = _messages.indexWhere(
+      (message) =>
+          message.packetId == requestId &&
+          message.delivery != MessageDelivery.received,
+    );
+    if (index == -1) {
+      return false;
+    }
+    final current = _messages[index];
+    if (current.delivery == MessageDelivery.delivered) {
+      return false;
+    }
+    _messages[index] = current.copyWith(
+      delivery: event.routingError == 0
+          ? MessageDelivery.delivered
+          : MessageDelivery.failed,
+    );
+    return true;
+  }
+
+  int _newPacketId() => _packetIdRandom.nextInt(0x7FFFFFFF) + 1;
 
   Future<void> _shareWaypoint(
     TacticalWaypoint waypoint,
@@ -2951,6 +3038,7 @@ class MessagesPage extends StatefulWidget {
     required this.selectedGroupIndex,
     required this.onGroupSelected,
     required this.onSend,
+    this.onRetry,
     super.key,
   });
 
@@ -2962,6 +3050,7 @@ class MessagesPage extends StatefulWidget {
   final int selectedGroupIndex;
   final ValueChanged<int> onGroupSelected;
   final Future<void> Function(MeshMessageDraft draft) onSend;
+  final ValueChanged<MeshMessage>? onRetry;
 
   @override
   State<MessagesPage> createState() => _MessagesPageState();
@@ -3137,8 +3226,14 @@ class _MessagesPageState extends State<MessagesPage> {
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             itemCount: filteredMessages.length,
             separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (context, index) =>
-                MessageCard(message: filteredMessages[index]),
+            itemBuilder: (context, index) {
+              final message = filteredMessages[index];
+              final onRetry = widget.onRetry;
+              return MessageCard(
+                message: message,
+                onRetry: onRetry == null ? null : () => onRetry(message),
+              );
+            },
           ),
         ),
       ],
@@ -3668,9 +3763,10 @@ class _TargetPill extends StatelessWidget {
 }
 
 class MessageCard extends StatelessWidget {
-  const MessageCard({required this.message, super.key});
+  const MessageCard({required this.message, this.onRetry, super.key});
 
   final MeshMessage message;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -3714,13 +3810,9 @@ class MessageCard extends StatelessWidget {
                           ),
                         ),
                       ],
-                      if (message.pending) ...[
+                      if (message.delivery != MessageDelivery.received) ...[
                         const SizedBox(width: 8),
-                        const Icon(
-                          Icons.cloud_off_outlined,
-                          size: 14,
-                          color: dangerRed,
-                        ),
+                        DeliveryStatusIcon(delivery: message.delivery),
                       ],
                     ],
                   ),
@@ -3739,9 +3831,51 @@ class MessageCard extends StatelessWidget {
               message.body,
               style: const TextStyle(fontSize: 14, height: 1.25),
             ),
+            if (message.canRetry && onRetry != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: onRetry,
+                  style: TextButton.styleFrom(foregroundColor: dangerRed),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Odeslat znovu'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+class DeliveryStatusIcon extends StatelessWidget {
+  const DeliveryStatusIcon({required this.delivery, super.key});
+
+  final MessageDelivery delivery;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color, label) = switch (delivery) {
+      MessageDelivery.received => (Icons.call_received, sand, 'Přijato'),
+      MessageDelivery.sending => (Icons.schedule, sand, 'Odesílám'),
+      MessageDelivery.notSent => (
+        Icons.cloud_off_outlined,
+        dangerRed,
+        'Neodesláno, T-Beam nepřipojen',
+      ),
+      MessageDelivery.sent => (Icons.done, sand, 'Předáno do T-Beamu'),
+      MessageDelivery.delivered => (Icons.done_all, blueForce, 'Doručeno'),
+      MessageDelivery.failed => (
+        Icons.error_outline,
+        dangerRed,
+        'Doručení selhalo',
+      ),
+    };
+    return Tooltip(
+      message: label,
+      child: Icon(icon, size: 14, color: color, semanticLabel: label),
     );
   }
 }
@@ -4753,6 +4887,26 @@ class TacticalWaypoint {
 
 enum TacticalWaypointType { rally, medevac, danger, observation, supply }
 
+enum MessageDelivery {
+  /// Incoming message.
+  received,
+
+  /// Being written to the T-Beam.
+  sending,
+
+  /// Could not be handed to the T-Beam (not connected); can be retried.
+  notSent,
+
+  /// Handed to the T-Beam; for direct messages an ACK is still pending.
+  sent,
+
+  /// Destination acknowledged the direct message.
+  delivered,
+
+  /// Mesh reported a routing error (NAK / max retransmit); can be retried.
+  failed,
+}
+
 class MeshMessage {
   const MeshMessage({
     required this.sender,
@@ -4760,11 +4914,12 @@ class MeshMessage {
     required this.time,
     required this.groupId,
     this.targetLabel,
-    this.pending = false,
+    this.delivery = MessageDelivery.received,
     this.priority = false,
     this.internetVoice = false,
     this.packetId,
     this.fromNode,
+    this.toNode,
   });
 
   final String sender;
@@ -4772,13 +4927,36 @@ class MeshMessage {
   final String time;
   final String groupId;
   final String? targetLabel;
-  final bool pending;
+  final MessageDelivery delivery;
   final bool priority;
   final bool internetVoice;
 
-  /// Meshtastic packet id and sender node, used to drop duplicate deliveries.
+  /// Meshtastic packet id and sender node, used to drop duplicate deliveries
+  /// and to match routing ACKs to outgoing messages.
   final int? packetId;
   final int? fromNode;
+
+  /// Destination node of an outgoing direct message (null = group).
+  final int? toNode;
+
+  bool get canRetry =>
+      delivery == MessageDelivery.notSent || delivery == MessageDelivery.failed;
+
+  MeshMessage copyWith({MessageDelivery? delivery, int? packetId}) {
+    return MeshMessage(
+      sender: sender,
+      body: body,
+      time: time,
+      groupId: groupId,
+      targetLabel: targetLabel,
+      delivery: delivery ?? this.delivery,
+      priority: priority,
+      internetVoice: internetVoice,
+      packetId: packetId ?? this.packetId,
+      fromNode: fromNode,
+      toNode: toNode,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -4787,26 +4965,38 @@ class MeshMessage {
       'time': time,
       'groupId': groupId,
       'targetLabel': targetLabel,
-      'pending': pending,
+      'delivery': delivery.name,
       'priority': priority,
       'internetVoice': internetVoice,
       'packetId': packetId,
       'fromNode': fromNode,
+      'toNode': toNode,
     };
   }
 
   static MeshMessage fromJson(Map<String, dynamic> json) {
+    var delivery = MessageDelivery.values.firstWhere(
+      (value) => value.name == json['delivery'],
+      orElse: () => json['pending'] == true
+          ? MessageDelivery.notSent
+          : MessageDelivery.received,
+    );
+    // A write interrupted by an app restart never reached the radio.
+    if (delivery == MessageDelivery.sending) {
+      delivery = MessageDelivery.notSent;
+    }
     return MeshMessage(
       sender: json['sender']?.toString() ?? 'UNKNOWN',
       body: json['body']?.toString() ?? '',
       time: json['time']?.toString() ?? '--:--',
       groupId: json['groupId']?.toString() ?? 'alpha',
       targetLabel: json['targetLabel']?.toString(),
-      pending: json['pending'] == true,
+      delivery: delivery,
       priority: json['priority'] == true,
       internetVoice: json['internetVoice'] == true,
       packetId: (json['packetId'] as num?)?.toInt(),
       fromNode: (json['fromNode'] as num?)?.toInt(),
+      toNode: (json['toNode'] as num?)?.toInt(),
     );
   }
 
