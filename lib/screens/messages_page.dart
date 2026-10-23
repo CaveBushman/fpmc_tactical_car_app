@@ -382,7 +382,11 @@ class _MessagesPageState extends State<MessagesPage> {
 
   Future<void> _showSitrepReportSheet() async {
     final batteryController = TextEditingController(
-      text: '${widget.selfNode.batteryPercent}%',
+      text: switch (widget.selfNode.batteryPercent) {
+        null => '?',
+        > 100 => 'EXT',
+        final percent => '$percent%',
+      },
     );
     final ammoController = TextEditingController(text: 'OK');
     final fuelController = TextEditingController(text: 'OK');

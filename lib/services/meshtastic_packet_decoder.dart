@@ -8,6 +8,7 @@ enum DecodedMeshEventType {
   nodeInfo,
   position,
   textMessage,
+  telemetry,
   routing,
   encrypted,
   unknown,
@@ -32,6 +33,7 @@ class DecodedMeshEvent {
     this.configId,
     this.requestId,
     this.routingError,
+    this.batteryLevel,
   });
 
   final DecodedMeshEventType type;
@@ -60,6 +62,9 @@ class DecodedMeshEvent {
   final int? requestId;
   final int? routingError;
 
+  /// DeviceMetrics.battery_level: 0–100 %, 101 = powered externally.
+  final int? batteryLevel;
+
   String get label {
     final name = longName ?? shortName ?? _nodeLabel(nodeNum ?? from);
     switch (type) {
@@ -76,6 +81,8 @@ class DecodedMeshEvent {
         return 'Pozice $name / ${_positionLabel ?? 'bez souřadnic'}';
       case DecodedMeshEventType.textMessage:
         return 'Zpráva $name: ${text ?? ''}';
+      case DecodedMeshEventType.telemetry:
+        return 'Telemetrie $name / baterie ${batteryLevel ?? '-'} %';
       case DecodedMeshEventType.routing:
         return routingError == 0
             ? 'ACK ${_nodeLabel(requestId)} od ${_nodeLabel(from)}'
@@ -111,6 +118,7 @@ class MeshtasticPacketDecoder {
 
   static const textMessageApp = 1;
   static const routingApp = 5;
+  static const telemetryApp = 67;
   static const positionApp = 3;
   static const nodeInfoApp = 4;
 
@@ -234,6 +242,18 @@ class MeshtasticPacketDecoder {
           requestId: payload.requestId,
           routingError: _readRoutingError(payload.payload),
         );
+      case telemetryApp:
+        return DecodedMeshEvent(
+          type: DecodedMeshEventType.telemetry,
+          from: from,
+          to: to,
+          packetId: packetId,
+          channelIndex: channelIndex,
+          heardAt: heardAt,
+          portNum: payload.portNum,
+          nodeNum: from,
+          batteryLevel: _readTelemetryBattery(payload.payload),
+        );
       case nodeInfoApp:
         final user = _readUser(payload.payload);
         return DecodedMeshEvent(
@@ -326,6 +346,7 @@ class MeshtasticPacketDecoder {
     _UserInfo? user;
     _PositionInfo? position;
     DateTime? lastHeard;
+    int? batteryLevel;
 
     while (!reader.isDone) {
       final field = reader.readField();
@@ -338,6 +359,10 @@ class MeshtasticPacketDecoder {
           position = _readPosition(reader.readLengthDelimited());
         case 5:
           lastHeard = _epochSeconds(reader.readFixed32());
+        case 6:
+          batteryLevel = _readDeviceMetricsBattery(
+            reader.readLengthDelimited(),
+          );
         default:
           reader.skipField(field);
       }
@@ -352,7 +377,40 @@ class MeshtasticPacketDecoder {
       longitude: position?.longitude,
       altitude: position?.altitude,
       heardAt: lastHeard,
+      batteryLevel: batteryLevel,
     );
+  }
+
+  /// Telemetry.device_metrics (field 2) → battery level; null for
+  /// environment/power telemetry variants.
+  int? _readTelemetryBattery(List<int> bytes) {
+    final reader = ProtobufWireReader(bytes);
+    int? battery;
+    while (!reader.isDone) {
+      final field = reader.readField();
+      switch (field.number) {
+        case 2:
+          battery = _readDeviceMetricsBattery(reader.readLengthDelimited());
+        default:
+          reader.skipField(field);
+      }
+    }
+    return battery;
+  }
+
+  int? _readDeviceMetricsBattery(List<int> bytes) {
+    final reader = ProtobufWireReader(bytes);
+    int? battery;
+    while (!reader.isDone) {
+      final field = reader.readField();
+      switch (field.number) {
+        case 1:
+          battery = reader.readVarint();
+        default:
+          reader.skipField(field);
+      }
+    }
+    return battery;
   }
 
   static DateTime? _epochSeconds(int seconds) {

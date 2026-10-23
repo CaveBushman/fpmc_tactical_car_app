@@ -61,6 +61,17 @@ List<int> fromRadioNodeInfo({
   ]);
 }
 
+List<int> fromRadioTelemetry({required int from, required int battery}) {
+  return pbMessage(2, [
+    ...pbFixed32(1, from),
+    ...pbFixed32(2, 0xFFFFFFFF),
+    ...pbMessage(4, [
+      ...pbVarint(1, 67),
+      ...pbMessage(2, pbMessage(2, pbVarint(1, battery))),
+    ]),
+  ]);
+}
+
 List<int> fromRadioMyInfo(int nodeNum) => pbMessage(3, pbVarint(1, nodeNum));
 
 List<int> _key(int field, int wireType) => _rawVarint((field << 3) | wireType);

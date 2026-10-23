@@ -156,11 +156,18 @@ class NodeCard extends StatelessWidget {
 class BatteryBadge extends StatelessWidget {
   const BatteryBadge({required this.percent, super.key});
 
-  final int percent;
+  /// Null = unknown, above 100 = external power (Meshtastic reports 101).
+  final int? percent;
 
   @override
   Widget build(BuildContext context) {
-    final color = percent < 25 ? dangerRed : sand;
+    final value = percent;
+    final (icon, label, color) = switch (value) {
+      null => (Icons.battery_unknown, '--', Colors.white54),
+      > 100 => (Icons.power, 'EXT', sand),
+      < 25 => (Icons.battery_alert, '$value%', dangerRed),
+      _ => (Icons.battery_5_bar, '$value%', sand),
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
@@ -169,10 +176,10 @@ class BatteryBadge extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.battery_5_bar, size: 15, color: color),
+          Icon(icon, size: 15, color: color),
           const SizedBox(width: 4),
           Text(
-            '$percent%',
+            label,
             style: TextStyle(
               color: color,
               fontWeight: FontWeight.w800,

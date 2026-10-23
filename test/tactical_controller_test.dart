@@ -120,4 +120,34 @@ void main() {
     expect(controller.session, isNull);
     expect(controller.messages.any((m) => m.body == 'Tajne'), isFalse);
   });
+
+  test('telemetry updates peer and own T-Beam battery', () async {
+    await controller.login('operator', 'operator-2026');
+    ingest(fromRadioMyInfo(0x0BADBEEF));
+    ingest(fromRadioTelemetry(from: 0xA1100002, battery: 17));
+    ingest(fromRadioTelemetry(from: 0x0BADBEEF, battery: 101));
+    await pumpEventQueue();
+
+    final raven2 = controller.peers.firstWhere(
+      (node) => node.callSign == 'RAVEN-2',
+    );
+    expect(raven2.batteryPercent, 17);
+    expect(controller.selfNode.batteryPercent, 101);
+  });
+
+  test('new node without telemetry has unknown battery', () async {
+    await controller.login('operator', 'operator-2026');
+    ingest(
+      fromRadioNodeInfo(
+        nodeNum: 0x0000BEEF,
+        shortName: 'NEW',
+        latitude: 50.1,
+        longitude: 14.4,
+      ),
+    );
+    await pumpEventQueue();
+
+    final node = controller.peers.firstWhere((node) => node.callSign == 'NEW');
+    expect(node.batteryPercent, isNull);
+  });
 }

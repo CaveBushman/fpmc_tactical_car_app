@@ -302,6 +302,8 @@ class TacticalController extends ChangeNotifier {
           changed = _upsertMeshNode(event) || changed;
         case DecodedMeshEventType.textMessage:
           changed = _appendIncomingMeshMessage(event) || changed;
+        case DecodedMeshEventType.telemetry:
+          changed = _applyTelemetry(event) || changed;
         case DecodedMeshEventType.routing:
           changed = _applyRoutingResult(event) || changed;
         case DecodedMeshEventType.encrypted:
@@ -338,13 +340,17 @@ class TacticalController extends ChangeNotifier {
     }
     final self = selfNode;
     if (nodeNum == self.nodeNum) {
-      // Our own NodeInfo from the radio carries the configured callsign;
-      // position stays driven by the phone GPS.
-      final name = _eventCallSign(event);
-      if (name == null || name == self.callSign) {
+      // Our own NodeInfo from the radio carries the configured callsign and
+      // the T-Beam battery; position stays driven by the phone GPS.
+      final name = _eventCallSign(event) ?? self.callSign;
+      final battery = event.batteryLevel ?? self.batteryPercent;
+      if (name == self.callSign && battery == self.batteryPercent) {
         return false;
       }
-      _nodes[_nodes.indexOf(self)] = self.copyWith(callSign: name);
+      _nodes[_nodes.indexOf(self)] = self.copyWith(
+        callSign: name,
+        batteryPercent: battery,
+      );
       return true;
     }
 
@@ -363,7 +369,7 @@ class TacticalController extends ChangeNotifier {
       latitude: latitude,
       longitude: longitude,
       altitudeM: event.altitude ?? existing?.altitudeM ?? 0,
-      batteryPercent: existing?.batteryPercent ?? 100,
+      batteryPercent: event.batteryLevel ?? existing?.batteryPercent,
       lastSeenAt: _latest(
         event.heardAt ?? DateTime.now(),
         existing?.lastSeenAt,
@@ -375,6 +381,28 @@ class TacticalController extends ChangeNotifier {
     } else {
       _nodes[existingIndex] = updated;
     }
+    return true;
+  }
+
+  /// Battery from TELEMETRY_APP; also counts as the node being heard.
+  bool _applyTelemetry(DecodedMeshEvent event) {
+    final nodeNum = event.from;
+    final battery = event.batteryLevel;
+    if (nodeNum == null || battery == null) {
+      return false;
+    }
+    final index = _nodes.indexWhere((node) => node.nodeNum == nodeNum);
+    if (index == -1) {
+      // Unknown node without a position cannot be placed yet.
+      return false;
+    }
+    final node = _nodes[index];
+    _nodes[index] = node.copyWith(
+      batteryPercent: battery,
+      lastSeenAt: node.isSelf
+          ? null
+          : _latest(event.heardAt ?? DateTime.now(), node.lastSeenAt),
+    );
     return true;
   }
 

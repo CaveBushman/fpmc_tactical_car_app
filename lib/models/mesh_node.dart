@@ -9,8 +9,8 @@ class MeshNode {
     required this.latitude,
     required this.longitude,
     required this.altitudeM,
-    required this.batteryPercent,
     required this.lastSeenAt,
+    this.batteryPercent,
     this.distanceKm = 0,
     this.bearingDeg = 0,
     this.isSelf = false,
@@ -24,7 +24,9 @@ class MeshNode {
 
   /// Always derived from [latitude]/[longitude] so it cannot drift.
   final String mgrs;
-  final int batteryPercent;
+
+  /// 0–100 %, above 100 = external power, null = not reported yet.
+  final int? batteryPercent;
   final DateTime lastSeenAt;
 
   /// Relative to the self node; derived state, recomputed whenever either
@@ -99,7 +101,7 @@ class MeshNode {
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       altitudeM: (json['altitudeM'] as num?)?.toInt() ?? 0,
-      batteryPercent: (json['batteryPercent'] as num?)?.toInt() ?? 100,
+      batteryPercent: (json['batteryPercent'] as num?)?.toInt(),
       // Snapshots without a timestamp are treated as long lost rather than
       // freshly heard.
       lastSeenAt:

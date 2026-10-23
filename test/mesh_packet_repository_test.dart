@@ -128,6 +128,30 @@ void main() {
     expect(events.last.type, DecodedMeshEventType.configComplete);
     expect(events.last.configId, 4242);
   });
+
+  test('decodes telemetry battery and NodeInfo device metrics', () {
+    const decoder = MeshtasticPacketDecoder();
+    final telemetry = _message(2, [
+      ..._fixed32(1, 0x1234ABCD),
+      ..._message(4, [
+        ..._varint(1, MeshtasticPacketDecoder.telemetryApp),
+        ..._message(2, [
+          ..._fixed32(1, 1792750000),
+          ..._message(2, [..._varint(1, 64), ..._fixed32(2, 0x40800000)]),
+        ]),
+      ]),
+    ]);
+    final nodeInfo = _message(4, [
+      ..._varint(1, 0x1234ABCD),
+      ..._message(6, _varint(1, 101)),
+    ]);
+
+    final event = decoder.decodeFromRadio(telemetry).single;
+    expect(event.type, DecodedMeshEventType.telemetry);
+    expect(event.batteryLevel, 64);
+    expect(event.nodeNum, 0x1234ABCD);
+    expect(decoder.decodeFromRadio(nodeInfo).single.batteryLevel, 101);
+  });
 }
 
 List<int> _message(int field, List<int> value) => _bytes(field, value);
