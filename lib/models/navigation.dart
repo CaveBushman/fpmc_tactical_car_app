@@ -103,6 +103,9 @@ class TacticalWaypoint {
     required this.longitude,
     required this.note,
     this.priority = false,
+    this.sharedBy,
+    this.createdAt,
+    this.meshWaypointId,
   });
 
   final String code;
@@ -116,7 +119,98 @@ class TacticalWaypoint {
   final String note;
   final bool priority;
 
+  /// Callsign that shared it over the mesh; null = created on this device.
+  final String? sharedBy;
+  final DateTime? createdAt;
+
+  /// Id of a native Meshtastic waypoint (WAYPOINT_APP), so updates and
+  /// deletions from other clients replace the same point.
+  final int? meshWaypointId;
+
   LatLng get latLng => LatLng(latitude, longitude);
+
+  /// Human-readable share format; [parseShareText] reads it back.
+  String get shareText =>
+      'WP $code | $typeLabel | MGRS $mgrs | LAT ${latitude.toStringAsFixed(6)} | LON ${longitude.toStringAsFixed(6)} | $note';
+
+  static final _sharePattern = RegExp(
+    r'^WP (\S+) \| ([A-Z]+) \| MGRS [^|]+\| LAT (-?\d+(?:\.\d+)?) \| LON (-?\d+(?:\.\d+)?)(?: \| (.*))?$',
+  );
+
+  /// Parses a waypoint shared as text by this app; null for other messages.
+  static TacticalWaypoint? parseShareText(
+    String text, {
+    String? sharedBy,
+    DateTime? receivedAt,
+  }) {
+    final match = _sharePattern.firstMatch(text.trim());
+    if (match == null) {
+      return null;
+    }
+    final type = typeFromLabel(match.group(2)!);
+    final latitude = double.tryParse(match.group(3)!);
+    final longitude = double.tryParse(match.group(4)!);
+    if (type == null ||
+        latitude == null ||
+        longitude == null ||
+        latitude.abs() > 90 ||
+        longitude.abs() > 180) {
+      return null;
+    }
+    return TacticalWaypoint(
+      code: match.group(1)!,
+      type: type,
+      latitude: latitude,
+      longitude: longitude,
+      note: match.group(5)?.trim() ?? '',
+      priority:
+          type == TacticalWaypointType.medevac ||
+          type == TacticalWaypointType.danger,
+      sharedBy: sharedBy,
+      createdAt: receivedAt,
+    );
+  }
+
+  static TacticalWaypointType? typeFromLabel(String label) {
+    final normalized = label.trim().toUpperCase();
+    for (final type in TacticalWaypointType.values) {
+      if (type.label == normalized) {
+        return type;
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'code': code,
+      'type': type.name,
+      'latitude': latitude,
+      'longitude': longitude,
+      'note': note,
+      'priority': priority,
+      'sharedBy': sharedBy,
+      'createdAt': createdAt?.toUtc().toIso8601String(),
+      'meshWaypointId': meshWaypointId,
+    };
+  }
+
+  static TacticalWaypoint fromJson(Map<String, dynamic> json) {
+    return TacticalWaypoint(
+      code: json['code']?.toString() ?? 'WP',
+      type: TacticalWaypointType.values.firstWhere(
+        (type) => type.name == json['type'],
+        orElse: () => TacticalWaypointType.observation,
+      ),
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble(),
+      note: json['note']?.toString() ?? '',
+      priority: json['priority'] == true,
+      sharedBy: json['sharedBy']?.toString(),
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
+      meshWaypointId: (json['meshWaypointId'] as num?)?.toInt(),
+    );
+  }
 
   IconData get icon {
     return switch (type) {
@@ -128,15 +222,7 @@ class TacticalWaypoint {
     };
   }
 
-  String get typeLabel {
-    return switch (type) {
-      TacticalWaypointType.rally => 'RALLY',
-      TacticalWaypointType.medevac => 'MEDEVAC',
-      TacticalWaypointType.danger => 'DANGER',
-      TacticalWaypointType.observation => 'OBS',
-      TacticalWaypointType.supply => 'SUPPLY',
-    };
-  }
+  String get typeLabel => type.label;
 
   TacticalNavTargetKind get navKind {
     return switch (type) {
@@ -174,4 +260,35 @@ class TacticalWaypoint {
   ];
 }
 
-enum TacticalWaypointType { rally, medevac, danger, observation, supply }
+enum TacticalWaypointType {
+  rally('RALLY'),
+  medevac('MEDEVAC'),
+  danger('DANGER'),
+  observation('OBS'),
+  supply('SUPPLY');
+
+  const TacticalWaypointType(this.label);
+
+  final String label;
+}
+
+/// User input from the waypoint editor.
+class WaypointDraft {
+  const WaypointDraft({
+    required this.type,
+    required this.latitude,
+    required this.longitude,
+    this.code = '',
+    this.note = '',
+    this.share = false,
+  });
+
+  final TacticalWaypointType type;
+  final double latitude;
+  final double longitude;
+  final String code;
+  final String note;
+
+  /// Also send it to the selected group right away.
+  final bool share;
+}

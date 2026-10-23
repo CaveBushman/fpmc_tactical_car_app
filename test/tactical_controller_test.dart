@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tactical_car_app/controllers/tactical_controller.dart';
 import 'package:tactical_car_app/models/messaging.dart';
+import 'package:tactical_car_app/models/navigation.dart';
 import 'package:tactical_car_app/services/location_service.dart';
 import 'package:tactical_car_app/services/mesh_packet_repository.dart';
 import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
@@ -149,5 +150,105 @@ void main() {
 
     final node = controller.peers.firstWhere((node) => node.callSign == 'NEW');
     expect(node.batteryPercent, isNull);
+  });
+
+  test('incoming WP text adds a shared waypoint', () async {
+    await controller.login('operator', 'operator-2026');
+    ingest(
+      fromRadioText(
+        from: 0xA1100002,
+        text:
+            'WP CP-4 | SUPPLY | MGRS 33U VR 1 2 | LAT 50.1 | LON 14.45 | voda',
+        packetId: 11,
+      ),
+    );
+    await pumpEventQueue();
+
+    final waypoint = controller.waypoints.firstWhere((w) => w.code == 'CP-4');
+    expect(waypoint.type, TacticalWaypointType.supply);
+    expect(waypoint.sharedBy, 'RAVEN-2');
+  });
+
+  test(
+    'native mesh waypoint is added, updated and deleted by expiry',
+    () async {
+      await controller.login('operator', 'operator-2026');
+      ingest(fromRadioWaypoint(from: 0xA1100002, id: 5, name: 'Sraz'));
+      ingest(
+        fromRadioWaypoint(
+          from: 0xA1100002,
+          id: 5,
+          name: 'Sraz',
+          latitude: 50.2,
+        ),
+      );
+      await pumpEventQueue();
+
+      final matches = controller.waypoints.where((w) => w.meshWaypointId == 5);
+      expect(matches, hasLength(1));
+      expect(matches.single.latitude, closeTo(50.2, 1e-6));
+
+      ingest(fromRadioWaypoint(from: 0xA1100002, id: 5, expire: 1));
+      await pumpEventQueue();
+
+      expect(controller.waypoints.where((w) => w.meshWaypointId == 5), isEmpty);
+    },
+  );
+
+  test('added waypoints get unique codes and can be removed', () async {
+    await controller.login('operator', 'operator-2026');
+
+    final first = controller.addWaypoint(
+      type: TacticalWaypointType.danger,
+      latitude: 50.1,
+      longitude: 14.4,
+    );
+    final second = controller.addWaypoint(
+      type: TacticalWaypointType.danger,
+      latitude: 50.2,
+      longitude: 14.5,
+    );
+    final named = controller.addWaypoint(
+      type: TacticalWaypointType.rally,
+      latitude: 50.2,
+      longitude: 14.5,
+      code: 'rally 1',
+    );
+
+    expect(first.code, 'DANGER-1');
+    expect(second.code, 'DANGER-2');
+    // RALLY-1 is taken by the demo data.
+    expect(named.code, 'RALLY-1-1');
+    expect(first.priority, isTrue);
+
+    controller.removeWaypoint(first);
+    expect(controller.waypoints.contains(first), isFalse);
+  });
+
+  test('waypoints survive restart for the same user', () async {
+    await controller.login('operator', 'operator-2026');
+    controller.addWaypoint(
+      type: TacticalWaypointType.observation,
+      latitude: 50.1,
+      longitude: 14.4,
+      code: 'HILL',
+    );
+    controller.removeWaypoint(
+      controller.waypoints.firstWhere((w) => w.code == 'OBS-2'),
+    );
+    await pumpEventQueue();
+
+    final restarted = TacticalController(
+      locationService: FakeLocationService(),
+      meshtasticBleService: FakeBleService(),
+      meshPacketRepository: MeshPacketRepository(),
+    );
+    addTearDown(restarted.dispose);
+    await restarted.login('operator', 'operator-2026');
+    await pumpEventQueue(times: 50);
+
+    final codes = restarted.waypoints.map((w) => w.code);
+    expect(codes, contains('HILL'));
+    expect(codes, isNot(contains('OBS-2')));
   });
 }

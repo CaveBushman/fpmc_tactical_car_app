@@ -138,6 +138,19 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       channelLabel: controller.selectedGroup.name,
       showDetailsSheet: showDetailsSheet,
       onShareWaypoint: controller.shareWaypoint,
+      onDeleteWaypoint: controller.removeWaypoint,
+      onCreateWaypoint: (draft) {
+        final waypoint = controller.addWaypoint(
+          type: draft.type,
+          latitude: draft.latitude,
+          longitude: draft.longitude,
+          code: draft.code,
+          note: draft.note,
+        );
+        if (draft.share) {
+          unawaited(controller.shareWaypoint(waypoint));
+        }
+      },
     );
 
     final detailPages = [

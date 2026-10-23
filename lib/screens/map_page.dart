@@ -21,6 +21,8 @@ class MapPage extends StatefulWidget {
     required this.waypoints,
     required this.pttActive,
     required this.onShareWaypoint,
+    this.onCreateWaypoint,
+    this.onDeleteWaypoint,
     this.locationState = LocationState.idle,
     this.channelLabel = 'ALPHA',
     this.showDetailsSheet = true,
@@ -31,6 +33,8 @@ class MapPage extends StatefulWidget {
   final List<TacticalWaypoint> waypoints;
   final bool pttActive;
   final ValueChanged<TacticalWaypoint> onShareWaypoint;
+  final ValueChanged<WaypointDraft>? onCreateWaypoint;
+  final ValueChanged<TacticalWaypoint>? onDeleteWaypoint;
   final LocationState locationState;
   final String channelLabel;
 
@@ -46,6 +50,21 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   bool? _positionExpanded;
+
+  Future<void> _createWaypointAt(LatLng point) async {
+    final draft = await showModalBottomSheet<WaypointDraft>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: panelGreen,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+      ),
+      builder: (context) => WaypointEditorSheet(position: point),
+    );
+    if (draft != null) {
+      widget.onCreateWaypoint?.call(draft);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +93,13 @@ class _MapPageState extends State<MapPage> {
               top: 0,
               right: 0,
               bottom: mapBottom,
-              child: MeshMap(nodes: nodes, waypoints: widget.waypoints),
+              child: MeshMap(
+                nodes: nodes,
+                waypoints: widget.waypoints,
+                onLongPress: widget.onCreateWaypoint == null
+                    ? null
+                    : _createWaypointAt,
+              ),
             ),
             Positioned(
               left: 8,
@@ -109,6 +134,7 @@ class _MapPageState extends State<MapPage> {
                 pttActive: widget.pttActive,
                 channelLabel: widget.channelLabel,
                 onShareWaypoint: widget.onShareWaypoint,
+                onDeleteWaypoint: widget.onDeleteWaypoint,
               ),
           ],
         );
@@ -126,6 +152,7 @@ class _MapDetailsSheet extends StatelessWidget {
     required this.pttActive,
     required this.channelLabel,
     required this.onShareWaypoint,
+    this.onDeleteWaypoint,
   });
 
   final double peekFraction;
@@ -135,6 +162,7 @@ class _MapDetailsSheet extends StatelessWidget {
   final bool pttActive;
   final String channelLabel;
   final ValueChanged<TacticalWaypoint> onShareWaypoint;
+  final ValueChanged<TacticalWaypoint>? onDeleteWaypoint;
 
   @override
   Widget build(BuildContext context) {
@@ -231,6 +259,7 @@ class _MapDetailsSheet extends StatelessWidget {
               WaypointStrip(
                 waypoints: waypoints,
                 onShareWaypoint: onShareWaypoint,
+                onDeleteWaypoint: onDeleteWaypoint,
               ),
               const SizedBox(height: 10),
               Align(
@@ -294,10 +323,16 @@ class _HealthDots extends StatelessWidget {
 }
 
 class MeshMap extends StatefulWidget {
-  const MeshMap({required this.nodes, required this.waypoints, super.key});
+  const MeshMap({
+    required this.nodes,
+    required this.waypoints,
+    this.onLongPress,
+    super.key,
+  });
 
   final List<MeshNode> nodes;
   final List<TacticalWaypoint> waypoints;
+  final ValueChanged<LatLng>? onLongPress;
 
   @override
   State<MeshMap> createState() => _MeshMapState();
@@ -349,6 +384,9 @@ class _MeshMapState extends State<MeshMap> {
             initialCenter: selfPoint,
             initialZoom: 13.4,
             onMapReady: () => _mapReady = true,
+            onLongPress: widget.onLongPress == null
+                ? null
+                : (_, point) => widget.onLongPress!(point),
             onPositionChanged: (camera, hasGesture) {
               if (hasGesture && _followSelf) {
                 setState(() => _followSelf = false);

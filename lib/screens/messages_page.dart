@@ -325,9 +325,17 @@ class _MessagesPageState extends State<MessagesPage> {
   Future<void> _showMedevacReportSheet() async {
     final casualtyController = TextEditingController(text: '1');
     final noteController = TextEditingController(text: 'nutny odsun');
+    // Prefer a MEDEVAC point; otherwise evacuate from our own position.
+    final self = widget.selfNode;
     final medevacWaypoint = widget.waypoints.firstWhere(
       (waypoint) => waypoint.type == TacticalWaypointType.medevac,
-      orElse: () => widget.waypoints.first,
+      orElse: () => TacticalWaypoint(
+        code: 'POZICE',
+        type: TacticalWaypointType.medevac,
+        latitude: self.latitude,
+        longitude: self.longitude,
+        note: '',
+      ),
     );
     var status = 'URGENT';
     final sent = await showModalBottomSheet<bool>(

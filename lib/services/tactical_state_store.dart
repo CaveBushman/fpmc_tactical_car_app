@@ -10,11 +10,15 @@ class PersistedTacticalState {
     required this.nodes,
     required this.messages,
     required this.savedAt,
+    this.waypoints,
     this.owner,
   });
 
   final List<Map<String, dynamic>> nodes;
   final List<Map<String, dynamic>> messages;
+
+  /// Null for snapshots written before waypoints were persisted.
+  final List<Map<String, dynamic>>? waypoints;
   final DateTime savedAt;
 
   /// User name of the session that wrote the snapshot (null for legacy).
@@ -106,6 +110,7 @@ class TacticalStateStore {
       await save(
         nodes: state.nodes,
         messages: state.messages,
+        waypoints: state.waypoints ?? const [],
         owner: state.owner,
       );
     }
@@ -116,6 +121,7 @@ class TacticalStateStore {
   Future<void> save({
     required List<Map<String, dynamic>> nodes,
     required List<Map<String, dynamic>> messages,
+    List<Map<String, dynamic>> waypoints = const [],
     String? owner,
   }) async {
     final prefs = await SharedPreferences.getInstance();
@@ -125,6 +131,7 @@ class TacticalStateStore {
       'savedAt': DateTime.now().toUtc().toIso8601String(),
       'nodes': nodes,
       'messages': messages,
+      'waypoints': waypoints,
     };
     await prefs.setString(key, await _encrypt(jsonEncode(payload)));
   }
@@ -188,6 +195,9 @@ class TacticalStateStore {
     return PersistedTacticalState(
       nodes: _mapList(decoded['nodes']),
       messages: _mapList(decoded['messages']),
+      waypoints: decoded.containsKey('waypoints')
+          ? _mapList(decoded['waypoints'])
+          : null,
       savedAt:
           DateTime.tryParse(decoded['savedAt']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
+import '../models/geo.dart';
 import '../models/navigation.dart';
 import '../theme.dart';
 
@@ -266,12 +268,14 @@ class WaypointStrip extends StatelessWidget {
   const WaypointStrip({
     required this.waypoints,
     required this.onShareWaypoint,
+    this.onDeleteWaypoint,
     this.compact = false,
     super.key,
   });
 
   final List<TacticalWaypoint> waypoints;
   final ValueChanged<TacticalWaypoint> onShareWaypoint;
+  final ValueChanged<TacticalWaypoint>? onDeleteWaypoint;
   final bool compact;
 
   @override
@@ -299,11 +303,21 @@ class WaypointStrip extends StatelessWidget {
           'Body mise',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
         ),
+        Text(
+          'Nový bod: dlouhý stisk na mapě',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withValues(alpha: 0.6),
+          ),
+        ),
         const SizedBox(height: 8),
         for (final waypoint in waypoints) ...[
           WaypointCard(
             waypoint: waypoint,
             onShare: () => onShareWaypoint(waypoint),
+            onDelete: onDeleteWaypoint == null
+                ? null
+                : () => onDeleteWaypoint!(waypoint),
           ),
           const SizedBox(height: 8),
         ],
@@ -316,12 +330,14 @@ class WaypointCard extends StatelessWidget {
   const WaypointCard({
     required this.waypoint,
     required this.onShare,
+    this.onDelete,
     this.compact = false,
     super.key,
   });
 
   final TacticalWaypoint waypoint;
   final VoidCallback onShare;
+  final VoidCallback? onDelete;
   final bool compact;
 
   @override
@@ -370,7 +386,9 @@ class WaypointCard extends StatelessWidget {
                   if (!compact) ...[
                     const SizedBox(height: 2),
                     Text(
-                      waypoint.note,
+                      waypoint.sharedBy == null
+                          ? waypoint.note
+                          : '${waypoint.note} (od ${waypoint.sharedBy})'.trim(),
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.66),
@@ -394,6 +412,127 @@ class WaypointCard extends StatelessWidget {
                 ),
               ),
               icon: const Icon(Icons.send, size: 18),
+            ),
+            if (onDelete != null)
+              IconButton(
+                key: ValueKey('delete-waypoint-${waypoint.code}'),
+                tooltip: 'Smazat ${waypoint.code}',
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline, size: 20),
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet for a new waypoint at [position].
+class WaypointEditorSheet extends StatefulWidget {
+  const WaypointEditorSheet({required this.position, super.key});
+
+  final LatLng position;
+
+  @override
+  State<WaypointEditorSheet> createState() => _WaypointEditorSheetState();
+}
+
+class _WaypointEditorSheetState extends State<WaypointEditorSheet> {
+  final TextEditingController _codeController = TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
+  TacticalWaypointType _type = TacticalWaypointType.rally;
+  bool _share = true;
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final position = widget.position;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        14,
+        16,
+        16 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Nový bod',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              formatMgrs(position.latitude, position.longitude),
+              style: const TextStyle(
+                color: sand,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final type in TacticalWaypointType.values)
+                  ChoiceChip(
+                    label: Text(type.label),
+                    selected: _type == type,
+                    onSelected: (_) => setState(() => _type = type),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _codeController,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(
+                labelText: 'Kód',
+                hintText: '${_type.label}-1 (automaticky)',
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _noteController,
+              decoration: const InputDecoration(
+                labelText: 'Poznámka',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _share,
+              onChanged: (value) => setState(() => _share = value),
+              title: const Text('Hned sdílet do skupiny'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(
+                WaypointDraft(
+                  type: _type,
+                  latitude: position.latitude,
+                  longitude: position.longitude,
+                  code: _codeController.text,
+                  note: _noteController.text,
+                  share: _share,
+                ),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: rangerGreen,
+                minimumSize: const Size.fromHeight(48),
+              ),
+              icon: const Icon(Icons.add_location_alt_outlined),
+              label: const Text('Uložit bod'),
             ),
           ],
         ),

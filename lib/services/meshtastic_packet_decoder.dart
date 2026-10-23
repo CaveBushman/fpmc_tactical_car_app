@@ -9,6 +9,7 @@ enum DecodedMeshEventType {
   position,
   textMessage,
   telemetry,
+  waypoint,
   routing,
   encrypted,
   unknown,
@@ -34,6 +35,10 @@ class DecodedMeshEvent {
     this.requestId,
     this.routingError,
     this.batteryLevel,
+    this.waypointId,
+    this.waypointName,
+    this.waypointDescription,
+    this.waypointExpire,
   });
 
   final DecodedMeshEventType type;
@@ -65,6 +70,13 @@ class DecodedMeshEvent {
   /// DeviceMetrics.battery_level: 0–100 %, 101 = powered externally.
   final int? batteryLevel;
 
+  /// WAYPOINT_APP fields; [waypointExpire] is epoch seconds, 0 = never, a
+  /// past value means the sender deleted it.
+  final int? waypointId;
+  final String? waypointName;
+  final String? waypointDescription;
+  final int? waypointExpire;
+
   String get label {
     final name = longName ?? shortName ?? _nodeLabel(nodeNum ?? from);
     switch (type) {
@@ -81,6 +93,8 @@ class DecodedMeshEvent {
         return 'Pozice $name / ${_positionLabel ?? 'bez souřadnic'}';
       case DecodedMeshEventType.textMessage:
         return 'Zpráva $name: ${text ?? ''}';
+      case DecodedMeshEventType.waypoint:
+        return 'Waypoint ${waypointName ?? waypointId} od ${_nodeLabel(from)}';
       case DecodedMeshEventType.telemetry:
         return 'Telemetrie $name / baterie ${batteryLevel ?? '-'} %';
       case DecodedMeshEventType.routing:
@@ -119,6 +133,7 @@ class MeshtasticPacketDecoder {
   static const textMessageApp = 1;
   static const routingApp = 5;
   static const telemetryApp = 67;
+  static const waypointApp = 8;
   static const positionApp = 3;
   static const nodeInfoApp = 4;
 
@@ -241,6 +256,23 @@ class MeshtasticPacketDecoder {
           portNum: payload.portNum,
           requestId: payload.requestId,
           routingError: _readRoutingError(payload.payload),
+        );
+      case waypointApp:
+        final waypoint = _readWaypoint(payload.payload);
+        return DecodedMeshEvent(
+          type: DecodedMeshEventType.waypoint,
+          from: from,
+          to: to,
+          packetId: packetId,
+          channelIndex: channelIndex,
+          heardAt: heardAt,
+          portNum: payload.portNum,
+          latitude: waypoint.latitude,
+          longitude: waypoint.longitude,
+          waypointId: waypoint.id,
+          waypointName: waypoint.name,
+          waypointDescription: waypoint.description,
+          waypointExpire: waypoint.expire,
         );
       case telemetryApp:
         return DecodedMeshEvent(
@@ -383,6 +415,49 @@ class MeshtasticPacketDecoder {
 
   /// Telemetry.device_metrics (field 2) → battery level; null for
   /// environment/power telemetry variants.
+  _WaypointInfo _readWaypoint(List<int> bytes) {
+    final reader = ProtobufWireReader(bytes);
+    int? id;
+    double? latitude;
+    double? longitude;
+    var expire = 0;
+    String? name;
+    String? description;
+    while (!reader.isDone) {
+      final field = reader.readField();
+      switch (field.number) {
+        case 1:
+          id = reader.readVarint();
+        case 2:
+          latitude = reader.readFixed32(signed: true) / 10000000;
+        case 3:
+          longitude = reader.readFixed32(signed: true) / 10000000;
+        case 4:
+          expire = reader.readVarint();
+        case 6:
+          name = utf8.decode(
+            reader.readLengthDelimited(),
+            allowMalformed: true,
+          );
+        case 7:
+          description = utf8.decode(
+            reader.readLengthDelimited(),
+            allowMalformed: true,
+          );
+        default:
+          reader.skipField(field);
+      }
+    }
+    return _WaypointInfo(
+      id: id,
+      latitude: latitude,
+      longitude: longitude,
+      expire: expire,
+      name: name,
+      description: description,
+    );
+  }
+
   int? _readTelemetryBattery(List<int> bytes) {
     final reader = ProtobufWireReader(bytes);
     int? battery;
@@ -498,4 +573,22 @@ class _PositionInfo {
   final double? latitude;
   final double? longitude;
   final int? altitude;
+}
+
+class _WaypointInfo {
+  const _WaypointInfo({
+    this.id,
+    this.latitude,
+    this.longitude,
+    this.expire = 0,
+    this.name,
+    this.description,
+  });
+
+  final int? id;
+  final double? latitude;
+  final double? longitude;
+  final int expire;
+  final String? name;
+  final String? description;
 }

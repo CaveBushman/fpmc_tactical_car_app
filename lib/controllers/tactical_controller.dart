@@ -107,7 +107,7 @@ class TacticalController extends ChangeNotifier {
   final List<MeshNode> _nodes = MeshNode.demoNodes(DateTime.now());
   final List<MeshMessage> _messages = MeshMessage.demoMessages(DateTime.now());
   final List<CommunicationGroup> _groups = CommunicationGroup.demoGroups;
-  final List<TacticalWaypoint> _waypoints = TacticalWaypoint.demoWaypoints;
+  final List<TacticalWaypoint> _waypoints = [...TacticalWaypoint.demoWaypoints];
 
   /// User-facing notices (shown as snack bars).
   Stream<String> get notices => _noticeController.stream;
@@ -117,7 +117,7 @@ class TacticalController extends ChangeNotifier {
   List<MeshNode> get peers => _nodes.where((node) => !node.isSelf).toList();
   MeshNode get selfNode => _nodes.firstWhere((node) => node.isSelf);
   List<MeshMessage> get messages => List.unmodifiable(_messages);
-  List<TacticalWaypoint> get waypoints => _waypoints;
+  List<TacticalWaypoint> get waypoints => List.unmodifiable(_waypoints);
   bool get pttActive => _pttActive;
   bool get internetVoiceOnline => _internetVoiceOnline;
   bool get meshConnected => _bleState.status == MeshtasticBleStatus.connected;
@@ -206,6 +206,9 @@ class TacticalController extends ChangeNotifier {
     _messages
       ..clear()
       ..addAll(MeshMessage.demoMessages(DateTime.now()));
+    _waypoints
+      ..clear()
+      ..addAll(TacticalWaypoint.demoWaypoints);
     _notify();
   }
 
@@ -304,6 +307,8 @@ class TacticalController extends ChangeNotifier {
           changed = _appendIncomingMeshMessage(event) || changed;
         case DecodedMeshEventType.telemetry:
           changed = _applyTelemetry(event) || changed;
+        case DecodedMeshEventType.waypoint:
+          changed = _applyMeshWaypoint(event) || changed;
         case DecodedMeshEventType.routing:
           changed = _applyRoutingResult(event) || changed;
         case DecodedMeshEventType.encrypted:
@@ -456,6 +461,14 @@ class TacticalController extends ChangeNotifier {
     final target = event.to == meshtasticBroadcastNode
         ? group.name
         : 'DM ${_nodeCallSign(event.to) ?? _nodeHex(event.to)}';
+    final sharedWaypoint = TacticalWaypoint.parseShareText(
+      text,
+      sharedBy: sender,
+      receivedAt: DateTime.now(),
+    );
+    if (sharedWaypoint != null) {
+      _upsertWaypoint(sharedWaypoint);
+    }
     _messages.insert(
       0,
       MeshMessage(
@@ -533,12 +546,118 @@ class TacticalController extends ChangeNotifier {
     }
   }
 
+  /// Adds a waypoint created on this device; returns it with a unique code.
+  TacticalWaypoint addWaypoint({
+    required TacticalWaypointType type,
+    required double latitude,
+    required double longitude,
+    String? code,
+    String note = '',
+  }) {
+    final waypoint = TacticalWaypoint(
+      code: _uniqueWaypointCode(code, type),
+      type: type,
+      latitude: latitude,
+      longitude: longitude,
+      note: note.trim(),
+      priority:
+          type == TacticalWaypointType.medevac ||
+          type == TacticalWaypointType.danger,
+      createdAt: DateTime.now(),
+    );
+    _waypoints.add(waypoint);
+    _notify();
+    unawaited(_persistState());
+    return waypoint;
+  }
+
+  void removeWaypoint(TacticalWaypoint waypoint) {
+    final removed = _waypoints.remove(waypoint);
+    if (removed) {
+      _notify();
+      unawaited(_persistState());
+    }
+  }
+
+  String _uniqueWaypointCode(String? requested, TacticalWaypointType type) {
+    final base = (requested ?? '').trim().toUpperCase().replaceAll(
+      RegExp(r'\s+'),
+      '-',
+    );
+    bool taken(String code) => _waypoints.any((w) => w.code == code);
+    if (base.isNotEmpty && !taken(base)) {
+      return base;
+    }
+    final prefix = base.isNotEmpty ? base : type.label;
+    for (var n = 1; ; n++) {
+      final candidate = '$prefix-$n';
+      if (!taken(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  /// Same code (text share) or same Meshtastic id replaces the old point.
+  void _upsertWaypoint(TacticalWaypoint waypoint) {
+    final index = _waypoints.indexWhere(
+      (existing) =>
+          existing.code == waypoint.code ||
+          (waypoint.meshWaypointId != null &&
+              existing.meshWaypointId == waypoint.meshWaypointId),
+    );
+    if (index == -1) {
+      _waypoints.add(waypoint);
+    } else {
+      _waypoints[index] = waypoint;
+    }
+  }
+
+  bool _applyMeshWaypoint(DecodedMeshEvent event) {
+    final id = event.waypointId;
+    if (id == null) {
+      return false;
+    }
+    final expire = event.waypointExpire ?? 0;
+    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (expire != 0 && expire <= nowSeconds) {
+      final before = _waypoints.length;
+      _waypoints.removeWhere((w) => w.meshWaypointId == id);
+      return _waypoints.length != before;
+    }
+    final latitude = event.latitude;
+    final longitude = event.longitude;
+    if (latitude == null || longitude == null) {
+      return false;
+    }
+    final name = event.waypointName?.trim() ?? '';
+    final description = event.waypointDescription?.trim() ?? '';
+    final type =
+        TacticalWaypoint.typeFromLabel(name.split(RegExp(r'[\s-]')).first) ??
+        TacticalWaypointType.observation;
+    _upsertWaypoint(
+      TacticalWaypoint(
+        code: name.isEmpty
+            ? 'WP-${id.toRadixString(16).toUpperCase()}'
+            : name.toUpperCase().replaceAll(RegExp(r'\s+'), '-'),
+        type: type,
+        latitude: latitude,
+        longitude: longitude,
+        note: description,
+        priority:
+            type == TacticalWaypointType.medevac ||
+            type == TacticalWaypointType.danger,
+        sharedBy: _nodeCallSign(event.from) ?? _nodeHex(event.from),
+        createdAt: DateTime.now(),
+        meshWaypointId: id,
+      ),
+    );
+    return true;
+  }
+
   Future<void> shareWaypoint(TacticalWaypoint waypoint) {
-    final text =
-        'WP ${waypoint.code} | ${waypoint.typeLabel} | MGRS ${waypoint.mgrs} | LAT ${waypoint.latitude.toStringAsFixed(6)} | LON ${waypoint.longitude.toStringAsFixed(6)} | ${waypoint.note}';
     return sendMeshText(
       MeshMessageDraft(
-        text: text,
+        text: waypoint.shareText,
         groupId: selectedGroup.id,
         priority: waypoint.priority,
       ),
@@ -647,7 +766,12 @@ class TacticalController extends ChangeNotifier {
       final restoredMessages = snapshot.messages
           .map(MeshMessage.fromJson)
           .toList();
-      if (restoredNodes.isEmpty && restoredMessages.isEmpty) {
+      final restoredWaypoints = snapshot.waypoints
+          ?.map(TacticalWaypoint.fromJson)
+          .toList();
+      if (restoredNodes.isEmpty &&
+          restoredMessages.isEmpty &&
+          restoredWaypoints == null) {
         return;
       }
 
@@ -658,6 +782,13 @@ class TacticalController extends ChangeNotifier {
         _messages
           ..clear()
           ..addAll(restoredMessages);
+      }
+      // An empty list is a valid state (all points deleted); only legacy
+      // snapshots without the key keep the defaults.
+      if (restoredWaypoints != null) {
+        _waypoints
+          ..clear()
+          ..addAll(restoredWaypoints);
       }
       _notify();
       final liveFix = _locationState.lastFix;
@@ -678,6 +809,7 @@ class TacticalController extends ChangeNotifier {
       await _stateStore.save(
         nodes: [for (final node in _nodes) node.toJson()],
         messages: [for (final message in _messages.take(150)) message.toJson()],
+        waypoints: [for (final waypoint in _waypoints) waypoint.toJson()],
         owner: session.userName,
       );
     } catch (_) {

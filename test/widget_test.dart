@@ -440,4 +440,49 @@ void main() {
     expect(find.text('OK uzly'), findsOneWidget);
     expect(find.text('Kanál'), findsOneWidget);
   });
+
+  testWidgets('long press on map creates a waypoint, delete removes it', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(tester.view.reset);
+
+    await login(tester);
+
+    await tester.longPress(find.byType(MeshMap));
+    await tester.pumpAndSettle();
+    expect(find.text('Nový bod'), findsOneWidget);
+
+    await tester.tap(find.text('DANGER'));
+    await tester.enterText(find.widgetWithText(TextField, 'Kód'), 'mina');
+    await tester.tap(find.text('Hned sdílet do skupiny'));
+    await tester.tap(find.text('Uložit bod'));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey('map-sheet-handle')),
+      const Offset(0, -700),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('delete-waypoint-MINA')),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('map-details-sheet')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('MINA | DANGER'), findsWidgets);
+
+    final delete = find.byKey(const ValueKey('delete-waypoint-MINA'));
+    await tester.ensureVisible(delete);
+    await tester.pumpAndSettle();
+    await tester.tap(delete);
+    await tester.pumpAndSettle();
+
+    expect(find.text('MINA | DANGER'), findsNothing);
+  });
 }
