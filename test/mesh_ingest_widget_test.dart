@@ -1,11 +1,13 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tactical_car_app/main.dart';
 import 'package:tactical_car_app/services/mesh_packet_repository.dart';
 import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
+import 'package:tactical_car_app/services/tactical_state_store.dart';
 
 import 'support/mesh_bytes.dart';
 
@@ -124,6 +126,7 @@ void main() {
         'messages': [],
       }),
     });
+    FlutterSecureStorage.setMockInitialValues({});
     addTearDown(() => SharedPreferences.setMockInitialValues({}));
 
     await login(tester);
@@ -131,5 +134,66 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('RAVEN-2'), findsNothing);
     expect(find.text('Nejbližší'), findsOneWidget);
+  });
+
+  testWidgets('logout wipes stored state and resets session data', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    final repository = await login(tester);
+
+    ingest(
+      repository,
+      fromRadioText(from: 0xA1100002, text: 'Tajna zprava', packetId: 9),
+    );
+    await tester.pumpAndSettle();
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('tactical_state_v2'), isNotNull);
+
+    await tester.tap(find.byTooltip('Uživatel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Odhlásit'));
+    await tester.pumpAndSettle();
+    expect(find.text('Odhlásit a smazat data?'), findsOneWidget);
+    await tester.tap(find.text('Odhlásit a smazat'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Přihlásit'), findsOneWidget);
+    expect(prefs.getString('tactical_state_v2'), isNull);
+
+    await tester.enterText(find.byType(TextField).first, 'operator');
+    await tester.enterText(find.byType(TextField).at(1), 'operator-2026');
+    await tester.tap(find.text('Přihlásit'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Zprávy'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tajna zprava'), findsNothing);
+  });
+
+  testWidgets('snapshot of another user is not restored', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
+    await const TacticalStateStore().save(
+      nodes: const [],
+      messages: const [
+        {
+          'sender': 'HQ',
+          'body': 'Jen pro velitele',
+          'time': '10:00',
+          'groupId': 'alpha',
+        },
+      ],
+      owner: 'commander',
+    );
+
+    await login(tester);
+    await tester.tap(find.text('Zprávy'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Jen pro velitele'), findsNothing);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('tactical_state_v2'), isNull);
   });
 }

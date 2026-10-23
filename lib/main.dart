@@ -157,7 +157,6 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     _pttService = EncryptedPttService(channel: 'ALPHA');
     _stateStore = const TacticalStateStore();
     _locationService = widget.locationService ?? GeolocatorLocationService();
-    unawaited(_restorePersistedState());
     _locationStateSubscription = _locationService.stateStream.listen((state) {
       if (!mounted) {
         return;
@@ -432,6 +431,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       _selectedGroupIndex = 0;
     });
     unawaited(_locationService.start());
+    unawaited(_restorePersistedState(result.session!.userName));
     _syncPttChannelForGroup(
       result.session!,
       _groups.firstWhere(
@@ -442,11 +442,59 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   }
 
   Future<void> _logout() async {
-    await _authService.logout();
-    await _locationService.stop();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: panelGreen,
+        title: const Text('Odhlásit a smazat data?'),
+        content: const Text(
+          'Zprávy, pozice týmu a šifrovací klíč lokálního úložiště budou '
+          'z tohoto zařízení nevratně smazány. T-Beam se odpojí.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Zrušit'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: dangerRed),
+            child: const Text('Odhlásit a smazat'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    // Drop the session first so no in-flight persist can rewrite the store.
     setState(() {
       _session = null;
       _selectedGroupIndex = 0;
+    });
+    await _authService.logout();
+    await _locationService.stop();
+    try {
+      await _meshtasticBleService.disconnect();
+    } catch (_) {
+      // Not connected or plugin unavailable; nothing to tear down.
+    }
+    try {
+      await _stateStore.clear();
+    } catch (_) {
+      // Storage unavailable; in-memory state is still reset below.
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _nodes
+        ..clear()
+        ..addAll(MeshNode.demoNodes(DateTime.now()));
+      _messages
+        ..clear()
+        ..addAll(MeshMessage.demoMessages);
     });
   }
 
@@ -904,10 +952,17 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     );
   }
 
-  Future<void> _restorePersistedState() async {
+  Future<void> _restorePersistedState(String userName) async {
     try {
       final snapshot = await _stateStore.load();
       if (!mounted || snapshot == null) {
+        return;
+      }
+      // A snapshot left behind by another user (app killed without logout)
+      // must not leak into this session.
+      final owner = snapshot.owner;
+      if (owner != null && owner != userName) {
+        await _stateStore.clear();
         return;
       }
 
@@ -944,10 +999,19 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   }
 
   Future<void> _persistState() async {
-    await _stateStore.save(
-      nodes: [for (final node in _nodes) node.toJson()],
-      messages: [for (final message in _messages.take(150)) message.toJson()],
-    );
+    final session = _session;
+    if (session == null) {
+      return;
+    }
+    try {
+      await _stateStore.save(
+        nodes: [for (final node in _nodes) node.toJson()],
+        messages: [for (final message in _messages.take(150)) message.toJson()],
+        owner: session.userName,
+      );
+    } catch (_) {
+      // Persistence is best effort; the live session keeps working.
+    }
   }
 
   String _clockLabel(DateTime value) {
