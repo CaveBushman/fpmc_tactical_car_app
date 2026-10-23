@@ -678,9 +678,25 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       return false;
     }
 
+    // Duplicate deliveries (rebroadcasts, re-read queue) share from+id.
+    final packetId = event.packetId;
+    if (packetId != null &&
+        packetId != 0 &&
+        _messages.any(
+          (message) =>
+              message.packetId == packetId && message.fromNode == event.from,
+        )) {
+      return false;
+    }
+
+    // Unknown channel indexes land in the primary channel group; the selected
+    // index refers to the session's allowed groups, not to _groups.
     final group = _groups.firstWhere(
       (group) => group.channelIndex == event.channelIndex,
-      orElse: () => _groups[_selectedGroupIndex],
+      orElse: () => _groups.firstWhere(
+        (group) => group.channelIndex == 0,
+        orElse: () => _groups.first,
+      ),
     );
     final sender = _nodeCallSign(event.from) ?? _nodeHex(event.from);
     final target = event.to == meshtasticBroadcastNode
@@ -694,6 +710,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         time: _clockLabel(DateTime.now()),
         groupId: group.id,
         targetLabel: target,
+        packetId: packetId,
+        fromNode: event.from,
       ),
     );
     return true;
@@ -1443,11 +1461,12 @@ class MapPage extends StatelessWidget {
                       bottom: 12,
                       child: MapLegend(pttActive: pttActive),
                     ),
-                    Positioned(
-                      right: 12,
-                      top: 52,
-                      child: NavigationCueBadge(solution: navSolutions.first),
-                    ),
+                    if (navSolutions.isNotEmpty)
+                      Positioned(
+                        right: 12,
+                        top: 52,
+                        child: NavigationCueBadge(solution: navSolutions.first),
+                      ),
                   ],
                 ),
               ),
@@ -1564,7 +1583,7 @@ class MapPage extends StatelessWidget {
             ),
             MetricTile(
               label: 'Nejbližší',
-              value: '${_nearest(nodes).distanceKm.toStringAsFixed(1)} km',
+              value: _nearestLabel(nodes),
               icon: Icons.near_me_outlined,
             ),
           ],
@@ -1580,10 +1599,13 @@ class MapPage extends StatelessWidget {
     );
   }
 
-  MeshNode _nearest(List<MeshNode> nodes) {
+  String _nearestLabel(List<MeshNode> nodes) {
     final others = nodes.where((node) => !node.isSelf).toList()
       ..sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
-    return others.first;
+    if (others.isEmpty) {
+      return '-';
+    }
+    return '${others.first.distanceKm.toStringAsFixed(1)} km';
   }
 }
 
@@ -4741,6 +4763,8 @@ class MeshMessage {
     this.pending = false,
     this.priority = false,
     this.internetVoice = false,
+    this.packetId,
+    this.fromNode,
   });
 
   final String sender;
@@ -4752,6 +4776,10 @@ class MeshMessage {
   final bool priority;
   final bool internetVoice;
 
+  /// Meshtastic packet id and sender node, used to drop duplicate deliveries.
+  final int? packetId;
+  final int? fromNode;
+
   Map<String, dynamic> toJson() {
     return {
       'sender': sender,
@@ -4762,6 +4790,8 @@ class MeshMessage {
       'pending': pending,
       'priority': priority,
       'internetVoice': internetVoice,
+      'packetId': packetId,
+      'fromNode': fromNode,
     };
   }
 
@@ -4775,6 +4805,8 @@ class MeshMessage {
       pending: json['pending'] == true,
       priority: json['priority'] == true,
       internetVoice: json['internetVoice'] == true,
+      packetId: (json['packetId'] as num?)?.toInt(),
+      fromNode: (json['fromNode'] as num?)?.toInt(),
     );
   }
 
