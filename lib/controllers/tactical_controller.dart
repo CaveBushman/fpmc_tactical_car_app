@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/mesh_node.dart';
 import '../models/messaging.dart';
 import '../models/navigation.dart';
+import '../models/reports.dart';
 import '../services/auth_service.dart';
 import '../services/encrypted_ptt_service.dart';
 import '../services/location_service.dart';
@@ -461,14 +462,7 @@ class TacticalController extends ChangeNotifier {
     final target = event.to == meshtasticBroadcastNode
         ? group.name
         : 'DM ${_nodeCallSign(event.to) ?? _nodeHex(event.to)}';
-    final sharedWaypoint = TacticalWaypoint.parseShareText(
-      text,
-      sharedBy: sender,
-      receivedAt: DateTime.now(),
-    );
-    if (sharedWaypoint != null) {
-      _upsertWaypoint(sharedWaypoint);
-    }
+    _applyStructuredText(text, sender: sender);
     _messages.insert(
       0,
       MeshMessage(
@@ -526,6 +520,7 @@ class TacticalController extends ChangeNotifier {
       toNode: directNode?.nodeNum,
     );
     _messages.insert(0, outgoingMessage);
+    _applyStructuredText(draft.text, sender: self.callSign);
     _notify();
     await _transmit(outgoingMessage);
   }
@@ -594,6 +589,45 @@ class TacticalController extends ChangeNotifier {
       if (!taken(candidate)) {
         return candidate;
       }
+    }
+  }
+
+  /// Turns structured report text into map data: shared waypoints and
+  /// CONTACT reports (plotted as a DANGER point at the estimated position).
+  void _applyStructuredText(String text, {required String sender}) {
+    final now = DateTime.now();
+    final shared = TacticalWaypoint.parseShareText(
+      text,
+      sharedBy: sender,
+      receivedAt: now,
+    );
+    if (shared != null) {
+      _upsertWaypoint(shared);
+      return;
+    }
+    final contact = ContactReport.parse(text);
+    if (contact != null) {
+      String two(int value) => value.toString().padLeft(2, '0');
+      final position = contact.position;
+      _waypoints.add(
+        TacticalWaypoint(
+          code: _uniqueWaypointCode(
+            'CONTACT-${two(now.hour)}${two(now.minute)}',
+            TacticalWaypointType.danger,
+          ),
+          type: TacticalWaypointType.danger,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          note: [
+            contact.contactType,
+            contact.size,
+            if (contact.note.isNotEmpty) contact.note,
+          ].join(' / '),
+          priority: true,
+          sharedBy: sender,
+          createdAt: now,
+        ),
+      );
     }
   }
 

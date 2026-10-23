@@ -251,4 +251,40 @@ void main() {
     expect(codes, contains('HILL'));
     expect(codes, isNot(contains('OBS-2')));
   });
+
+  test('CONTACT reports become DANGER points for sender and receivers', () async {
+    await controller.login('operator', 'operator-2026');
+    final self = controller.selfNode;
+
+    await controller.sendMeshText(
+      MeshMessageDraft(
+        text:
+            'CONTACT | MGRS ${self.mgrs} | DIR 180 | DIST 500 m | TYPE DRON | SIZE 1 | nizko',
+        groupId: controller.selectedGroup.id,
+      ),
+    );
+    ingest(
+      fromRadioText(
+        from: 0xA1100002,
+        text:
+            'CONTACT | MGRS ${self.mgrs} | DIR 000 | DIST 200 m | TYPE OSOBA | SIZE 3 | x',
+        packetId: 21,
+      ),
+    );
+    await pumpEventQueue();
+
+    final contacts = controller.waypoints
+        .where((w) => w.code.startsWith('CONTACT-'))
+        .toList();
+    expect(contacts, hasLength(2));
+    expect(
+      contacts.every((w) => w.type == TacticalWaypointType.danger),
+      isTrue,
+    );
+    final own = contacts.firstWhere((w) => w.sharedBy == self.callSign);
+    expect(own.latitude, lessThan(self.latitude));
+    expect(own.note, contains('DRON'));
+    final received = contacts.firstWhere((w) => w.sharedBy == 'RAVEN-2');
+    expect(received.latitude, greaterThan(self.latitude));
+  });
 }
