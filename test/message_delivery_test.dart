@@ -6,20 +6,8 @@ import 'package:tactical_car_app/services/mesh_packet_repository.dart';
 import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
 import 'package:tactical_car_app/services/protobuf_wire_reader.dart';
 
+import 'support/fakes.dart';
 import 'support/mesh_bytes.dart';
-
-class FakeBleService extends MeshtasticBleService {
-  bool connected = true;
-  final List<List<int>> written = [];
-
-  @override
-  Future<void> writeToRadio(List<int> protobufBytes) async {
-    if (!connected) {
-      throw StateError('not connected');
-    }
-    written.add(protobufBytes);
-  }
-}
 
 /// Extracts MeshPacket.id from a ToRadio{packet} frame.
 int writtenPacketId(List<int> toRadio) {

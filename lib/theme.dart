@@ -1,6 +1,4 @@
-
 import 'package:flutter/material.dart';
-
 
 const rangerGreen = Color(0xFF4B5320);
 

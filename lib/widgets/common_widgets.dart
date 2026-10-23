@@ -1,3 +1,4 @@
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -148,20 +149,46 @@ class AppBrand extends StatelessWidget {
   }
 }
 
-class TimeReadout extends StatelessWidget {
-  const TimeReadout({required this.now, super.key});
+/// Local and UTC clock. Ticks on its own so the rest of the screen does not
+/// rebuild every second.
+class TimeReadout extends StatefulWidget {
+  const TimeReadout({this.clock = DateTime.now, super.key});
 
-  final DateTime now;
+  final DateTime Function() clock;
+
+  @override
+  State<TimeReadout> createState() => _TimeReadoutState();
+}
+
+class _TimeReadoutState extends State<TimeReadout> {
+  late DateTime _now;
+  late final Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = widget.clock();
+    _timer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => setState(() => _now = widget.clock()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final utc = now.toUtc();
+    final utc = _now.toUtc();
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Text(
-          'LOC ${_time(now)}',
+          'LOC ${_time(_now)}',
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
         Text(
