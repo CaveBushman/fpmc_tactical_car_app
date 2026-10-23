@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tactical_car_app/main.dart';
+import 'package:tactical_car_app/app.dart';
 import 'package:tactical_car_app/services/mesh_packet_repository.dart';
 import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
 import 'package:tactical_car_app/services/tactical_state_store.dart';

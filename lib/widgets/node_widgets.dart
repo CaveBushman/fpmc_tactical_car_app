@@ -1,0 +1,195 @@
+
+import 'package:flutter/material.dart';
+
+import '../models/mesh_node.dart';
+import '../theme.dart';
+
+class NodeStatusBadge extends StatelessWidget {
+  const NodeStatusBadge({required this.status, super.key});
+
+  final MeshNodeLinkStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+      decoration: BoxDecoration(
+        color: status.color.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: status.color.withValues(alpha: 0.38)),
+      ),
+      child: Text(
+        status.label,
+        style: TextStyle(
+          color: status.color,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class NodeHealthSummary {
+  const NodeHealthSummary({
+    required this.ok,
+    required this.stale,
+    required this.lost,
+  });
+
+  final int ok;
+  final int stale;
+  final int lost;
+
+  static NodeHealthSummary fromNodes(List<MeshNode> nodes) {
+    var ok = 0;
+    var stale = 0;
+    var lost = 0;
+    for (final node in nodes) {
+      switch (node.linkStatus) {
+        case MeshNodeLinkStatus.ok:
+          ok++;
+        case MeshNodeLinkStatus.stale:
+          stale++;
+        case MeshNodeLinkStatus.lost:
+          lost++;
+      }
+    }
+    return NodeHealthSummary(ok: ok, stale: stale, lost: lost);
+  }
+}
+
+extension MeshNodeLinkStatusStyle on MeshNodeLinkStatus {
+  String get label {
+    return switch (this) {
+      MeshNodeLinkStatus.ok => 'OK',
+      MeshNodeLinkStatus.stale => 'STALE',
+      MeshNodeLinkStatus.lost => 'LOST',
+    };
+  }
+
+  Color get color {
+    return switch (this) {
+      MeshNodeLinkStatus.ok => blueForce,
+      MeshNodeLinkStatus.stale => signalAmber,
+      MeshNodeLinkStatus.lost => dangerRed,
+    };
+  }
+}
+
+class NodeCard extends StatelessWidget {
+  const NodeCard({required this.node, this.onCheckIn, super.key});
+
+  final MeshNode node;
+  final VoidCallback? onCheckIn;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = node.linkStatus;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: node.isSelf ? signalAmber : status.color,
+              foregroundColor: Colors.black,
+              child: Text(
+                node.callSign.characters.first,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    node.callSign,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    node.mgrs,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      color: sand,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${node.distanceKm.toStringAsFixed(1)} km | ${node.bearingDeg.toStringAsFixed(0)} deg | ${node.lastSeenMinutes} min',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.68),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                NodeStatusBadge(status: status),
+                const SizedBox(height: 6),
+                BatteryBadge(percent: node.batteryPercent),
+                if (onCheckIn != null) ...[
+                  const SizedBox(height: 6),
+                  IconButton.filledTonal(
+                    tooltip: 'CHECK-IN ${node.callSign}',
+                    onPressed: onCheckIn,
+                    style: IconButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: status.color.withValues(alpha: 0.28),
+                      fixedSize: const Size(38, 34),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.mark_chat_unread_outlined, size: 18),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class BatteryBadge extends StatelessWidget {
+  const BatteryBadge({required this.percent, super.key});
+
+  final int percent;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = percent < 25 ? dangerRed : sand;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.battery_5_bar, size: 15, color: color),
+          const SizedBox(width: 4),
+          Text(
+            '$percent%',
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

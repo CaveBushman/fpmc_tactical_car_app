@@ -1,0 +1,210 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
+
+import '../theme.dart';
+import 'mesh_node.dart';
+
+enum TacticalNavTargetKind { team, rally, medevac, danger, observation, supply }
+
+extension TacticalNavTargetKindStyle on TacticalNavTargetKind {
+  String get label {
+    return switch (this) {
+      TacticalNavTargetKind.team => 'TEAM',
+      TacticalNavTargetKind.rally => 'RALLY',
+      TacticalNavTargetKind.medevac => 'MEDEVAC',
+      TacticalNavTargetKind.danger => 'DANGER',
+      TacticalNavTargetKind.observation => 'OBS',
+      TacticalNavTargetKind.supply => 'SUPPLY',
+    };
+  }
+
+  Color get color {
+    return switch (this) {
+      TacticalNavTargetKind.team => blueForce,
+      TacticalNavTargetKind.rally => sand,
+      TacticalNavTargetKind.medevac => dangerRed,
+      TacticalNavTargetKind.danger => dangerRed,
+      TacticalNavTargetKind.observation => signalAmber,
+      TacticalNavTargetKind.supply => tacticalKhaki,
+    };
+  }
+}
+
+class TacticalNavSolution {
+  const TacticalNavSolution({
+    required this.label,
+    required this.kind,
+    required this.icon,
+    required this.mgrs,
+    required this.distanceKm,
+    required this.bearingDeg,
+    this.waypoint,
+    this.priority = false,
+  });
+
+  final String label;
+  final TacticalNavTargetKind kind;
+  final IconData icon;
+  final String mgrs;
+  final double distanceKm;
+  final double bearingDeg;
+  final TacticalWaypoint? waypoint;
+  final bool priority;
+
+  String get etaLabel {
+    final minutes = (distanceKm / 5.0 * 60).round().clamp(1, 999);
+    return '${minutes}m';
+  }
+
+  static List<TacticalNavSolution> fromMission({
+    required MeshNode self,
+    required List<MeshNode> nodes,
+    required List<TacticalWaypoint> waypoints,
+  }) {
+    final solutions = [
+      for (final node in nodes.where((node) => !node.isSelf))
+        TacticalNavSolution(
+          label: node.callSign,
+          kind: TacticalNavTargetKind.team,
+          icon: Icons.person_pin_circle_outlined,
+          mgrs: node.mgrs,
+          distanceKm: _distanceKm(self.latLng, node.latLng),
+          bearingDeg: _bearingDeg(self.latLng, node.latLng),
+          priority: node.linkStatus != MeshNodeLinkStatus.ok,
+        ),
+      for (final waypoint in waypoints)
+        TacticalNavSolution(
+          label: waypoint.code,
+          kind: waypoint.navKind,
+          icon: waypoint.icon,
+          mgrs: waypoint.mgrs,
+          distanceKm: _distanceKm(self.latLng, waypoint.latLng),
+          bearingDeg: _bearingDeg(self.latLng, waypoint.latLng),
+          waypoint: waypoint,
+          priority: waypoint.priority,
+        ),
+    ];
+    solutions.sort((a, b) {
+      if (a.priority != b.priority) {
+        return a.priority ? -1 : 1;
+      }
+      return a.distanceKm.compareTo(b.distanceKm);
+    });
+    return solutions;
+  }
+
+  static double _distanceKm(LatLng from, LatLng to) {
+    const earthRadiusKm = 6371.0088;
+    final lat1 = _degToRad(from.latitude);
+    final lat2 = _degToRad(to.latitude);
+    final deltaLat = _degToRad(to.latitude - from.latitude);
+    final deltaLon = _degToRad(to.longitude - from.longitude);
+    final a =
+        math.sin(deltaLat / 2) * math.sin(deltaLat / 2) +
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(deltaLon / 2) *
+            math.sin(deltaLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadiusKm * c;
+  }
+
+  static double _bearingDeg(LatLng from, LatLng to) {
+    final lat1 = _degToRad(from.latitude);
+    final lat2 = _degToRad(to.latitude);
+    final deltaLon = _degToRad(to.longitude - from.longitude);
+    final y = math.sin(deltaLon) * math.cos(lat2);
+    final x =
+        math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(deltaLon);
+    return (_radToDeg(math.atan2(y, x)) + 360) % 360;
+  }
+
+  static double _degToRad(double degrees) => degrees * math.pi / 180;
+
+  static double _radToDeg(double radians) => radians * 180 / math.pi;
+}
+
+class TacticalWaypoint {
+  const TacticalWaypoint({
+    required this.code,
+    required this.type,
+    required this.latitude,
+    required this.longitude,
+    required this.mgrs,
+    required this.note,
+    this.priority = false,
+  });
+
+  final String code;
+  final TacticalWaypointType type;
+  final double latitude;
+  final double longitude;
+  final String mgrs;
+  final String note;
+  final bool priority;
+
+  LatLng get latLng => LatLng(latitude, longitude);
+
+  IconData get icon {
+    return switch (type) {
+      TacticalWaypointType.rally => Icons.flag_outlined,
+      TacticalWaypointType.medevac => Icons.medical_services_outlined,
+      TacticalWaypointType.danger => Icons.warning_amber_outlined,
+      TacticalWaypointType.observation => Icons.visibility_outlined,
+      TacticalWaypointType.supply => Icons.inventory_2_outlined,
+    };
+  }
+
+  String get typeLabel {
+    return switch (type) {
+      TacticalWaypointType.rally => 'RALLY',
+      TacticalWaypointType.medevac => 'MEDEVAC',
+      TacticalWaypointType.danger => 'DANGER',
+      TacticalWaypointType.observation => 'OBS',
+      TacticalWaypointType.supply => 'SUPPLY',
+    };
+  }
+
+  TacticalNavTargetKind get navKind {
+    return switch (type) {
+      TacticalWaypointType.rally => TacticalNavTargetKind.rally,
+      TacticalWaypointType.medevac => TacticalNavTargetKind.medevac,
+      TacticalWaypointType.danger => TacticalNavTargetKind.danger,
+      TacticalWaypointType.observation => TacticalNavTargetKind.observation,
+      TacticalWaypointType.supply => TacticalNavTargetKind.supply,
+    };
+  }
+
+  static const demoWaypoints = [
+    TacticalWaypoint(
+      code: 'RALLY-1',
+      type: TacticalWaypointType.rally,
+      latitude: 50.086138,
+      longitude: 14.414208,
+      mgrs: '33U VR 58009 48063',
+      note: 'primarni shromazdiste',
+    ),
+    TacticalWaypoint(
+      code: 'MED-POINT',
+      type: TacticalWaypointType.medevac,
+      latitude: 50.083846,
+      longitude: 14.427594,
+      mgrs: '33U VR 58967 47810',
+      note: 'vyzvednuti zranenych',
+      priority: true,
+    ),
+    TacticalWaypoint(
+      code: 'OBS-2',
+      type: TacticalWaypointType.observation,
+      latitude: 50.091922,
+      longitude: 14.432875,
+      mgrs: '33U VR 59347 48708',
+      note: 'pozorovaci bod sever',
+    ),
+  ];
+}
+
+enum TacticalWaypointType { rally, medevac, danger, observation, supply }

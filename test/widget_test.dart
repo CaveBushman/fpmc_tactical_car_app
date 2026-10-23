@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:tactical_car_app/main.dart';
+import 'package:tactical_car_app/app.dart';
+import 'package:tactical_car_app/widgets/node_widgets.dart';
 
 Finder _textFieldWithLabel(String label) {
   return find.byWidgetPredicate(

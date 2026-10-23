@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tactical_car_app/main.dart';
+import 'package:tactical_car_app/models/mesh_node.dart';
 
 MeshNode _node(DateTime lastSeenAt, {bool isSelf = false}) => MeshNode(
   nodeNum: 0x1234,

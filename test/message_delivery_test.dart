@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tactical_car_app/main.dart';
+import 'package:tactical_car_app/app.dart';
+import 'package:tactical_car_app/models/messaging.dart';
 import 'package:tactical_car_app/services/mesh_packet_repository.dart';
 import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
 import 'package:tactical_car_app/services/protobuf_wire_reader.dart';
