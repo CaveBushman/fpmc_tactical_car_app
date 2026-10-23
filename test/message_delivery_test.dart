@@ -70,6 +70,7 @@ void main() {
       ),
     );
     await tester.enterText(find.byType(TextField).first, 'operator');
+    await tester.enterText(find.byType(TextField).at(1), 'operator-2026');
     await tester.tap(find.text('Přihlásit'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Zprávy'));

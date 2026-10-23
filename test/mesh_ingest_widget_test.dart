@@ -20,6 +20,7 @@ void main() {
     final repository = MeshPacketRepository();
     await tester.pumpWidget(TacticalCarApp(meshPacketRepository: repository));
     await tester.enterText(find.byType(TextField).first, 'operator');
+    await tester.enterText(find.byType(TextField).at(1), 'operator-2026');
     await tester.tap(find.text('Přihlásit'));
     await tester.pumpAndSettle();
     return repository;

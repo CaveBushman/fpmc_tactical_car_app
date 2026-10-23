@@ -23,6 +23,7 @@ void main() {
     await tester.pumpWidget(const TacticalCarApp());
     expect(find.text('Přihlásit'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, userName);
+    await tester.enterText(find.byType(TextField).at(1), '$userName-2026');
     await tester.tap(find.text('Přihlásit'));
     await tester.pumpAndSettle();
   }
@@ -369,5 +370,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Kontrola spojeni a prihlaseni posadek.'), findsOneWidget);
+  });
+
+  testWidgets('rejects login with wrong password', (tester) async {
+    await tester.pumpWidget(const TacticalCarApp());
+    await tester.enterText(find.byType(TextField).first, 'operator');
+    await tester.enterText(find.byType(TextField).at(1), 'spatne');
+    await tester.tap(find.text('Přihlásit'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Neplatné jméno nebo heslo.'), findsOneWidget);
+    expect(find.text('Přihlásit'), findsOneWidget);
   });
 }

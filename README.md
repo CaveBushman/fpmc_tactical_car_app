@@ -22,7 +22,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Meshtastic packet diagnostics in system settings: packet count, decoded NodeInfo/Position/Text events, last RX time, packet size, and hex preview.
 - Focused Meshtastic protobuf reader/writer for current NodeInfo, Position, and TextMessage paths.
 - Encrypted PTT frame service using AES-GCM 256.
-- Local auth service with demo roles (`operator`, `commander`, `medic`), session chip, and logout.
+- Local auth service with demo roles (`operator`, `commander`, `medic`), password check (demo password `<user>-2026`, e.g. `operator-2026`), lockout after 5 failed attempts, session chip, and logout.
 - Communication groups with role-based access: ALPHA, BRAVO, MED, COMMAND.
 - PTT channel access is derived from the authenticated session and selected group; each group gets its own AES-GCM key material.
 - GitHub Actions CI for dependency install, static analysis, tests, and web build.

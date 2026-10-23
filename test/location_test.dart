@@ -59,6 +59,7 @@ void main() {
     final location = FakeLocationService();
     await tester.pumpWidget(TacticalCarApp(locationService: location));
     await tester.enterText(find.byType(TextField).first, 'operator');
+    await tester.enterText(find.byType(TextField).at(1), 'operator-2026');
     await tester.tap(find.text('Přihlásit'));
     await tester.pumpAndSettle();
     return location;
