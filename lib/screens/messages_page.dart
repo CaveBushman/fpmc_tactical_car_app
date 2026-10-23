@@ -798,7 +798,7 @@ class MessageCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  message.time,
+                  message.timeLabel(DateTime.now()),
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.55),
                     fontSize: 12,

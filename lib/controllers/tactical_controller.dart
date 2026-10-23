@@ -105,7 +105,7 @@ class TacticalController extends ChangeNotifier {
   );
 
   final List<MeshNode> _nodes = MeshNode.demoNodes(DateTime.now());
-  final List<MeshMessage> _messages = [...MeshMessage.demoMessages];
+  final List<MeshMessage> _messages = MeshMessage.demoMessages(DateTime.now());
   final List<CommunicationGroup> _groups = CommunicationGroup.demoGroups;
   final List<TacticalWaypoint> _waypoints = TacticalWaypoint.demoWaypoints;
 
@@ -205,7 +205,7 @@ class TacticalController extends ChangeNotifier {
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
     _messages
       ..clear()
-      ..addAll(MeshMessage.demoMessages);
+      ..addAll(MeshMessage.demoMessages(DateTime.now()));
     _notify();
   }
 
@@ -433,7 +433,7 @@ class TacticalController extends ChangeNotifier {
       MeshMessage(
         sender: sender,
         body: text,
-        time: _clockLabel(DateTime.now()),
+        sentAt: event.heardAt ?? DateTime.now(),
         groupId: group.id,
         targetLabel: target,
         packetId: packetId,
@@ -473,7 +473,7 @@ class TacticalController extends ChangeNotifier {
     final outgoingMessage = MeshMessage(
       sender: self.callSign,
       body: draft.text,
-      time: _clockLabel(DateTime.now()),
+      sentAt: DateTime.now(),
       groupId: draft.groupId,
       targetLabel: directNode == null
           ? group.name
@@ -675,11 +675,6 @@ class TacticalController extends ChangeNotifier {
     if (!_noticeController.isClosed) {
       _noticeController.add(message);
     }
-  }
-
-  String _clockLabel(DateTime value) {
-    String two(int number) => number.toString().padLeft(2, '0');
-    return '${two(value.hour)}:${two(value.minute)}';
   }
 
   String? _nodeCallSign(int? nodeNum) {

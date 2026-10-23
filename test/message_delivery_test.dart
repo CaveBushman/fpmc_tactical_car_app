@@ -142,10 +142,10 @@ void main() {
   });
 
   test('in-flight message restores as not sent', () {
-    const message = MeshMessage(
+    final message = MeshMessage(
       sender: 'RAVEN-1',
       body: 'OK',
-      time: '12:00',
+      sentAt: DateTime.utc(2026, 10, 23, 12),
       groupId: 'alpha',
       delivery: MessageDelivery.sending,
       packetId: 7,

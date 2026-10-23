@@ -26,7 +26,7 @@ class MeshMessage {
   const MeshMessage({
     required this.sender,
     required this.body,
-    required this.time,
+    required this.sentAt,
     required this.groupId,
     this.targetLabel,
     this.delivery = MessageDelivery.received,
@@ -39,7 +39,9 @@ class MeshMessage {
 
   final String sender;
   final String body;
-  final String time;
+
+  /// When the message was sent or received (UTC-normalised on save).
+  final DateTime sentAt;
   final String groupId;
   final String? targetLabel;
   final MessageDelivery delivery;
@@ -61,7 +63,7 @@ class MeshMessage {
     return MeshMessage(
       sender: sender,
       body: body,
-      time: time,
+      sentAt: sentAt,
       groupId: groupId,
       targetLabel: targetLabel,
       delivery: delivery ?? this.delivery,
@@ -73,11 +75,50 @@ class MeshMessage {
     );
   }
 
+  /// `HH:mm` for today, `d.M. HH:mm` for older messages (local time).
+  String timeLabel(DateTime now) {
+    final local = sentAt.toLocal();
+    final nowLocal = now.toLocal();
+    String two(int number) => number.toString().padLeft(2, '0');
+    final clock = '${two(local.hour)}:${two(local.minute)}';
+    final sameDay =
+        local.year == nowLocal.year &&
+        local.month == nowLocal.month &&
+        local.day == nowLocal.day;
+    return sameDay ? clock : '${local.day}.${local.month}. $clock';
+  }
+
+  static DateTime _parseSentAt(Map<String, dynamic> json) {
+    final parsed = DateTime.tryParse(json['sentAt']?.toString() ?? '');
+    if (parsed != null) {
+      return parsed;
+    }
+    // Older snapshots stored only "HH:mm": assume the most recent such time.
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})$',
+    ).firstMatch(json['time']?.toString() ?? '');
+    if (match == null) {
+      return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+    final now = DateTime.now();
+    var value = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+    );
+    if (value.isAfter(now)) {
+      value = value.subtract(const Duration(days: 1));
+    }
+    return value;
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'sender': sender,
       'body': body,
-      'time': time,
+      'sentAt': sentAt.toUtc().toIso8601String(),
       'groupId': groupId,
       'targetLabel': targetLabel,
       'delivery': delivery.name,
@@ -103,7 +144,7 @@ class MeshMessage {
     return MeshMessage(
       sender: json['sender']?.toString() ?? 'UNKNOWN',
       body: json['body']?.toString() ?? '',
-      time: json['time']?.toString() ?? '--:--',
+      sentAt: _parseSentAt(json),
       groupId: json['groupId']?.toString() ?? 'alpha',
       targetLabel: json['targetLabel']?.toString(),
       delivery: delivery,
@@ -115,44 +156,44 @@ class MeshMessage {
     );
   }
 
-  static const demoMessages = [
+  static List<MeshMessage> demoMessages(DateTime now) => [
     MeshMessage(
       sender: 'RAVEN-2',
       body: 'Na pozici. Vidim trasu k bodu BRAVO.',
-      time: '14:22',
+      sentAt: now.subtract(const Duration(minutes: 3)),
       groupId: 'alpha',
       priority: false,
     ),
     MeshMessage(
       sender: 'SCOUT-3',
       body: 'Posilam novou pozici pres Meshtastic.',
-      time: '14:19',
+      sentAt: now.subtract(const Duration(minutes: 6)),
       groupId: 'alpha',
     ),
     MeshMessage(
       sender: 'PTT SERVER',
       body: 'ALPHA voice channel online. Floor control aktivni.',
-      time: '14:18',
+      sentAt: now.subtract(const Duration(minutes: 7)),
       groupId: 'alpha',
       internetVoice: true,
     ),
     MeshMessage(
       sender: 'MED-4',
       body: 'Baterie nizka, zustavam u vozidla.',
-      time: '14:14',
+      sentAt: now.subtract(const Duration(minutes: 11)),
       groupId: 'med',
       priority: true,
     ),
     MeshMessage(
       sender: 'COMMAND',
       body: 'BRAVO zustava jako zalozni presunovy kanal.',
-      time: '14:11',
+      sentAt: now.subtract(const Duration(minutes: 14)),
       groupId: 'bravo',
     ),
     MeshMessage(
       sender: 'HQ',
       body: 'Kontrola spojeni a prihlaseni posadek.',
-      time: '14:05',
+      sentAt: now.subtract(const Duration(minutes: 20)),
       groupId: 'command',
     ),
   ];
