@@ -130,12 +130,13 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     final selfNode = controller.selfNode;
     final pttState = controller.pttState;
 
-    MapPage mapPage({bool compact = false}) => MapPage(
+    MapPage mapPage({bool showDetailsSheet = true}) => MapPage(
       nodes: nodes,
       waypoints: controller.waypoints,
       pttActive: controller.pttActive,
       locationState: controller.locationState,
-      compact: compact,
+      channelLabel: controller.selectedGroup.name,
+      showDetailsSheet: showDetailsSheet,
       onShareWaypoint: controller.shareWaypoint,
     );
 
@@ -168,11 +169,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       ),
     ];
 
-    final statusStrip = StatusStrip(
-      meshConnected: controller.meshConnected,
-      voiceOnline: controller.internetVoiceOnline,
-      pttActive: controller.pttActive,
-    );
+    final screen = MediaQuery.sizeOf(context);
+    // Phones: shorter bars and icon-only header so the map keeps the screen.
+    final narrow = screen.width < 480;
+    final short = screen.height < 800;
 
     PttBar pttBar({bool compact = false}) => PttBar(
       active: controller.pttActive,
@@ -186,12 +186,24 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const AppBrand(),
+        toolbarHeight: short ? 46 : kToolbarHeight,
+        titleSpacing: narrow ? 8 : null,
+        title: AppBrand(compact: narrow),
         actions: [
-          UserSessionChip(session: session, onLogout: _confirmLogout),
-          const SizedBox(width: 10),
+          StatusIcons(
+            meshConnected: controller.meshConnected,
+            voiceOnline: controller.internetVoiceOnline,
+            pttActive: controller.pttActive,
+          ),
+          SizedBox(width: narrow ? 2 : 8),
+          UserSessionChip(
+            session: session,
+            onLogout: _confirmLogout,
+            compact: narrow,
+          ),
+          SizedBox(width: narrow ? 4 : 10),
           const TimeReadout(),
-          const SizedBox(width: 12),
+          SizedBox(width: narrow ? 8 : 12),
         ],
       ),
       body: SafeArea(
@@ -206,7 +218,6 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
                 final fullMapMode = _selectedIndex == 0;
                 return Column(
                   children: [
-                    statusStrip,
                     Expanded(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -217,7 +228,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
                           ),
                           Expanded(
                             flex: fullMapMode ? 1 : 7,
-                            child: mapPage(compact: true),
+                            child: mapPage(showDetailsSheet: fullMapMode),
                           ),
                           if (!fullMapMode)
                             SizedBox(
@@ -236,13 +247,12 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
 
               return Column(
                 children: [
-                  statusStrip,
                   Expanded(
                     child: _selectedIndex == 0
                         ? mapPage()
                         : detailPages[_selectedIndex - 1],
                   ),
-                  pttBar(),
+                  pttBar(compact: short),
                 ],
               );
             },
@@ -259,6 +269,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
           return _ScaledTextContent(
             fontScale: controller.fontScale,
             child: NavigationBar(
+              height: short ? 58 : null,
+              labelBehavior: short
+                  ? NavigationDestinationLabelBehavior.onlyShowSelected
+                  : null,
               backgroundColor: const Color(0xFF171B13),
               indicatorColor: rangerGreen.withValues(alpha: 0.85),
               selectedIndex: _selectedIndex,

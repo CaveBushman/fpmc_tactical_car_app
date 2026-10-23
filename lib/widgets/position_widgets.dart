@@ -5,6 +5,53 @@ import '../services/location_service.dart';
 import '../theme.dart';
 import 'common_widgets.dart';
 
+/// One-line own-position readout for small screens; tap to expand.
+class PositionChip extends StatelessWidget {
+  const PositionChip({
+    required this.node,
+    this.locationState = LocationState.idle,
+    super.key,
+  });
+
+  final MeshNode node;
+  final LocationState locationState;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.76),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: rangerGreen.withValues(alpha: 0.65)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.my_location, size: 14, color: sand),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              node.mgrs,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontFamily: 'monospace',
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          GpsStatusBadge(state: locationState, compact: true),
+          const SizedBox(width: 2),
+          Icon(Icons.expand_more, size: 16, color: sand.withValues(alpha: 0.8)),
+        ],
+      ),
+    );
+  }
+}
+
 class CoordinatePanel extends StatelessWidget {
   const CoordinatePanel({
     required this.node,

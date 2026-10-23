@@ -133,6 +133,14 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('RAVEN-2'), findsNothing);
+
+    await tester.drag(
+      find.byKey(const ValueKey('map-sheet-handle')),
+      const Offset(0, -500),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
     expect(find.text('Nejbližší'), findsOneWidget);
   });
 

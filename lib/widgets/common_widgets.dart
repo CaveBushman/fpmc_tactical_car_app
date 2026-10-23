@@ -9,11 +9,15 @@ class UserSessionChip extends StatelessWidget {
   const UserSessionChip({
     required this.session,
     required this.onLogout,
+    this.compact = false,
     super.key,
   });
 
   final AuthSession session;
   final VoidCallback onLogout;
+
+  /// Icon only (narrow phones); name and role are in the menu.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -24,46 +28,60 @@ class UserSessionChip extends StatelessWidget {
           onLogout();
         }
       },
-      itemBuilder: (context) => const [
-        PopupMenuItem(value: 'logout', child: Text('Odhlásit')),
+      itemBuilder: (context) => [
+        if (compact)
+          PopupMenuItem(
+            enabled: false,
+            child: Text('${session.displayName} / ${session.role}'),
+          ),
+        const PopupMenuItem(value: 'logout', child: Text('Odhlásit')),
       ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: panelGreen,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.verified_user_outlined, size: 16, color: sand),
-            const SizedBox(width: 6),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  session.displayName,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
+      child: compact
+          ? const Padding(
+              padding: EdgeInsets.all(6),
+              child: Icon(Icons.verified_user_outlined, size: 22, color: sand),
+            )
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: panelGreen,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.verified_user_outlined,
+                    size: 16,
+                    color: sand,
                   ),
-                ),
-                Text(
-                  session.role,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.white.withValues(alpha: 0.62),
-                    fontWeight: FontWeight.w700,
+                  const SizedBox(width: 6),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        session.displayName,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        session.role,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.white.withValues(alpha: 0.62),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -114,7 +132,10 @@ class TacticalNavigationRail extends StatelessWidget {
 }
 
 class AppBrand extends StatelessWidget {
-  const AppBrand({super.key});
+  const AppBrand({this.compact = false, super.key});
+
+  /// Logo only, for narrow screens.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -122,8 +143,8 @@ class AppBrand extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          height: 36,
-          width: 58,
+          height: compact ? 30 : 36,
+          width: compact ? 48 : 58,
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -136,13 +157,61 @@ class AppBrand extends StatelessWidget {
             filterQuality: FilterQuality.medium,
           ),
         ),
-        const SizedBox(width: 10),
-        Flexible(
-          child: Text(
-            'FIRST PRIVATE MILITARY COMPANY',
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w800),
+        if (!compact) ...[
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              'FIRST PRIVATE MILITARY COMPANY',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
           ),
+        ],
+      ],
+    );
+  }
+}
+
+/// T-Beam / PTT / transmit state as three icons for the app bar, so the
+/// status stays visible on every tab without a separate strip.
+class StatusIcons extends StatelessWidget {
+  const StatusIcons({
+    required this.meshConnected,
+    required this.voiceOnline,
+    required this.pttActive,
+    super.key,
+  });
+
+  final bool meshConnected;
+  final bool voiceOnline;
+  final bool pttActive;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget icon(IconData data, String tooltip, Color color) => Tooltip(
+      message: tooltip,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Icon(data, size: 20, color: color),
+      ),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        icon(
+          meshConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+          meshConnected ? 'T-Beam 868 připojen' : 'T-Beam 868 nepřipojen',
+          meshConnected ? sand : dangerRed,
+        ),
+        icon(
+          voiceOnline ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+          voiceOnline ? 'PTT demo online' : 'PTT offline',
+          voiceOnline ? sand : dangerRed,
+        ),
+        icon(
+          pttActive ? Icons.mic : Icons.mic_none,
+          pttActive ? 'Vysílám' : 'Příjem',
+          pttActive ? signalAmber : sand,
         ),
       ],
     );
@@ -205,107 +274,6 @@ class _TimeReadoutState extends State<TimeReadout> {
   String _time(DateTime value) {
     String two(int number) => number.toString().padLeft(2, '0');
     return '${two(value.hour)}:${two(value.minute)}:${two(value.second)}';
-  }
-}
-
-class StatusStrip extends StatelessWidget {
-  const StatusStrip({
-    required this.meshConnected,
-    required this.voiceOnline,
-    required this.pttActive,
-    super.key,
-  });
-
-  final bool meshConnected;
-  final bool voiceOnline;
-  final bool pttActive;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 2, 12, 8),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: panelGreen,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: StatusChip(
-              icon: Icons.bluetooth_connected,
-              label: 'T-Beam 868',
-              ok: meshConnected,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: StatusChip(
-              icon: Icons.cloud_done_outlined,
-              label: 'PTT demo',
-              ok: voiceOnline,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: StatusChip(
-              icon: pttActive ? Icons.mic : Icons.mic_none,
-              label: pttActive ? 'Vysílám' : 'Příjem',
-              ok: !pttActive,
-              alert: pttActive,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class StatusChip extends StatelessWidget {
-  const StatusChip({
-    required this.icon,
-    required this.label,
-    required this.ok,
-    this.alert = false,
-    super.key,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool ok;
-  final bool alert;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = alert ? signalAmber : (ok ? sand : dangerRed);
-    return Container(
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 17, color: color),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                color: color,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

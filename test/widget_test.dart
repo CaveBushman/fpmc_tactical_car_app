@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tactical_car_app/app.dart';
+import 'package:tactical_car_app/screens/map_page.dart';
+import 'package:tactical_car_app/widgets/position_widgets.dart';
 import 'package:tactical_car_app/widgets/node_widgets.dart';
 
 Finder _textFieldWithLabel(String label) {
@@ -34,7 +36,7 @@ void main() {
 
     expect(find.text('FIRST PRIVATE MILITARY COMPANY'), findsOneWidget);
     expect(find.text('RAVEN-1'), findsWidgets);
-    expect(find.text('T-Beam 868'), findsOneWidget);
+    expect(find.byTooltip('T-Beam 868 nepřipojen'), findsOneWidget);
     expect(find.text('PTT'), findsOneWidget);
     expect(find.text('Mapa'), findsOneWidget);
   });
@@ -382,5 +384,60 @@ void main() {
 
     expect(find.text('Neplatné jméno nebo heslo.'), findsOneWidget);
     expect(find.text('Přihlásit'), findsOneWidget);
+  });
+
+  for (final size in const [Size(360, 640), Size(360, 740), Size(740, 360)]) {
+    testWidgets(
+      'map fits a ${size.width.toInt()}x${size.height.toInt()} phone',
+      (tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = size;
+        addTearDown(tester.view.reset);
+
+        await login(tester);
+
+        expect(tester.takeException(), isNull);
+        final mapBox = tester.getRect(find.byType(MeshMap));
+        // The map must own most of the body, not a card squeezed by panels.
+        expect(mapBox.height, greaterThan(size.height * 0.45));
+        expect(find.byKey(const ValueKey('map-details-sheet')), findsOneWidget);
+      },
+    );
+  }
+
+  testWidgets('position readout collapses on small phones and expands on tap', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 640);
+    addTearDown(tester.view.reset);
+
+    await login(tester);
+
+    expect(find.byType(PositionChip), findsOneWidget);
+    expect(find.byType(CoordinatePanel), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('position-panel')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CoordinatePanel), findsOneWidget);
+  });
+
+  testWidgets('details sheet drags up to show metrics', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 640);
+    addTearDown(tester.view.reset);
+
+    await login(tester);
+    expect(find.text('OK uzly'), findsNothing);
+
+    await tester.drag(
+      find.byKey(const ValueKey('map-sheet-handle')),
+      const Offset(0, -400),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('OK uzly'), findsOneWidget);
+    expect(find.text('Kanál'), findsOneWidget);
   });
 }

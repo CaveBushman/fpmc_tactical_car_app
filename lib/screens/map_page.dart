@@ -11,14 +11,19 @@ import '../widgets/navigation_widgets.dart';
 import '../widgets/node_widgets.dart';
 import '../widgets/position_widgets.dart';
 
-class MapPage extends StatelessWidget {
+/// Full-bleed map. Position readout floats top-left; team metrics, navigation
+/// targets and waypoints live in a bottom sheet that peeks with the nearest
+/// target and drags up for the rest, so small phones keep most of the screen
+/// for the map.
+class MapPage extends StatefulWidget {
   const MapPage({
     required this.nodes,
     required this.waypoints,
     required this.pttActive,
     required this.onShareWaypoint,
     this.locationState = LocationState.idle,
-    this.compact = false,
+    this.channelLabel = 'ALPHA',
+    this.showDetailsSheet = true,
     super.key,
   });
 
@@ -27,179 +32,215 @@ class MapPage extends StatelessWidget {
   final bool pttActive;
   final ValueChanged<TacticalWaypoint> onShareWaypoint;
   final LocationState locationState;
-  final bool compact;
+  final String channelLabel;
+
+  /// False when the map sits next to another panel (landscape detail tabs).
+  final bool showDetailsSheet;
+
+  /// Height of the collapsed sheet: handle + nearest-target row.
+  static const sheetPeekHeight = 76.0;
+
+  @override
+  State<MapPage> createState() => _MapPageState();
+}
+
+class _MapPageState extends State<MapPage> {
+  bool? _positionExpanded;
 
   @override
   Widget build(BuildContext context) {
+    final nodes = widget.nodes;
     final self = nodes.firstWhere((node) => node.isSelf);
-    final health = NodeHealthSummary.fromNodes(nodes);
     final navSolutions = TacticalNavSolution.fromMission(
       self: self,
       nodes: nodes,
-      waypoints: waypoints,
+      waypoints: widget.waypoints,
     );
-    if (compact) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 8, 12),
-        child: Column(
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = constraints.maxHeight;
+        final narrow = constraints.maxWidth < 420;
+        // Expanded readout only where it does not bury the map; the user can
+        // still toggle it.
+        final positionExpanded = _positionExpanded ?? height >= 640;
+        final showSheet = widget.showDetailsSheet && height >= 240;
+        final mapBottom = showSheet ? MapPage.sheetPeekHeight - 8 : 0.0;
+
+        return Stack(
           children: [
-            Expanded(
-              child: Card(
-                clipBehavior: Clip.antiAlias,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: MeshMap(nodes: nodes, waypoints: waypoints),
-                    ),
-                    Positioned(
-                      left: 12,
-                      top: 12,
-                      child: CoordinatePanel(
+            Positioned(
+              left: 0,
+              top: 0,
+              right: 0,
+              bottom: mapBottom,
+              child: MeshMap(nodes: nodes, waypoints: widget.waypoints),
+            ),
+            Positioned(
+              left: 8,
+              top: 8,
+              right: narrow ? 56 : null,
+              child: GestureDetector(
+                key: const ValueKey('position-panel'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () =>
+                    setState(() => _positionExpanded = !positionExpanded),
+                child: positionExpanded
+                    ? CoordinatePanel(
                         node: self,
-                        locationState: locationState,
-                        compact: true,
+                        locationState: widget.locationState,
+                        compact: narrow,
+                      )
+                    : PositionChip(
+                        node: self,
+                        locationState: widget.locationState,
                       ),
+              ),
+            ),
+            if (showSheet)
+              _MapDetailsSheet(
+                peekFraction: (MapPage.sheetPeekHeight / height).clamp(
+                  0.05,
+                  0.5,
+                ),
+                nodes: nodes,
+                navSolutions: navSolutions,
+                waypoints: widget.waypoints,
+                pttActive: widget.pttActive,
+                channelLabel: widget.channelLabel,
+                onShareWaypoint: widget.onShareWaypoint,
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MapDetailsSheet extends StatelessWidget {
+  const _MapDetailsSheet({
+    required this.peekFraction,
+    required this.nodes,
+    required this.navSolutions,
+    required this.waypoints,
+    required this.pttActive,
+    required this.channelLabel,
+    required this.onShareWaypoint,
+  });
+
+  final double peekFraction;
+  final List<MeshNode> nodes;
+  final List<TacticalNavSolution> navSolutions;
+  final List<TacticalWaypoint> waypoints;
+  final bool pttActive;
+  final String channelLabel;
+  final ValueChanged<TacticalWaypoint> onShareWaypoint;
+
+  @override
+  Widget build(BuildContext context) {
+    final health = NodeHealthSummary.fromNodes(nodes);
+    final nearest = navSolutions.isEmpty ? null : navSolutions.first;
+    return DraggableScrollableSheet(
+      key: const ValueKey('map-details-sheet'),
+      initialChildSize: peekFraction,
+      minChildSize: peekFraction,
+      maxChildSize: 0.88,
+      snap: true,
+      snapSizes: [peekFraction, 0.5],
+      builder: (context, scrollController) {
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: panelGreen,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 12)],
+          ),
+          child: ListView(
+            controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+            children: [
+              Center(
+                child: Container(
+                  key: const ValueKey('map-sheet-handle'),
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: 52,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: nearest == null
+                          ? const SizedBox.shrink()
+                          : NavigationCueBadge(solution: nearest),
                     ),
-                    Positioned(
-                      right: 12,
-                      bottom: 12,
-                      child: MapLegend(pttActive: pttActive),
-                    ),
-                    if (navSolutions.isNotEmpty)
-                      Positioned(
-                        right: 12,
-                        top: 52,
-                        child: NavigationCueBadge(solution: navSolutions.first),
-                      ),
+                    const SizedBox(width: 8),
+                    _HealthDots(health: health),
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 78,
-              child: Row(
+              const SizedBox(height: 10),
+              GridView(
+                // Fixed tile height (scaled with the font setting) instead of
+                // an aspect ratio, which collapses on narrow phones.
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: MediaQuery.sizeOf(context).width > 640
+                      ? 4
+                      : 2,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  mainAxisExtent: MediaQuery.textScalerOf(context).scale(68),
+                ),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  Expanded(
-                    child: MetricTile(
-                      label: 'OK',
-                      value: '${health.ok}',
-                      icon: Icons.hub_outlined,
-                      compact: true,
-                    ),
+                  MetricTile(
+                    label: 'OK uzly',
+                    value: '${health.ok}/${nodes.length}',
+                    icon: Icons.hub_outlined,
                   ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: MetricTile(
-                      label: 'Kanál',
-                      value: 'ALPHA',
-                      icon: Icons.radio,
-                      compact: true,
-                    ),
+                  MetricTile(
+                    label: 'Kanál',
+                    value: channelLabel,
+                    icon: Icons.radio,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: MetricTile(
-                      label: 'STALE',
-                      value: '${health.stale}',
-                      icon: Icons.schedule_outlined,
-                      compact: true,
-                    ),
+                  MetricTile(
+                    label: 'Stale / Lost',
+                    value: '${health.stale} / ${health.lost}',
+                    icon: Icons.schedule_outlined,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: MetricTile(
-                      label: 'LOST',
-                      value: '${health.lost}',
-                      icon: Icons.signal_wifi_connected_no_internet_4_outlined,
-                      compact: true,
-                    ),
+                  MetricTile(
+                    label: 'Nejbližší',
+                    value: _nearestLabel(nodes),
+                    icon: Icons.near_me_outlined,
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 112,
-              child: WaypointStrip(
+              const SizedBox(height: 10),
+              NavigationTargetStrip(
+                solutions: navSolutions,
+                onShareWaypoint: onShareWaypoint,
+              ),
+              const SizedBox(height: 10),
+              WaypointStrip(
                 waypoints: waypoints,
                 onShareWaypoint: onShareWaypoint,
-                compact: true,
               ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      children: [
-        SizedBox(
-          height: 390,
-          child: Card(
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: MeshMap(nodes: nodes, waypoints: waypoints),
-                ),
-                Positioned(
-                  left: 12,
-                  top: 12,
-                  child: CoordinatePanel(
-                    node: self,
-                    locationState: locationState,
-                  ),
-                ),
-                Positioned(
-                  right: 12,
-                  bottom: 12,
-                  child: MapLegend(pttActive: pttActive),
-                ),
-              ],
-            ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: MapLegend(pttActive: pttActive),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 10),
-        GridView.count(
-          crossAxisCount: MediaQuery.sizeOf(context).width > 640 ? 4 : 2,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 2.7,
-          children: [
-            MetricTile(
-              label: 'OK uzly',
-              value: '${health.ok}/${nodes.length}',
-              icon: Icons.hub_outlined,
-            ),
-            MetricTile(
-              label: 'Stale',
-              value: '${health.stale}',
-              icon: Icons.schedule_outlined,
-            ),
-            MetricTile(
-              label: 'Lost',
-              value: '${health.lost}',
-              icon: Icons.signal_wifi_connected_no_internet_4_outlined,
-            ),
-            MetricTile(
-              label: 'Nejbližší',
-              value: _nearestLabel(nodes),
-              icon: Icons.near_me_outlined,
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        NavigationTargetStrip(
-          solutions: navSolutions,
-          onShareWaypoint: onShareWaypoint,
-        ),
-        const SizedBox(height: 10),
-        WaypointStrip(waypoints: waypoints, onShareWaypoint: onShareWaypoint),
-      ],
+        );
+      },
     );
   }
 
@@ -210,6 +251,45 @@ class MapPage extends StatelessWidget {
       return '-';
     }
     return '${others.first.distanceKm.toStringAsFixed(1)} km';
+  }
+}
+
+/// OK / STALE / LOST counts as three small coloured numbers.
+class _HealthDots extends StatelessWidget {
+  const _HealthDots({required this.health});
+
+  final NodeHealthSummary health;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget dot(MeshNodeLinkStatus status, int count) => Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Tooltip(
+        message: '${status.label}: $count',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.circle, size: 10, color: status.color),
+            const SizedBox(width: 3),
+            Text(
+              '$count',
+              style: TextStyle(
+                color: status.color,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        dot(MeshNodeLinkStatus.ok, health.ok),
+        dot(MeshNodeLinkStatus.stale, health.stale),
+        dot(MeshNodeLinkStatus.lost, health.lost),
+      ],
+    );
   }
 }
 
@@ -354,7 +434,6 @@ class _MeshMapState extends State<MeshMap> {
           ],
         ),
         const Positioned.fill(child: TacticalMapGrid()),
-        const Positioned(right: 12, top: 12, child: MapCacheBadge()),
         Positioned(
           left: 12,
           bottom: 36,
@@ -565,37 +644,6 @@ class WaypointMapMarker extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class MapCacheBadge extends StatelessWidget {
-  const MapCacheBadge({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.76),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: tacticalKhaki.withValues(alpha: 0.45)),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.offline_pin_outlined, size: 15, color: sand),
-          SizedBox(width: 6),
-          Text(
-            'MAP CACHE',
-            style: TextStyle(
-              color: sand,
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
