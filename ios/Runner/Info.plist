@@ -30,6 +30,8 @@
 	<string>Aplikace používá Bluetooth pro připojení k Meshtastic T-Beam zařízení.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Aplikace používá Bluetooth pro čtení a odesílání Meshtastic paketů.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Aplikace používá GPS pro zobrazení vlastní pozice, MGRS a navigaci k týmu.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Aplikace používá mikrofon pro šifrovanou PTT komunikaci.</string>
 	<key>UIApplicationSceneManifest</key>

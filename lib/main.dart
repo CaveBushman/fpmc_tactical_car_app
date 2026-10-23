@@ -8,6 +8,7 @@ import 'package:mgrs_dart/mgrs_dart.dart';
 
 import 'services/auth_service.dart';
 import 'services/encrypted_ptt_service.dart';
+import 'services/location_service.dart';
 import 'services/mesh_packet_repository.dart';
 import 'services/meshtastic_packet_decoder.dart';
 import 'services/meshtastic_message_encoder.dart';
@@ -36,7 +37,9 @@ const pmcLogoAsset = 'assets/branding/1stpmc_logo_ral6031.png';
 const tacticalMapUrlTemplate = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 class TacticalCarApp extends StatelessWidget {
-  const TacticalCarApp({super.key});
+  const TacticalCarApp({this.locationService, super.key});
+
+  final LocationService? locationService;
 
   @override
   Widget build(BuildContext context) {
@@ -68,13 +71,15 @@ class TacticalCarApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const TacticalHomeScreen(),
+      home: TacticalHomeScreen(locationService: locationService),
     );
   }
 }
 
 class TacticalHomeScreen extends StatefulWidget {
-  const TacticalHomeScreen({super.key});
+  const TacticalHomeScreen({this.locationService, super.key});
+
+  final LocationService? locationService;
 
   @override
   State<TacticalHomeScreen> createState() => _TacticalHomeScreenState();
@@ -89,6 +94,11 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   late final MeshPacketRepository _meshPacketRepository;
   late final EncryptedPttService _pttService;
   late final TacticalStateStore _stateStore;
+  late final LocationService _locationService;
+  StreamSubscription<LocationState>? _locationStateSubscription;
+  StreamSubscription<LocationFix>? _locationFixSubscription;
+  LocationState _locationState = LocationState.idle;
+  DateTime? _lastLocationPersistAt;
   StreamSubscription<MeshtasticBleState>? _bleStateSubscription;
   StreamSubscription<MeshtasticBlePacket>? _blePacketSubscription;
   StreamSubscription<MeshPacketDiagnostics>? _packetDiagnosticsSubscription;
@@ -125,7 +135,15 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     _meshPacketRepository = MeshPacketRepository();
     _pttService = EncryptedPttService(channel: 'ALPHA');
     _stateStore = const TacticalStateStore();
+    _locationService = widget.locationService ?? GeolocatorLocationService();
     unawaited(_restorePersistedState());
+    _locationStateSubscription = _locationService.stateStream.listen((state) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _locationState = state);
+    });
+    _locationFixSubscription = _locationService.fixes.listen(_applySelfFix);
     _bleStateSubscription = _meshtasticBleService.stateStream.listen((state) {
       if (!mounted) {
         return;
@@ -167,6 +185,9 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     unawaited(_packetDiagnosticsSubscription?.cancel());
     unawaited(_meshEventsSubscription?.cancel());
     unawaited(_pttStateSubscription?.cancel());
+    unawaited(_locationStateSubscription?.cancel());
+    unawaited(_locationFixSubscription?.cancel());
+    unawaited(_locationService.dispose());
     unawaited(_meshtasticBleService.dispose());
     unawaited(_meshPacketRepository.dispose());
     unawaited(_pttService.dispose());
@@ -192,6 +213,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         nodes: _nodes,
         waypoints: _waypoints,
         pttActive: _pttActive,
+        locationState: _locationState,
         onShareWaypoint: (waypoint) => _shareWaypoint(waypoint, allowedGroups),
       ),
       TeamPage(
@@ -217,6 +239,9 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         bleState: _bleState,
         packetDiagnostics: _packetDiagnostics,
         pttState: _pttState,
+        locationState: _locationState,
+        onLocationStart: _locationService.start,
+        onLocationSettings: _locationService.openSettings,
         fontScale: _fontScale,
         onFontScaleChanged: (value) => setState(() => _fontScale = value),
       ),
@@ -247,6 +272,9 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         bleState: _bleState,
         packetDiagnostics: _packetDiagnostics,
         pttState: _pttState,
+        locationState: _locationState,
+        onLocationStart: _locationService.start,
+        onLocationSettings: _locationService.openSettings,
         fontScale: _fontScale,
         onFontScaleChanged: (value) => setState(() => _fontScale = value),
       ),
@@ -294,6 +322,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
                               nodes: _nodes,
                               waypoints: _waypoints,
                               pttActive: _pttActive,
+                              locationState: _locationState,
                               compact: true,
                               onShareWaypoint: (waypoint) =>
                                   _shareWaypoint(waypoint, allowedGroups),
@@ -381,6 +410,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       _session = result.session;
       _selectedGroupIndex = 0;
     });
+    unawaited(_locationService.start());
     _syncPttChannelForGroup(
       result.session!,
       _groups.firstWhere(
@@ -392,6 +422,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
 
   Future<void> _logout() async {
     await _authService.logout();
+    await _locationService.stop();
     setState(() {
       _session = null;
       _selectedGroupIndex = 0;
@@ -425,6 +456,56 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       channel: access.channel,
       keyBytes: access.keyBytes,
     );
+  }
+
+  void _applySelfFix(LocationFix fix) {
+    if (!mounted) {
+      return;
+    }
+    final selfIndex = _nodes.indexWhere((node) => node.isSelf);
+    if (selfIndex == -1) {
+      return;
+    }
+    setState(() {
+      final self = _nodes[selfIndex].copyWith(
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+        altitudeM: fix.altitudeM.round(),
+        mgrs: _mgrsLabel(fix.latitude, fix.longitude),
+        lastSeenMinutes: 0,
+      );
+      _nodes[selfIndex] = self;
+      for (var i = 0; i < _nodes.length; i++) {
+        final node = _nodes[i];
+        if (node.isSelf) {
+          continue;
+        }
+        _nodes[i] = node.copyWith(
+          distanceKm: _distanceKm(
+            self.latitude,
+            self.longitude,
+            node.latitude,
+            node.longitude,
+          ),
+          bearingDeg: _bearingDeg(
+            self.latitude,
+            self.longitude,
+            node.latitude,
+            node.longitude,
+          ),
+        );
+      }
+    });
+
+    // GPS can fire every few metres; persist the last known position at most
+    // every 30 s so a restart still opens on a recent fix.
+    final now = DateTime.now();
+    final lastPersist = _lastLocationPersistAt;
+    if (lastPersist == null ||
+        now.difference(lastPersist) > const Duration(seconds: 30)) {
+      _lastLocationPersistAt = now;
+      unawaited(_persistState());
+    }
   }
 
   void _applyDecodedMeshEvents(List<DecodedMeshEvent> events) {
@@ -687,6 +768,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
             ..addAll(restoredMessages);
         }
       });
+      final liveFix = _locationState.lastFix;
+      if (liveFix != null) {
+        _applySelfFix(liveFix);
+      }
     } catch (_) {
       // Ignore corrupt or incompatible local state and keep demo defaults.
     }
@@ -1249,6 +1334,7 @@ class MapPage extends StatelessWidget {
     required this.waypoints,
     required this.pttActive,
     required this.onShareWaypoint,
+    this.locationState = LocationState.idle,
     this.compact = false,
     super.key,
   });
@@ -1257,6 +1343,7 @@ class MapPage extends StatelessWidget {
   final List<TacticalWaypoint> waypoints;
   final bool pttActive;
   final ValueChanged<TacticalWaypoint> onShareWaypoint;
+  final LocationState locationState;
   final bool compact;
 
   @override
@@ -1284,7 +1371,11 @@ class MapPage extends StatelessWidget {
                     Positioned(
                       left: 12,
                       top: 12,
-                      child: CoordinatePanel(node: self, compact: true),
+                      child: CoordinatePanel(
+                        node: self,
+                        locationState: locationState,
+                        compact: true,
+                      ),
                     ),
                     Positioned(
                       right: 12,
@@ -1372,7 +1463,10 @@ class MapPage extends StatelessWidget {
                 Positioned(
                   left: 12,
                   top: 12,
-                  child: CoordinatePanel(node: self),
+                  child: CoordinatePanel(
+                    node: self,
+                    locationState: locationState,
+                  ),
                 ),
                 Positioned(
                   right: 12,
@@ -1432,22 +1526,67 @@ class MapPage extends StatelessWidget {
   }
 }
 
-class MeshMap extends StatelessWidget {
+class MeshMap extends StatefulWidget {
   const MeshMap({required this.nodes, required this.waypoints, super.key});
 
   final List<MeshNode> nodes;
   final List<TacticalWaypoint> waypoints;
 
   @override
+  State<MeshMap> createState() => _MeshMapState();
+}
+
+class _MeshMapState extends State<MeshMap> {
+  final MapController _mapController = MapController();
+  bool _mapReady = false;
+  bool _followSelf = true;
+  LatLng? _lastSelfPoint;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _recenter() {
+    setState(() => _followSelf = true);
+    if (_mapReady) {
+      final self = widget.nodes.firstWhere((node) => node.isSelf);
+      _mapController.move(self.latLng, _mapController.camera.zoom);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final nodes = widget.nodes;
+    final waypoints = widget.waypoints;
     final self = nodes.firstWhere((node) => node.isSelf);
     final selfPoint = self.latLng;
+    // The node list is mutated in place by the parent, so compare against the
+    // last rendered position rather than oldWidget in didUpdateWidget.
+    if (_lastSelfPoint != selfPoint) {
+      _lastSelfPoint = selfPoint;
+      if (_followSelf && _mapReady) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _followSelf) {
+            _mapController.move(selfPoint, _mapController.camera.zoom);
+          }
+        });
+      }
+    }
     return Stack(
       children: [
         FlutterMap(
+          mapController: _mapController,
           options: MapOptions(
             initialCenter: selfPoint,
             initialZoom: 13.4,
+            onMapReady: () => _mapReady = true,
+            onPositionChanged: (camera, hasGesture) {
+              if (hasGesture && _followSelf) {
+                setState(() => _followSelf = false);
+              }
+            },
             minZoom: 3,
             maxZoom: 18,
             backgroundColor: fieldBlack,
@@ -1529,6 +1668,28 @@ class MeshMap extends StatelessWidget {
         ),
         const Positioned.fill(child: TacticalMapGrid()),
         const Positioned(right: 12, top: 12, child: MapCacheBadge()),
+        Positioned(
+          left: 12,
+          bottom: 36,
+          child: IconButton.filled(
+            tooltip: _followSelf
+                ? 'Mapa sleduje vlastní pozici'
+                : 'Vycentrovat na vlastní pozici',
+            onPressed: _recenter,
+            style: IconButton.styleFrom(
+              backgroundColor: _followSelf
+                  ? rangerGreen
+                  : Colors.black.withValues(alpha: 0.76),
+              foregroundColor: _followSelf ? Colors.white : sand,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            icon: Icon(
+              _followSelf ? Icons.my_location : Icons.location_searching,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -1826,9 +1987,15 @@ class MapCacheBadge extends StatelessWidget {
 }
 
 class CoordinatePanel extends StatelessWidget {
-  const CoordinatePanel({required this.node, this.compact = false, super.key});
+  const CoordinatePanel({
+    required this.node,
+    this.locationState = LocationState.idle,
+    this.compact = false,
+    super.key,
+  });
 
   final MeshNode node;
+  final LocationState locationState;
   final bool compact;
 
   @override
@@ -1844,13 +2011,22 @@ class CoordinatePanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'VLASTNÍ POZICE',
-            style: TextStyle(
-              fontSize: compact ? 10 : 11,
-              color: sand,
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'VLASTNÍ POZICE',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: compact ? 10 : 11,
+                    color: sand,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              GpsStatusBadge(state: locationState, compact: compact),
+            ],
           ),
           SizedBox(height: compact ? 6 : 8),
           MgrsReadout(value: node.mgrs, compact: compact),
@@ -1861,6 +2037,66 @@ class CoordinatePanel extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class GpsStatusBadge extends StatelessWidget {
+  const GpsStatusBadge({required this.state, this.compact = false, super.key});
+
+  final LocationState state;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = state.status == LocationStatus.active;
+    final color = active ? blueForce : dangerRed;
+    final accuracy = state.lastFix?.accuracyM;
+    final label = active && accuracy != null
+        ? 'GPS ±${accuracy.round()} m'
+        : state.status.shortLabel;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: compact ? 9 : 10,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+extension LocationStatusLabel on LocationStatus {
+  String get shortLabel {
+    return switch (this) {
+      LocationStatus.idle => 'GPS VYP',
+      LocationStatus.searching => 'GPS HLEDÁ',
+      LocationStatus.active => 'GPS',
+      LocationStatus.serviceDisabled => 'GPS VYPNUTO',
+      LocationStatus.permissionDenied ||
+      LocationStatus.permissionDeniedForever => 'GPS BEZ PRÁV',
+      LocationStatus.unavailable => 'GPS N/A',
+    };
+  }
+
+  String get description {
+    return switch (this) {
+      LocationStatus.idle => 'neaktivní',
+      LocationStatus.searching => 'hledá signál',
+      LocationStatus.active => 'aktivní',
+      LocationStatus.serviceDisabled => 'polohové služby jsou vypnuté',
+      LocationStatus.permissionDenied => 'oprávnění k poloze zamítnuto',
+      LocationStatus.permissionDeniedForever =>
+        'oprávnění trvale zamítnuto, povol v nastavení',
+      LocationStatus.unavailable => 'nedostupné na tomto zařízení',
+    };
   }
 }
 
@@ -3439,6 +3675,9 @@ class SystemsPage extends StatelessWidget {
     required this.pttState,
     required this.fontScale,
     required this.onFontScaleChanged,
+    this.locationState = LocationState.idle,
+    this.onLocationStart,
+    this.onLocationSettings,
     super.key,
   });
 
@@ -3452,12 +3691,54 @@ class SystemsPage extends StatelessWidget {
   final EncryptedPttState pttState;
   final double fontScale;
   final ValueChanged<double> onFontScaleChanged;
+  final LocationState locationState;
+  final VoidCallback? onLocationStart;
+  final VoidCallback? onLocationSettings;
 
   @override
   Widget build(BuildContext context) {
+    final fix = locationState.lastFix;
+    final needsSettings =
+        locationState.status == LocationStatus.serviceDisabled ||
+        locationState.status == LocationStatus.permissionDeniedForever;
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       children: [
+        SystemSection(
+          title: 'GPS',
+          icon: Icons.gps_fixed,
+          children: [
+            MonoLine(label: 'Stav', value: locationState.status.description),
+            MonoLine(
+              label: 'Přesnost',
+              value: fix == null ? '-' : '±${fix.accuracyM.round()} m',
+            ),
+            MonoLine(
+              label: 'Poslední fix',
+              value: fix == null ? '-' : _clockLabel(fix.timestamp.toLocal()),
+            ),
+            if (locationState.lastError != null)
+              MonoLine(label: 'Chyba', value: locationState.lastError!),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: needsSettings ? onLocationSettings : onLocationStart,
+              style: FilledButton.styleFrom(
+                backgroundColor: rangerGreen,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: Icon(
+                needsSettings ? Icons.settings_outlined : Icons.gps_not_fixed,
+                size: 18,
+              ),
+              label: Text(
+                needsSettings ? 'Otevřít nastavení polohy' : 'Spustit GPS',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
         SystemSection(
           title: 'Nastavení',
           icon: Icons.format_size,
@@ -3609,6 +3890,11 @@ class SystemsPage extends StatelessWidget {
       MeshtasticBleStatus.disconnected => 'odpojeno',
       MeshtasticBleStatus.error => 'chyba ${state.lastError ?? ''}',
     };
+  }
+
+  String _clockLabel(DateTime value) {
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${two(value.hour)}:${two(value.minute)}:${two(value.second)}';
   }
 
   String _lastPacketLabel(MeshPacketDiagnostics diagnostics) {
