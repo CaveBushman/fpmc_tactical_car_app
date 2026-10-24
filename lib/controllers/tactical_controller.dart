@@ -424,6 +424,21 @@ class TacticalController extends ChangeNotifier {
       ..addAll(TacticalWaypoint.demoWaypoints);
   }
 
+  /// Panic wipe: logout plus removal of all preferences, without asking
+  /// anything and without contacting the backend. Offline map tiles are
+  /// wiped by the caller (OfflineMapsController).
+  Future<void> emergencyWipe() async {
+    _stopSosSilently();
+    await logout();
+    await settings.clearAll();
+    _fontScale = 1.0;
+    _volumeKeyPtt = false;
+    _nightMode = false;
+    _sharePositionToMesh = true;
+    unawaited(_nativePtt.setVolumeKeyPtt(false));
+    _notify();
+  }
+
   /// Ends the session and wipes everything stored on the device.
   Future<void> logout() async {
     // Drop the session first so no in-flight persist can rewrite the store.

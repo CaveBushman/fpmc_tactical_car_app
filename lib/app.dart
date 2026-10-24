@@ -337,6 +337,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
           UserSessionChip(
             session: session,
             onLogout: _confirmLogout,
+            onEmergencyWipe: _emergencyWipe,
             compact: narrow,
           ),
           SizedBox(width: narrow ? 4 : 10),
@@ -438,6 +439,49 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
   }
 
   void _selectTab(int index) => setState(() => _selectedIndex = index);
+
+  /// Panic wipe behind a 3 s hold: no backend call, no further questions.
+  Future<void> _emergencyWipe() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: panelGreen,
+        title: const Text('Nouzově smazat data'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Okamžitě smaže zprávy, pozice, stopu, šifrovací klíč, offline '
+              'mapy a nastavení, odpojí T-Beam a odhlásí. Nelze vrátit.',
+            ),
+            const SizedBox(height: 16),
+            HoldToConfirmButton(
+              key: const ValueKey('wipe-hold'),
+              label: 'DRŽ 3 s PRO SMAZÁNÍ',
+              onConfirmed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Zrušit'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    setState(() => _selectedIndex = 0);
+    await _controller.emergencyWipe();
+    try {
+      await _offlineMaps.clear();
+    } catch (_) {
+      // Tiles unavailable on this platform.
+    }
+  }
 
   Future<void> _toggleSos() async {
     if (_controller.sosActive) {

@@ -40,6 +40,18 @@ class SettingsStore {
   Future<void> setGroupFor(String userName, String groupId) =>
       _set((prefs) => prefs.setString('${prefix}group.$userName', groupId));
 
+  /// Removes every stored preference (emergency wipe).
+  Future<void> clearAll() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final key in prefs.getKeys().where((k) => k.startsWith(prefix))) {
+        await prefs.remove(key);
+      }
+    } catch (_) {
+      // Nothing stored or no preferences backend.
+    }
+  }
+
   Future<T?> _get<T>(T? Function(SharedPreferences prefs) read) async {
     try {
       return read(await SharedPreferences.getInstance());

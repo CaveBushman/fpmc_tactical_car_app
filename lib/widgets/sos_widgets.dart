@@ -145,3 +145,84 @@ class _Banner extends StatelessWidget {
     );
   }
 }
+
+/// Button that fires only after being held for [holdFor], with a filling
+/// progress bar, so a destructive action cannot happen by a stray tap.
+class HoldToConfirmButton extends StatefulWidget {
+  const HoldToConfirmButton({
+    required this.label,
+    required this.onConfirmed,
+    this.holdFor = const Duration(seconds: 3),
+    super.key,
+  });
+
+  final String label;
+  final VoidCallback onConfirmed;
+  final Duration holdFor;
+
+  @override
+  State<HoldToConfirmButton> createState() => _HoldToConfirmButtonState();
+}
+
+class _HoldToConfirmButtonState extends State<HoldToConfirmButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _progress =
+      AnimationController(vsync: this, duration: widget.holdFor)
+        ..addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            widget.onConfirmed();
+          }
+        });
+
+  @override
+  void dispose() {
+    _progress.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerDown: (_) => _progress.forward(from: 0),
+      onPointerUp: (_) {
+        if (!_progress.isCompleted) {
+          _progress.reverse();
+        }
+      },
+      onPointerCancel: (_) => _progress.reverse(),
+      child: AnimatedBuilder(
+        animation: _progress,
+        builder: (context, _) => Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: dangerRed, width: 2),
+              ),
+            ),
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: _progress.value,
+                  child: const ColoredBox(color: dangerRed),
+                ),
+              ),
+            ),
+            Text(
+              widget.label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

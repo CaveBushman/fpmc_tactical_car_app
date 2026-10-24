@@ -10,12 +10,14 @@ class UserSessionChip extends StatelessWidget {
   const UserSessionChip({
     required this.session,
     required this.onLogout,
+    this.onEmergencyWipe,
     this.compact = false,
     super.key,
   });
 
   final AuthSession session;
   final VoidCallback onLogout;
+  final VoidCallback? onEmergencyWipe;
 
   /// Icon only (narrow phones); name and role are in the menu.
   final bool compact;
@@ -27,6 +29,8 @@ class UserSessionChip extends StatelessWidget {
       onSelected: (value) {
         if (value == 'logout') {
           onLogout();
+        } else if (value == 'wipe') {
+          onEmergencyWipe?.call();
         }
       },
       itemBuilder: (context) => [
@@ -36,6 +40,14 @@ class UserSessionChip extends StatelessWidget {
             child: Text('${session.displayName} / ${session.role}'),
           ),
         const PopupMenuItem(value: 'logout', child: Text('Odhlásit')),
+        if (onEmergencyWipe != null)
+          const PopupMenuItem(
+            value: 'wipe',
+            child: Text(
+              'Nouzově smazat data',
+              style: TextStyle(color: dangerRed, fontWeight: FontWeight.w800),
+            ),
+          ),
       ],
       child: compact
           ? const Padding(

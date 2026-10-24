@@ -36,6 +36,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Operation groups managed on the backend (name, Meshtastic channel slot 0–7, PTT on/off); the app receives them at login (demo mode: ALPHA, BRAVO, MED, COMMAND). The app reads the T-Beam's channel config and warns when a group uses a channel the radio does not have enabled.
 - Backend (`server/`) issues sessions, LiveKit room tokens limited to the user's groups, and random per-group E2EE keys with commander-triggered rotation; security events go to an audit log.
 - Node/message state persisted locally, AES-GCM encrypted with a key in the platform keystore, wiped on logout.
+- Emergency wipe (user menu → Nouzově smazat data, hold 3 s): removes messages, positions, trail, the storage key, offline maps and settings, disconnects the T-Beam and logs out, without contacting the backend.
 - GitHub Actions CI for dependency install, static analysis, tests, web build, and Android debug APK build.
 
 ## Target Architecture
