@@ -18,6 +18,7 @@ import '../services/meshtastic_ble_service.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/position_widgets.dart';
+import 'help_page.dart';
 
 class SystemsPage extends StatelessWidget {
   const SystemsPage({
@@ -514,6 +515,22 @@ class SystemsPage extends StatelessWidget {
                 fontSize: 12,
                 color: Colors.white.withValues(alpha: 0.6),
               ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SystemSection(
+          title: 'Nápověda',
+          icon: Icons.help_outline,
+          children: [
+            FilledButton.icon(
+              key: const ValueKey('open-help'),
+              onPressed: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute<void>(builder: (_) => const HelpPage())),
+              style: FilledButton.styleFrom(backgroundColor: rangerGreen),
+              icon: const Icon(Icons.menu_book_outlined, size: 18),
+              label: const Text('Jak co udělat'),
             ),
           ],
         ),

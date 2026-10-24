@@ -4,6 +4,7 @@
 
 - Own base point: marked in the point editor, shown with a house and
   offered first in the car-mode target list.
+- In-app help in Czech (System → Nápověda), searchable.
 
 ## 1.2.0 (build 3) – 2026-10-24
 
