@@ -178,6 +178,7 @@ class _MapPageState extends State<MapPage> {
               right: 0,
               bottom: mapBottom,
               child: MeshMap(
+                key: const ValueKey('mesh-map'),
                 nodes: nodes,
                 waypoints: widget.waypoints,
                 onLongPress: widget.onCreateWaypoint == null
@@ -593,6 +594,14 @@ class _MeshMapState extends State<MeshMap> {
     super.dispose();
   }
 
+  ButtonStyle _controlStyle({required bool active}) => IconButton.styleFrom(
+    backgroundColor: active
+        ? rangerGreen
+        : Colors.black.withValues(alpha: 0.76),
+    foregroundColor: active ? Colors.white : sand,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  );
+
   void _recenter() {
     setState(() => _followSelf = true);
     if (_mapReady) {
@@ -833,64 +842,67 @@ class _MeshMapState extends State<MeshMap> {
               ),
             ),
           ),
-        if (widget.onToggleMeasure != null)
-          Positioned(
-            left: 12,
-            bottom: 148,
-            child: IconButton.filled(
-              key: const ValueKey('measure'),
-              tooltip: widget.measuring ? 'Ukončit měření' : 'Měřit',
-              onPressed: widget.onToggleMeasure,
-              style: IconButton.styleFrom(
-                backgroundColor: widget.measuring
-                    ? rangerGreen
-                    : Colors.black.withValues(alpha: 0.76),
-                foregroundColor: widget.measuring ? Colors.white : sand,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+        // Ruler, coordinate entry and recenter stacked bottom-left; on a
+        // short map (phone in landscape) the column would run into the
+        // position panel, so they line up along the bottom instead.
+        Positioned.fill(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final buttons = [
+                if (widget.onToggleMeasure != null)
+                  IconButton.filled(
+                    key: const ValueKey('measure'),
+                    tooltip: widget.measuring ? 'Ukončit měření' : 'Měřit',
+                    onPressed: widget.onToggleMeasure,
+                    style: _controlStyle(active: widget.measuring),
+                    icon: const Icon(Icons.straighten),
+                  ),
+                if (widget.onEnterCoordinates != null)
+                  IconButton.filled(
+                    key: const ValueKey('enter-coordinates'),
+                    tooltip: 'Zadat souřadnice',
+                    onPressed: widget.onEnterCoordinates,
+                    style: _controlStyle(active: false),
+                    icon: const Icon(Icons.edit_location_alt_outlined),
+                  ),
+                IconButton.filled(
+                  key: const ValueKey('recenter'),
+                  tooltip: _followSelf
+                      ? 'Mapa sleduje vlastní pozici'
+                      : 'Vycentrovat na vlastní pozici',
+                  onPressed: _recenter,
+                  style: _controlStyle(active: _followSelf),
+                  icon: Icon(
+                    _followSelf ? Icons.my_location : Icons.location_searching,
+                  ),
                 ),
-              ),
-              icon: const Icon(Icons.straighten),
-            ),
-          ),
-        if (widget.onEnterCoordinates != null)
-          Positioned(
-            left: 12,
-            bottom: 92,
-            child: IconButton.filled(
-              key: const ValueKey('enter-coordinates'),
-              tooltip: 'Zadat souřadnice',
-              onPressed: widget.onEnterCoordinates,
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.black.withValues(alpha: 0.76),
-                foregroundColor: sand,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              icon: const Icon(Icons.edit_location_alt_outlined),
-            ),
-          ),
-        Positioned(
-          left: 12,
-          bottom: 36,
-          child: IconButton.filled(
-            tooltip: _followSelf
-                ? 'Mapa sleduje vlastní pozici'
-                : 'Vycentrovat na vlastní pozici',
-            onPressed: _recenter,
-            style: IconButton.styleFrom(
-              backgroundColor: _followSelf
-                  ? rangerGreen
-                  : Colors.black.withValues(alpha: 0.76),
-              foregroundColor: _followSelf ? Colors.white : sand,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            icon: Icon(
-              _followSelf ? Icons.my_location : Icons.location_searching,
-            ),
+              ];
+              const bottom = 36.0;
+              const step = 56.0;
+              // Room kept free at the top for the position panel.
+              const topReserve = 120.0;
+              final fitsColumn =
+                  bottom + buttons.length * step + topReserve <=
+                  constraints.maxHeight;
+              return Stack(
+                children: [
+                  Positioned(
+                    left: 12,
+                    bottom: bottom,
+                    child: Flex(
+                      direction: fitsColumn ? Axis.vertical : Axis.horizontal,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final (index, button) in buttons.indexed) ...[
+                          if (index > 0) const SizedBox(width: 8, height: 8),
+                          button,
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ],
