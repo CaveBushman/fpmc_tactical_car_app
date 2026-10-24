@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (build 3) – 2026-10-24
 
 - Lost contact alerts with navigation to the last known position.
 - Message search (case and diacritics ignored) and a priority filter.
@@ -15,6 +15,8 @@
 - Layout fixes for the team phone found by screen-by-screen audits
   (Messages in landscape, map cards and buttons, forms with the keyboard,
   navigation rail).
+- Internal: the mission log and unread counts live in their own classes;
+  layout and keyboard audits run in the test suite.
 
 ## 1.1.0 (build 2) – 2026-10-24
 
