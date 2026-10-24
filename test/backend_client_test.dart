@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:tactical_car_app/services/auth_service.dart';
 import 'package:tactical_car_app/services/backend_client.dart';
+import 'package:tactical_car_app/services/device_identity.dart';
 
 void main() {
   late List<http.Request> requests;
@@ -51,7 +52,10 @@ void main() {
       requests.single.url.toString(),
       'https://ptt.example.test/api/auth/login',
     );
-    expect(jsonDecode(requests.single.body)['userName'], 'medic');
+    final sent = jsonDecode(requests.single.body) as Map<String, dynamic>;
+    expect(sent['userName'], 'medic');
+    expect(sent['deviceId'], matches(RegExp(r'^[0-9a-f]{32}$')));
+    expect(sent['deviceName'], isNotEmpty);
   });
 
   test('remote login explains failures', () async {
@@ -67,6 +71,14 @@ void main() {
     expect(
       await error(json(429, {'error': 'locked', 'retryAfterSeconds': 42})),
       contains('42 s'),
+    );
+    expect(
+      await error(json(403, {'error': 'device_not_allowed'})),
+      contains('odpojení starého zařízení'),
+    );
+    expect(
+      await error(json(403, {'error': 'account_disabled'})),
+      'Účet je zablokovaný.',
     );
     final unreachable = RemoteAuthService(
       BackendClient(
@@ -99,5 +111,13 @@ void main() {
     expect(info.keys.map((key) => key.id), [3, 4]);
     expect(info.keyId, 4);
     expect(info.keys.last.bytes, List.filled(32, 4));
+  });
+
+  test('device id is stable across logins', () async {
+    const identity = DeviceIdentity(storageKey: 'test_device_id');
+    final first = await identity.id();
+    final second = await identity.id();
+    expect(first, second);
+    expect(first, hasLength(32));
   });
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'backend_client.dart';
+import 'device_identity.dart';
 
 class AuthSession {
   const AuthSession({
@@ -135,9 +136,10 @@ class AuthService {
 
 /// Logs in against the tactical backend.
 class RemoteAuthService extends AuthService {
-  RemoteAuthService(this.backend);
+  RemoteAuthService(this.backend, {this.device = const DeviceIdentity()});
 
   final BackendClient backend;
+  final DeviceIdentity device;
 
   @override
   Future<AuthResult> login({
@@ -148,7 +150,12 @@ class RemoteAuthService extends AuthService {
       return const AuthResult.failure('Zadej uživatele.');
     }
     try {
-      final login = await backend.login(userName.trim(), password);
+      final login = await backend.login(
+        userName.trim(),
+        password,
+        deviceId: await device.id(),
+        deviceName: device.name,
+      );
       final user = login.user;
       return AuthResult.success(
         AuthSession(
@@ -163,6 +170,10 @@ class RemoteAuthService extends AuthService {
       return AuthResult.failure(switch (error.statusCode) {
         0 => 'Server je nedostupný. Zkontroluj připojení.',
         401 => AuthService._invalidCredentials,
+        403 when error.code == 'device_not_allowed' =>
+          'Účet už je přihlášený na povoleném počtu zařízení. '
+              'Požádej velitele o odpojení starého zařízení.',
+        403 when error.code == 'account_disabled' => 'Účet je zablokovaný.',
         429 =>
           'Příliš mnoho pokusů. Zkus to za ${error.retryAfter?.inSeconds ?? 60} s.',
         _ => 'Přihlášení selhalo (${error.code}).',

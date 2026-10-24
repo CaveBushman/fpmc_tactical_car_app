@@ -9,7 +9,10 @@ import 'package:tactical_server/tactical_server.dart';
 /// - `SESSION_SECRET` – HMAC secret for app session tokens (≥ 32 chars)
 /// - `LIVEKIT_URL` – URL the app connects to, e.g. wss://ptt.example.cz
 /// - `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` – same as in livekit.yaml
-/// - `USERS_FILE` (default config/users.json), `DATA_DIR` (default data)
+/// - `USERS_FILE` (default config/users.json): initial users; afterwards
+///   the editable copy in `DATA_DIR/users.json` is used
+/// - `DATA_DIR` (default data)
+/// - `MAX_DEVICES_PER_USER` (default 2, 0 = unlimited)
 Future<void> main() async {
   String require(String name) {
     final value = Platform.environment[name];
@@ -30,7 +33,10 @@ Future<void> main() async {
   final api = TacticalApi(
     users: UserDirectory.fromFile(
       Platform.environment['USERS_FILE'] ?? 'config/users.json',
+      stateFile: File('$dataDir/users.json'),
     ),
+    maxDevicesPerUser:
+        int.tryParse(Platform.environment['MAX_DEVICES_PER_USER'] ?? '') ?? 2,
     sessions: SessionIssuer(secret: sessionSecret),
     liveKit: LiveKitTokenIssuer(
       apiKey: require('LIVEKIT_API_KEY'),

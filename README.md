@@ -93,7 +93,7 @@ Optional: `TILE_MAX_ZOOM` (default 18), `TILE_ALLOW_BULK=false` to disable packs
 1. Replace the focused manual Meshtastic protobuf layer with generated classes when `protoc` is available in CI.
 2. Named offline map packs per operation area (today: radius around own position).
 3. CarPlay (needs Apple entitlements, see `docs/carplay.md`).
-4. Add server-side teams management UI, operation groups, device binding, and audit logs.
+4. Operation groups configurable on the server (today a fixed set: alpha, bravo, med, command).
 5. Add end-to-end integration tests with recorded Meshtastic BLE packets.
 
 ## PTT Backend and LiveKit
@@ -114,7 +114,11 @@ Put a TLS reverse proxy in front (the app needs `https://` for the backend and `
 flutter run --dart-define=BACKEND_URL=https://ptt.example.cz/api
 ```
 
-API: `POST /auth/login`, `POST /ptt/<group>/join`, `POST /admin/groups/<group>/rotate-key` (commander), `GET /health`. Backend tests: `cd server && dart test`.
+Team administration: open `https://ptt.example.cz/api/admin` and log in as a commander. It manages users (create, display name, role, groups, block, new password), logs a user out everywhere, unbinds devices, rotates group keys and shows the audit log. Changes of role, groups, password or blocking end that user's sessions immediately. Users are seeded from `USERS_FILE` on first start and then kept in `DATA_DIR/users.json`.
+
+Device binding: the app sends a random per-installation id at login; an account may use at most `MAX_DEVICES_PER_USER` devices (default 2, `0` = unlimited) until a commander unbinds one.
+
+API: `POST /auth/login`, `POST /auth/password`, `POST /ptt/<group>/join`, admin endpoints under `/admin/…` (commander), `GET /health`. Backend tests: `cd server && dart test`.
 
 ## Code Layout
 

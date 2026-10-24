@@ -76,10 +76,20 @@ class BackendClient {
   final Uri baseUri;
   final http.Client _http;
 
-  Future<BackendLogin> login(String userName, String password) async {
+  Future<BackendLogin> login(
+    String userName,
+    String password, {
+    String? deviceId,
+    String? deviceName,
+  }) async {
     final body = await _post(
       'auth/login',
-      body: {'userName': userName, 'password': password},
+      body: {
+        'userName': userName,
+        'password': password,
+        'deviceId': ?deviceId,
+        'deviceName': ?deviceName,
+      },
     );
     final user = body['user'] as Map<String, dynamic>;
     return BackendLogin(
