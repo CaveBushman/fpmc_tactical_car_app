@@ -74,11 +74,17 @@ class NodeCard extends StatelessWidget {
     required this.node,
     this.onCheckIn,
     this.memberStatus,
+    this.onNavigate,
+    this.onMessage,
     super.key,
   });
 
   final MeshNode node;
   final VoidCallback? onCheckIn;
+
+  /// Navigate to this member / write them a direct message.
+  final VoidCallback? onNavigate;
+  final VoidCallback? onMessage;
 
   /// Last status the member reported about themselves.
   final MemberStatusReport? memberStatus;
@@ -150,6 +156,35 @@ class NodeCard extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
+                  if (onNavigate != null || onMessage != null)
+                    Wrap(
+                      spacing: 4,
+                      children: [
+                        if (onNavigate != null)
+                          TextButton.icon(
+                            key: ValueKey('navigate-member-${node.callSign}'),
+                            onPressed: onNavigate,
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            icon: const Icon(
+                              Icons.navigation_outlined,
+                              size: 16,
+                            ),
+                            label: const Text('Navigovat'),
+                          ),
+                        if (onMessage != null)
+                          TextButton.icon(
+                            key: ValueKey('message-member-${node.callSign}'),
+                            onPressed: onMessage,
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            icon: const Icon(Icons.chat_outlined, size: 16),
+                            label: const Text('Zpráva'),
+                          ),
+                      ],
+                    ),
                 ],
               ),
             ),

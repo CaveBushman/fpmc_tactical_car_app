@@ -13,8 +13,14 @@ class TeamPage extends StatefulWidget {
     this.statusOf,
     this.ownStatus,
     this.onOwnStatus,
+    this.onNavigate,
+    this.onMessage,
     super.key,
   });
+
+  /// Navigate to a member / write them a direct message.
+  final ValueChanged<MeshNode>? onNavigate;
+  final ValueChanged<MeshNode>? onMessage;
 
   final List<MeshNode> nodes;
   final ValueChanged<MeshNode> onCheckIn;
@@ -103,6 +109,12 @@ class _TeamPageState extends State<TeamPage> {
                       onCheckIn: node.isSelf
                           ? null
                           : () => widget.onCheckIn(node),
+                      onNavigate: node.isSelf || widget.onNavigate == null
+                          ? null
+                          : () => widget.onNavigate!(node),
+                      onMessage: node.isSelf || widget.onMessage == null
+                          ? null
+                          : () => widget.onMessage!(node),
                     );
                   },
                 ),

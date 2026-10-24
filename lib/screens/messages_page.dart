@@ -1,7 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:latlong2/latlong.dart';
 
+import '../models/geo.dart';
 import '../models/mesh_node.dart';
 import '../models/messaging.dart';
 import '../models/navigation.dart';
@@ -22,6 +25,10 @@ class MessagesPage extends StatefulWidget {
     this.onSos,
     this.unreadIn,
     this.quickMessages = const [],
+    this.directTo,
+    this.onDirectConsumed,
+    this.onShowOnMap,
+    this.onNavigateToSender,
     super.key,
   });
 
@@ -43,6 +50,16 @@ class MessagesPage extends StatefulWidget {
 
   /// One-tap templates sent to the selected group.
   final List<String> quickMessages;
+
+  /// Request from elsewhere (team card): open a direct message to this
+  /// callsign; [onDirectConsumed] is called once it is applied.
+  final String? directTo;
+  final VoidCallback? onDirectConsumed;
+
+  /// Message actions: show a position from the text on the map, navigate
+  /// to the sender.
+  final ValueChanged<LatLng>? onShowOnMap;
+  final ValueChanged<String>? onNavigateToSender;
 
   @override
   State<MessagesPage> createState() => _MessagesPageState();
@@ -71,11 +88,33 @@ class _MessagesPageState extends State<MessagesPage> {
         setState(() {});
       }
     });
+    _applyDirectTo();
+  }
+
+  /// Switches the composer to a direct message for [MessagesPage.directTo].
+  void _applyDirectTo() {
+    final callSign = widget.directTo;
+    if (callSign == null) {
+      return;
+    }
+    _directTo(callSign);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => widget.onDirectConsumed?.call(),
+    );
+  }
+
+  void _directTo(String callSign) {
+    _directMode = true;
+    _nodeSearchController.text = callSign;
+    _selectedNodeIndex = 0;
   }
 
   @override
   void didUpdateWidget(covariant MessagesPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.directTo != null && widget.directTo != oldWidget.directTo) {
+      _applyDirectTo();
+    }
     if (_selectedNodeIndex >= _filteredDirectNodes.length) {
       _selectedNodeIndex = 0;
     }
@@ -294,6 +333,7 @@ class _MessagesPageState extends State<MessagesPage> {
       return MessageCard(
         message: message,
         onRetry: onRetry == null ? null : () => onRetry(message),
+        onLongPress: () => _showMessageActions(message),
       );
     }
 
@@ -332,6 +372,66 @@ class _MessagesPageState extends State<MessagesPage> {
         );
       },
     );
+  }
+
+  /// Long press on a message: map, reply, navigate, copy.
+  Future<void> _showMessageActions(MeshMessage message) async {
+    final position = coordinatesInText(message.body);
+    final own = message.sender == widget.selfNode.callSign;
+    final known = widget.nodes.any((node) => node.callSign == message.sender);
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: panelGreen,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            if (position != null && widget.onShowOnMap != null)
+              ListTile(
+                key: const ValueKey('message-show-on-map'),
+                leading: const Icon(Icons.map_outlined),
+                title: const Text('Ukázat na mapě'),
+                subtitle: Text(
+                  formatMgrs(position.latitude, position.longitude),
+                ),
+                onTap: () => Navigator.of(context).pop('map'),
+              ),
+            if (!own && known)
+              ListTile(
+                key: const ValueKey('message-reply-direct'),
+                leading: const Icon(Icons.reply),
+                title: Text('Odpovědět soukromě ${message.sender}'),
+                onTap: () => Navigator.of(context).pop('reply'),
+              ),
+            if (!own && known && widget.onNavigateToSender != null)
+              ListTile(
+                leading: const Icon(Icons.navigation_outlined),
+                title: Text('Navigovat k ${message.sender}'),
+                onTap: () => Navigator.of(context).pop('navigate'),
+              ),
+            ListTile(
+              key: const ValueKey('message-copy'),
+              leading: const Icon(Icons.copy),
+              title: const Text('Kopírovat text'),
+              onTap: () => Navigator.of(context).pop('copy'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    switch (action) {
+      case 'map':
+        widget.onShowOnMap?.call(position!);
+      case 'reply':
+        setState(() => _directTo(message.sender));
+      case 'navigate':
+        widget.onNavigateToSender?.call(message.sender);
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: message.body));
+    }
   }
 
   Future<void> _send() async {
@@ -879,87 +979,99 @@ class _TargetPill extends StatelessWidget {
 }
 
 class MessageCard extends StatelessWidget {
-  const MessageCard({required this.message, this.onRetry, super.key});
+  const MessageCard({
+    required this.message,
+    this.onRetry,
+    this.onLongPress,
+    super.key,
+  });
 
   final MeshMessage message;
   final VoidCallback? onRetry;
 
+  /// Opens the message actions.
+  final VoidCallback? onLongPress;
+
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  message.viaInternet
-                      ? Icons.cloud_outlined
-                      : Icons.settings_input_antenna,
-                  size: 16,
-                  color: message.priority ? signalAmber : sand,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          message.sender,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      if (message.targetLabel != null) ...[
-                        const SizedBox(width: 8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    message.viaInternet
+                        ? Icons.cloud_outlined
+                        : Icons.settings_input_antenna,
+                    size: 16,
+                    color: message.priority ? signalAmber : sand,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Row(
+                      children: [
                         Flexible(
                           child: Text(
-                            message.targetLabel!,
+                            message.sender,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: sand.withValues(alpha: 0.78),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                         ),
+                        if (message.targetLabel != null) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              message.targetLabel!,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: sand.withValues(alpha: 0.78),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (message.delivery != MessageDelivery.received) ...[
+                          const SizedBox(width: 8),
+                          DeliveryStatusIcon(delivery: message.delivery),
+                        ],
                       ],
-                      if (message.delivery != MessageDelivery.received) ...[
-                        const SizedBox(width: 8),
-                        DeliveryStatusIcon(delivery: message.delivery),
-                      ],
-                    ],
+                    ),
                   ),
-                ),
-                Text(
-                  message.timeLabel(DateTime.now()),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.55),
-                    fontSize: 12,
+                  Text(
+                    message.timeLabel(DateTime.now()),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message.body,
+                style: const TextStyle(fontSize: 14, height: 1.25),
+              ),
+              if (message.canRetry && onRetry != null) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: onRetry,
+                    style: TextButton.styleFrom(foregroundColor: dangerRed),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Odeslat znovu'),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message.body,
-              style: const TextStyle(fontSize: 14, height: 1.25),
-            ),
-            if (message.canRetry && onRetry != null) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: onRetry,
-                  style: TextButton.styleFrom(foregroundColor: dangerRed),
-                  icon: const Icon(Icons.refresh, size: 18),
-                  label: const Text('Odeslat znovu'),
-                ),
-              ),
             ],
-          ],
+          ),
         ),
       ),
     );

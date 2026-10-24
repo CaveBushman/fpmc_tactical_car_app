@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:latlong2/latlong.dart';
 
 import 'controllers/offline_maps_controller.dart';
 import 'controllers/tactical_controller.dart';
@@ -157,6 +158,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
   late final StreamSubscription<String> _noticeSubscription;
   int _selectedIndex = 0;
 
+  /// Cross-tab requests: a member to write to, a point to show on the map.
+  String? _composeTo;
+  LatLng? _mapFocusRequest;
+
   @override
   void initState() {
     super.initState();
@@ -272,6 +277,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       navTarget: controller.navTarget,
       peerTrails: controller.peerTrails,
       onClearOldWaypoints: controller.clearOldReceivedWaypoints,
+      focusRequest: _mapFocusRequest,
+      onFocusConsumed: () => setState(() => _mapFocusRequest = null),
       baseCode: controller.baseWaypoint?.code,
       speedKmh: controller.travelSpeedKmh,
       courseDeg: controller.courseDeg,
@@ -312,6 +319,14 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       TeamPage(
         nodes: nodes,
         onCheckIn: controller.sendCheckIn,
+        onNavigate: (node) {
+          controller.navigateTo(NavTarget.node(node.nodeNum));
+          _selectTab(0);
+        },
+        onMessage: (node) {
+          setState(() => _composeTo = node.callSign);
+          _selectTab(messagesTabIndex);
+        },
         statusOf: controller.statusOf,
         ownStatus: controller.ownStatus,
         onOwnStatus: (status) => unawaited(controller.setOwnStatus(status)),
@@ -325,6 +340,17 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         selectedGroupIndex: controller.selectedGroupIndex,
         unreadIn: controller.unreadIn,
         quickMessages: controller.quickMessages,
+        directTo: _composeTo,
+        onDirectConsumed: () => setState(() => _composeTo = null),
+        onShowOnMap: (point) {
+          setState(() => _mapFocusRequest = point);
+          _selectTab(0);
+        },
+        onNavigateToSender: (callSign) {
+          if (controller.navigateToMember(callSign)) {
+            _selectTab(0);
+          }
+        },
         onGroupSelected: controller.selectGroup,
         onSend: controller.sendMeshText,
         onRetry: controller.retryMessage,

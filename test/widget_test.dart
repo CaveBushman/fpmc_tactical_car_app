@@ -241,6 +241,8 @@ void main() {
     expect(find.text('STALE'), findsOneWidget);
     expect(find.text('LOST'), findsOneWidget);
 
+    await tester.ensureVisible(find.byTooltip('CHECK-IN MED-4'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('CHECK-IN MED-4'));
     await tester.pumpAndSettle();
 

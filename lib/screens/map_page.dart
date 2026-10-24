@@ -45,6 +45,8 @@ class MapPage extends StatefulWidget {
     this.onClearNavTarget,
     this.peerTrails = const {},
     this.onClearOldWaypoints,
+    this.focusRequest,
+    this.onFocusConsumed,
     this.baseCode,
     this.speedKmh = TacticalNavSolution.walkingKmh,
     this.courseDeg,
@@ -68,6 +70,11 @@ class MapPage extends StatefulWidget {
 
   /// Code of the user's base point (drawn with a house).
   final String? baseCode;
+
+  /// Request from elsewhere (a message): move here and show the point
+  /// card; [onFocusConsumed] is called once applied.
+  final LatLng? focusRequest;
+  final VoidCallback? onFocusConsumed;
 
   /// Own direction of travel (GPS course), null before moving.
   final double? courseDeg;
@@ -123,6 +130,34 @@ class _MapPageState extends State<MapPage> {
 
   /// Measuring mode: taps add points instead of opening the point card.
   List<LatLng>? _measure;
+
+  @override
+  void initState() {
+    super.initState();
+    _applyFocusRequest();
+  }
+
+  @override
+  void didUpdateWidget(covariant MapPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.focusRequest != null &&
+        widget.focusRequest != oldWidget.focusRequest) {
+      _applyFocusRequest();
+    }
+  }
+
+  void _applyFocusRequest() {
+    final point = widget.focusRequest;
+    if (point == null) {
+      return;
+    }
+    _focus = point;
+    _inspected = point;
+    _measure = null;
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => widget.onFocusConsumed?.call(),
+    );
+  }
 
   void _onMapTap(LatLng point) {
     final measure = _measure;

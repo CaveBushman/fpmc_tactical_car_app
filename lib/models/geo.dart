@@ -128,6 +128,30 @@ LatLng? parseCoordinates(String input, {LatLng? near}) {
   return null;
 }
 
+/// First position written in a message: "LAT 50.1 | LON 14.4" as the
+/// app's reports write it, otherwise the first full MGRS reference
+/// ("MGRS 33U VR 58335 40478"). Null when there is none.
+LatLng? coordinatesInText(String text) {
+  final latLon = RegExp(
+    r'LAT\s*(-?\d{1,2}(?:\.\d+)?)\s*\|?\s*LON\s*(-?\d{1,3}(?:\.\d+)?)',
+    caseSensitive: false,
+  ).firstMatch(text);
+  if (latLon != null) {
+    final lat = double.tryParse(latLon.group(1)!);
+    final lon = double.tryParse(latLon.group(2)!);
+    if (lat != null && lon != null && lat.abs() <= 90 && lon.abs() <= 180) {
+      return LatLng(lat, lon);
+    }
+  }
+  final mgrs = RegExp(
+    r'\b(\d{1,2}[C-X])\s?([A-Z]{2})\s?(\d{1,5})\s?(\d{1,5})\b',
+  ).firstMatch(text.toUpperCase());
+  if (mgrs != null && mgrs.group(3)!.length == mgrs.group(4)!.length) {
+    return parseMgrs(mgrs.group(0)!);
+  }
+  return null;
+}
+
 /// Point reached from [from] after [distanceM] metres on [bearing] degrees
 /// (great-circle, spherical earth).
 LatLng destination(LatLng from, double bearing, double distanceM) {

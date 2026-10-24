@@ -120,6 +120,13 @@ const helpTopics = [
   ),
   HelpTopic(
     'Zprávy a hlášení',
+    'Akce u zprávy',
+    'Dlouhý stisk na zprávě: „Ukázat na mapě“, pokud zpráva obsahuje '
+        'souřadnice (MGRS nebo LAT/LON), soukromá odpověď odesílateli, '
+        'navigace k němu a kopírování textu.',
+  ),
+  HelpTopic(
+    'Zprávy a hlášení',
     'Bez T-Beamu přes internet',
     'Když není T-Beam připojený, zprávy skupiny a poloha jdou přes '
         'internet (ikona mráčku). Soukromé zprávy a jiné skupiny potřebují '
@@ -132,6 +139,12 @@ const helpTopics = [
     'Záložka Tým: nahoře vy, pak OK, STALE (5–15 min bez zprávy) a LOST '
         '(déle), uvnitř podle vzdálenosti. Členové, kteří se neozvali '
         '24 hodin, se skryjí.',
+  ),
+  HelpTopic(
+    'Tým a stavy',
+    'Akce u člena',
+    'Na kartě člena v Týmu: „Navigovat“ spustí navigaci k němu (cíl se '
+        'posouvá s ním), „Zpráva“ otevře soukromou zprávu jen pro něj.',
   ),
   HelpTopic(
     'Tým a stavy',
