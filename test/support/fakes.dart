@@ -14,6 +14,7 @@ class FakeLocationService implements LocationService {
       StreamController.broadcast();
   LocationState _state = LocationState.idle;
   int startCount = 0;
+  bool powerSaving = false;
 
   @override
   Stream<LocationState> get stateStream => _stateController.stream;
@@ -39,6 +40,9 @@ class FakeLocationService implements LocationService {
 
   @override
   Future<void> stop() async {}
+
+  @override
+  Future<void> setPowerSaving(bool enabled) async => powerSaving = enabled;
 
   @override
   Future<void> openSettings() async {}

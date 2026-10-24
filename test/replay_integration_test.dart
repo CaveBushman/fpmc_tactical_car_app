@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tactical_car_app/app.dart';
 import 'package:tactical_car_app/controllers/tactical_controller.dart';
 import 'package:tactical_car_app/models/navigation.dart';
+import 'package:tactical_car_app/screens/systems_page.dart';
 import 'package:tactical_car_app/services/mesh_packet_repository.dart';
 import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
 import 'package:tactical_car_app/services/packet_recording.dart';
@@ -122,7 +123,17 @@ void main() {
 
     await tester.tap(find.text('Systém'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Vyhledat T-Beam'));
+    // The System list builds lazily: scroll until the radio card exists.
+    await tester.scrollUntilVisible(
+      find.text('Vyhledat T-Beam'),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(SystemsPage),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Vyhledat T-Beam'));
     // Replay timers run on the test's fake clock: pump until all frames

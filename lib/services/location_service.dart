@@ -50,6 +50,10 @@ abstract class LocationService {
   Future<void> start();
   Future<void> stop();
 
+  /// Coarser, sparser fixes to save battery; applied immediately when
+  /// running.
+  Future<void> setPowerSaving(bool enabled);
+
   /// Opens the OS location switch or app permission screen, depending on
   /// what currently blocks GPS.
   Future<void> openSettings();
@@ -57,9 +61,14 @@ abstract class LocationService {
 }
 
 class GeolocatorLocationService implements LocationService {
-  GeolocatorLocationService({this.distanceFilterM = 5});
+  GeolocatorLocationService({
+    this.distanceFilterM = 5,
+    this.powerSavingDistanceFilterM = 50,
+  });
 
   final int distanceFilterM;
+  final int powerSavingDistanceFilterM;
+  bool _powerSaving = false;
   final StreamController<LocationState> _stateController =
       StreamController.broadcast();
   final StreamController<LocationFix> _fixController =
@@ -109,10 +118,15 @@ class GeolocatorLocationService implements LocationService {
       );
       _positionSubscription =
           Geolocator.getPositionStream(
-            locationSettings: LocationSettings(
-              accuracy: LocationAccuracy.best,
-              distanceFilter: distanceFilterM,
-            ),
+            locationSettings: _powerSaving
+                ? LocationSettings(
+                    accuracy: LocationAccuracy.medium,
+                    distanceFilter: powerSavingDistanceFilterM,
+                  )
+                : LocationSettings(
+                    accuracy: LocationAccuracy.best,
+                    distanceFilter: distanceFilterM,
+                  ),
           ).listen(
             _onPosition,
             onError: (Object error) {
@@ -142,6 +156,17 @@ class GeolocatorLocationService implements LocationService {
   Future<void> stop() async {
     await _positionSubscription?.cancel();
     _positionSubscription = null;
+  }
+
+  @override
+  Future<void> setPowerSaving(bool enabled) async {
+    if (_powerSaving == enabled) {
+      return;
+    }
+    _powerSaving = enabled;
+    if (_positionSubscription != null) {
+      await start();
+    }
   }
 
   @override

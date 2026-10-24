@@ -184,6 +184,7 @@ class TacticalController extends ChangeNotifier {
   Stream<String> get notices => _noticeController.stream;
 
   AuthSession? get session => _session;
+
   /// Nodes not heard for this long disappear from the map and the team
   /// list and are not saved any more.
   static const nodeExpiry = Duration(hours: 24);
@@ -382,6 +383,8 @@ class TacticalController extends ChangeNotifier {
     _nightMode = false;
     _sharePositionToMesh = true;
     _mgrsGrid = true;
+    _batterySaver = false;
+    unawaited(_locationService.setPowerSaving(false));
     unawaited(_nativePtt.setVolumeKeyPtt(false));
     _notify();
   }
@@ -428,8 +431,13 @@ class TacticalController extends ChangeNotifier {
     _nightMode = await settings.nightMode();
     _sharePositionToMesh = await settings.sharePositionToMesh();
     _mgrsGrid = await settings.mgrsGrid();
+    final batterySaver = await settings.batterySaver();
     if (_disposed) {
       return;
+    }
+    if (batterySaver) {
+      _batterySaver = true;
+      unawaited(_locationService.setPowerSaving(true));
     }
     if (fontScale != null) {
       _fontScale = fontScale.clamp(0.85, 1.35);
@@ -476,6 +484,18 @@ class TacticalController extends ChangeNotifier {
   bool _nightMode = false;
   bool _sharePositionToMesh = true;
   bool _mgrsGrid = true;
+  bool _batterySaver = false;
+
+  /// Coarser GPS and sparser position sharing (mesh every 5 min / 250 m,
+  /// internet every 2 min / 100 m). SOS and forced updates are unaffected.
+  bool get batterySaver => _batterySaver;
+
+  void setBatterySaver(bool enabled) {
+    _batterySaver = enabled;
+    unawaited(settings.setBatterySaver(enabled));
+    unawaited(_locationService.setPowerSaving(enabled));
+    _notify();
+  }
 
   /// MGRS/UTM grid lines on the map.
   bool get mgrsGrid => _mgrsGrid;
@@ -512,7 +532,8 @@ class TacticalController extends ChangeNotifier {
     _notify();
   }
 
-  /// At most once a minute, or after 50 m of movement.
+  /// At most once a minute, or after 50 m of movement (5 min / 250 m in
+  /// battery saver).
   Future<void> _sharePositionToRadio({
     LocationFix? latest,
     bool force = false,
@@ -531,8 +552,11 @@ class TacticalController extends ChangeNotifier {
     if (!force &&
         last != null &&
         lastAt != null &&
-        now.difference(lastAt) < const Duration(minutes: 1) &&
-        geo.distanceKm(last, position) < 0.05) {
+        now.difference(lastAt) <
+            (_batterySaver
+                ? const Duration(minutes: 5)
+                : const Duration(minutes: 1)) &&
+        geo.distanceKm(last, position) < (_batterySaver ? 0.25 : 0.05)) {
       return;
     }
     _lastMeshPosition = position;
@@ -589,7 +613,8 @@ class TacticalController extends ChangeNotifier {
 
   // --- Internet fallback (group room data channel) ---------------------------
 
-  /// Own position to the group room, at most every 30 s or after 25 m.
+  /// Own position to the group room, at most every 30 s or after 25 m
+  /// (2 min / 100 m in battery saver).
   Future<void> _shareInternetPosition({bool force = false}) async {
     if (!_ptt.roomConnected || _session == null) {
       return;
@@ -601,8 +626,11 @@ class TacticalController extends ChangeNotifier {
     if (!force &&
         last != null &&
         lastAt != null &&
-        now.difference(lastAt) < const Duration(seconds: 30) &&
-        geo.distanceKm(last, self.latLng) < 0.025) {
+        now.difference(lastAt) <
+            (_batterySaver
+                ? const Duration(minutes: 2)
+                : const Duration(seconds: 30)) &&
+        geo.distanceKm(last, self.latLng) < (_batterySaver ? 0.1 : 0.025)) {
       return;
     }
     _lastInternetPosition = self.latLng;

@@ -27,6 +27,8 @@ class SystemsPage extends StatelessWidget {
     this.onNightModeChanged,
     this.mgrsGrid = true,
     this.onMgrsGridChanged,
+    this.batterySaver = false,
+    this.onBatterySaverChanged,
     this.sharePositionToMesh = true,
     this.onSharePositionToMeshChanged,
     this.trackPoints = 0,
@@ -59,6 +61,8 @@ class SystemsPage extends StatelessWidget {
   final ValueChanged<bool>? onNightModeChanged;
   final bool mgrsGrid;
   final ValueChanged<bool>? onMgrsGridChanged;
+  final bool batterySaver;
+  final ValueChanged<bool>? onBatterySaverChanged;
   final bool sharePositionToMesh;
   final ValueChanged<bool>? onSharePositionToMeshChanged;
   final int trackPoints;
@@ -173,6 +177,17 @@ class SystemsPage extends StatelessWidget {
               secondary: const Icon(Icons.grid_4x4),
               title: const Text('Mřížka MGRS na mapě'),
               subtitle: const Text('1 km / 10 km / 100 km podle přiblížení'),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: batterySaver,
+              onChanged: onBatterySaverChanged,
+              secondary: const Icon(Icons.battery_saver),
+              title: const Text('Úsporný režim'),
+              subtitle: const Text(
+                'Hrubší GPS, poloha týmu po 5 min / 250 m (mesh) '
+                'a 2 min / 100 m (internet). SOS se neomezuje.',
+              ),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

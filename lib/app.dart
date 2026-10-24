@@ -275,6 +275,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         onNightModeChanged: controller.setNightMode,
         mgrsGrid: controller.mgrsGrid,
         onMgrsGridChanged: controller.setMgrsGrid,
+        batterySaver: controller.batterySaver,
+        onBatterySaverChanged: controller.setBatterySaver,
         sharePositionToMesh: controller.sharePositionToMesh,
         onSharePositionToMeshChanged: controller.setSharePositionToMesh,
         trackPoints: controller.track.length,

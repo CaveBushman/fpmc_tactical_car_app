@@ -89,4 +89,43 @@ void main() {
     await pumpEventQueue();
     expect(positions(), hasLength(1));
   });
+
+  test('battery saver: coarser GPS and only after 250 m', () async {
+    controller.setBatterySaver(true);
+    expect(location.powerSaving, isTrue);
+
+    location.emit(fix(50.0, 14.0));
+    await pumpEventQueue();
+    expect(positions(), hasLength(1));
+
+    location.emit(fix(50.001, 14.0)); // ~110 m: enough normally, not here
+    await pumpEventQueue();
+    expect(positions(), hasLength(1));
+
+    location.emit(fix(50.003, 14.0)); // ~330 m
+    await pumpEventQueue();
+    expect(positions(), hasLength(2));
+  });
+
+  test('battery saver is remembered across restarts', () async {
+    controller.setBatterySaver(true);
+    await pumpEventQueue();
+
+    final restartedLocation = FakeLocationService();
+    final restarted = TacticalController(
+      locationService: restartedLocation,
+      meshtasticBleService: FakeBleService(),
+      meshPacketRepository: MeshPacketRepository(),
+      nativePtt: FakeNativePttBridge(),
+      carBridge: FakeCarBridge(),
+    );
+    addTearDown(restarted.dispose);
+    await pumpEventQueue();
+    expect(restarted.batterySaver, isTrue);
+    expect(restartedLocation.powerSaving, isTrue);
+
+    await restarted.emergencyWipe();
+    expect(restarted.batterySaver, isFalse);
+    expect(restartedLocation.powerSaving, isFalse);
+  });
 }

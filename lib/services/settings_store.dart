@@ -39,6 +39,13 @@ class SettingsStore {
   Future<void> setMgrsGrid(bool value) =>
       _set((prefs) => prefs.setBool('${prefix}mgrsGrid', value));
 
+  /// Sparser GPS and position sharing (default off).
+  Future<bool> batterySaver() async =>
+      await _get((prefs) => prefs.getBool('${prefix}batterySaver')) ?? false;
+
+  Future<void> setBatterySaver(bool value) =>
+      _set((prefs) => prefs.setBool('${prefix}batterySaver', value));
+
   /// Last communication group chosen by [userName].
   Future<String?> groupFor(String userName) =>
       _get((prefs) => prefs.getString('${prefix}group.$userName'));
