@@ -31,7 +31,14 @@ const _expected = <String, Map<String, (int, int)>>{
     'my_info': (3, _message),
     'node_info': (4, _message),
     'config_complete_id': (7, _uint32),
+    'channel': (10, _message),
   },
+  'meshtastic.Channel': {
+    'index': (1, _int32),
+    'settings': (2, _message),
+    'role': (3, _enum),
+  },
+  'meshtastic.ChannelSettings': {'name': (3, _string)},
   'meshtastic.MeshPacket': {
     'from': (1, _fixed32),
     'to': (2, _fixed32),

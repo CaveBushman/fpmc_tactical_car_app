@@ -19,6 +19,9 @@ enum PttStatus {
 
   /// Someone else holds the floor.
   receiving,
+
+  /// PTT switched off for this group on the backend.
+  disabled,
   error,
 }
 
@@ -118,6 +121,16 @@ class PttController extends ChangeNotifier {
       _error = _describe(error);
       _setStatus(PttStatus.error);
     }
+  }
+
+  /// The selected group has no PTT: leave any room and say why.
+  Future<void> disable(String channelLabel) async {
+    _joinGeneration++;
+    await _leaveRoom();
+    _channel = channelLabel;
+    _error = 'PTT je pro tuto skupinu vypnuté.';
+    _keyId = null;
+    _setStatus(PttStatus.disabled);
   }
 
   Future<void> leave() async {

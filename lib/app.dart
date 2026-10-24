@@ -219,6 +219,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         ptt: ptt,
         onPttReconnect: controller.reconnectPtt,
         onCopyPacketRecording: controller.exportPacketRecording,
+        radioChannels: controller.radioChannels,
+        channelWarnings: controller.channelWarnings,
         volumeKeyPtt: controller.volumeKeyPtt,
         onVolumeKeyPttChanged: controller.setVolumeKeyPtt,
         onBleConnect: controller.connectRadio,

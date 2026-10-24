@@ -27,7 +27,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Meshtastic packet diagnostics in system settings: packet count, decoded NodeInfo/Position/Text events, last RX time, packet size, and hex preview.
 - Focused Meshtastic protobuf reader/writer for MyNodeInfo, NodeInfo, Position, TextMessage, Routing (ACK/NAK) and want_config handshake.
 - Local auth service with demo roles (`operator`, `commander`, `medic`), password check (demo password `<user>-2026`, e.g. `operator-2026`), lockout after 5 failed attempts, session chip, and logout.
-- Communication groups with role-based access: ALPHA, BRAVO, MED, COMMAND.
+- Operation groups managed on the backend (name, Meshtastic channel slot 0–7, PTT on/off); the app receives them at login (demo mode: ALPHA, BRAVO, MED, COMMAND). The app reads the T-Beam's channel config and warns when a group uses a channel the radio does not have enabled.
 - Backend (`server/`) issues sessions, LiveKit room tokens limited to the user's groups, and random per-group E2EE keys with commander-triggered rotation; security events go to an audit log.
 - Node/message state persisted locally, AES-GCM encrypted with a key in the platform keystore, wiped on logout.
 - GitHub Actions CI for dependency install, static analysis, tests, web build, and Android debug APK build.
@@ -91,8 +91,7 @@ Optional: `TILE_MAX_ZOOM` (default 18), `TILE_ALLOW_BULK=false` to disable packs
 ## Next Implementation Steps
 
 1. CarPlay (needs Apple entitlements, see `docs/carplay.md`).
-2. Operation groups configurable on the server (today a fixed set: alpha, bravo, med, command).
-3. Replace the synthetic replay fixture with real T-Beam captures (System → Kopírovat záznam paketů).
+2. Replace the synthetic replay fixture with real T-Beam captures (System → Kopírovat záznam paketů).
 
 ## PTT Backend and LiveKit
 

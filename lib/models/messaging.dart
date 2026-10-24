@@ -207,14 +207,42 @@ class CommunicationGroup {
     required this.icon,
     required this.channelIndex,
     this.encrypted = true,
+    this.pttEnabled = true,
   });
+
+  /// Group configured on the backend.
+  factory CommunicationGroup.configured({
+    required String id,
+    required String name,
+    required int channelIndex,
+    bool pttEnabled = true,
+    String description = '',
+  }) => CommunicationGroup(
+    id: id,
+    name: name,
+    channelIndex: channelIndex,
+    pttEnabled: pttEnabled,
+    transportLabel: description.isNotEmpty
+        ? description
+        : (pttEnabled ? 'Meshtastic + PTT' : 'Meshtastic'),
+    icon: switch (id) {
+      'alpha' => Icons.radio,
+      'bravo' => Icons.settings_input_antenna,
+      'med' => Icons.medical_services_outlined,
+      'command' => Icons.admin_panel_settings_outlined,
+      _ => Icons.groups_outlined,
+    },
+  );
 
   final String id;
   final String name;
   final String transportLabel;
   final IconData icon;
+
+  /// Meshtastic channel slot (0–7) for the group's text traffic.
   final int channelIndex;
   final bool encrypted;
+  final bool pttEnabled;
 
   static const demoGroups = [
     CommunicationGroup(
@@ -260,4 +288,27 @@ class MeshMessageDraft {
   final String groupId;
   final MeshNode? directNode;
   final bool priority;
+}
+
+/// A channel slot as configured on the connected T-Beam.
+class RadioChannel {
+  const RadioChannel({
+    required this.index,
+    required this.name,
+    required this.role,
+  });
+
+  final int index;
+  final String name;
+
+  /// 0 disabled, 1 primary, 2 secondary (Meshtastic Channel.Role).
+  final int role;
+
+  bool get enabled => role != 0;
+
+  String get roleLabel => switch (role) {
+    1 => 'PRIMARY',
+    2 => 'SECONDARY',
+    _ => 'VYPNUTO',
+  };
 }

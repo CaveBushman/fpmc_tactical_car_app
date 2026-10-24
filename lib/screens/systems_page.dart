@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../controllers/offline_maps_controller.dart';
 import '../controllers/ptt_controller.dart';
+import '../models/messaging.dart';
 import '../services/backend_client.dart';
 import '../services/offline_tiles/tile_math.dart';
 import '../widgets/offline_maps_section.dart';
@@ -23,6 +24,8 @@ class SystemsPage extends StatelessWidget {
     required this.ptt,
     this.onPttReconnect,
     this.onCopyPacketRecording,
+    this.radioChannels = const [],
+    this.channelWarnings = const [],
     this.volumeKeyPtt = false,
     this.onVolumeKeyPttChanged,
     required this.onBleConnect,
@@ -43,6 +46,8 @@ class SystemsPage extends StatelessWidget {
   final PttController ptt;
   final VoidCallback? onPttReconnect;
   final String Function()? onCopyPacketRecording;
+  final List<RadioChannel> radioChannels;
+  final List<String> channelWarnings;
   final bool volumeKeyPtt;
   final ValueChanged<bool>? onVolumeKeyPttChanged;
   final VoidCallback onBleConnect;
@@ -176,6 +181,28 @@ class SystemsPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             MonoLine(label: 'BLE stav', value: _bleStatusLabel(bleState)),
+            for (final channel in radioChannels)
+              MonoLine(
+                label: 'Kanál ${channel.index}',
+                value:
+                    '${channel.roleLabel}${channel.name.isEmpty ? '' : ' · ${channel.name}'}',
+              ),
+            for (final warning in channelWarnings)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber, color: dangerRed, size: 18),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        warning,
+                        style: const TextStyle(color: dangerRed),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             MonoLine(
               label: 'Pakety',
               value: '${packetDiagnostics.packetCount}',

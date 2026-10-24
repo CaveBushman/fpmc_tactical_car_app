@@ -213,6 +213,7 @@ class _CarPanel extends StatelessWidget {
     PttStatus.ready => ptt.isDemo ? 'PŘIPRAVENO (DEMO)' : 'PŘIPRAVENO',
     PttStatus.transmitting => 'VYSÍLÁM',
     PttStatus.receiving => 'MLUVÍ ${ptt.speaker ?? '?'}',
+    PttStatus.disabled => 'PTT VYPNUTO',
     PttStatus.error => 'CHYBA SPOJENÍ',
   };
 }

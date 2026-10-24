@@ -4,6 +4,7 @@ import 'protobuf_wire_reader.dart';
 
 enum DecodedMeshEventType {
   myInfo,
+  channel,
   configComplete,
   nodeInfo,
   position,
@@ -39,6 +40,8 @@ class DecodedMeshEvent {
     this.waypointName,
     this.waypointDescription,
     this.waypointExpire,
+    this.channelName,
+    this.channelRole,
   });
 
   final DecodedMeshEventType type;
@@ -77,6 +80,11 @@ class DecodedMeshEvent {
   final String? waypointDescription;
   final int? waypointExpire;
 
+  /// FromRadio.channel: slot name and role (0 disabled, 1 primary,
+  /// 2 secondary); the slot itself is in [channelIndex].
+  final String? channelName;
+  final int? channelRole;
+
   String get label {
     final name = longName ?? shortName ?? _nodeLabel(nodeNum ?? from);
     switch (type) {
@@ -84,6 +92,8 @@ class DecodedMeshEvent {
         return 'MyNodeInfo ${_nodeLabel(nodeNum)}';
       case DecodedMeshEventType.configComplete:
         return 'Konfigurace načtena';
+      case DecodedMeshEventType.channel:
+        return 'Kanál $channelIndex ${channelName ?? ''} (role $channelRole)';
       case DecodedMeshEventType.nodeInfo:
         final position = _positionLabel;
         return position == null
@@ -156,6 +166,8 @@ class MeshtasticPacketDecoder {
               configId: reader.readVarint(),
             ),
           );
+        case 10:
+          events.add(_readChannel(reader.readLengthDelimited()));
         default:
           reader.skipField(field);
       }
@@ -326,6 +338,43 @@ class MeshtasticPacketDecoder {
       }
     }
     return errorReason;
+  }
+
+  DecodedMeshEvent _readChannel(List<int> bytes) {
+    final reader = ProtobufWireReader(bytes);
+    var index = 0;
+    var role = 0;
+    String? name;
+    while (!reader.isDone) {
+      final field = reader.readField();
+      switch (field.number) {
+        case 1:
+          index = reader.readVarint();
+        case 2:
+          final settings = ProtobufWireReader(reader.readLengthDelimited());
+          while (!settings.isDone) {
+            final settingsField = settings.readField();
+            if (settingsField.number == 3) {
+              name = utf8.decode(
+                settings.readLengthDelimited(),
+                allowMalformed: true,
+              );
+            } else {
+              settings.skipField(settingsField);
+            }
+          }
+        case 3:
+          role = reader.readVarint();
+        default:
+          reader.skipField(field);
+      }
+    }
+    return DecodedMeshEvent(
+      type: DecodedMeshEventType.channel,
+      channelIndex: index,
+      channelName: name,
+      channelRole: role,
+    );
   }
 
   DecodedMeshEvent _readMyInfo(List<int> bytes) {

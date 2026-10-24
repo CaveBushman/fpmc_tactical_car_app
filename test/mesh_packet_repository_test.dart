@@ -152,6 +152,26 @@ void main() {
     expect(event.nodeNum, 0x1234ABCD);
     expect(decoder.decodeFromRadio(nodeInfo).single.batteryLevel, 101);
   });
+
+  test('decodes FromRadio channel config', () {
+    const decoder = MeshtasticPacketDecoder();
+    final event = decoder
+        .decodeFromRadio(
+          _message(10, [
+            ..._varint(1, 2),
+            ..._message(2, [
+              ..._bytes(2, [1]),
+              ..._string(3, 'MED'),
+            ]),
+            ..._varint(3, 2),
+          ]),
+        )
+        .single;
+    expect(event.type, DecodedMeshEventType.channel);
+    expect(event.channelIndex, 2);
+    expect(event.channelName, 'MED');
+    expect(event.channelRole, 2);
+  });
 }
 
 List<int> _message(int field, List<int> value) => _bytes(field, value);

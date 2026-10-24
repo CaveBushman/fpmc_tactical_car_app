@@ -98,6 +98,16 @@ List<int> fromRadioWaypoint({
   ]);
 }
 
+List<int> fromRadioChannel({
+  required int index,
+  required int role,
+  String name = '',
+}) => pbMessage(10, [
+  ...pbVarint(1, index),
+  if (name.isNotEmpty) ...pbMessage(2, pbString(3, name)),
+  ...pbVarint(3, role),
+]);
+
 List<int> fromRadioMyInfo(int nodeNum) => pbMessage(3, pbVarint(1, nodeNum));
 
 List<int> _key(int field, int wireType) => _rawVarint((field << 3) | wireType);

@@ -12,6 +12,7 @@ class AuthSession {
     required this.role,
     required this.allowedGroupIds,
     this.sessionToken,
+    this.groupDefinitions = const [],
   });
 
   final String userName;
@@ -21,6 +22,9 @@ class AuthSession {
 
   /// Backend session token; null for local demo accounts.
   final String? sessionToken;
+
+  /// Group configuration from the backend; empty = built-in demo groups.
+  final List<GroupDefinition> groupDefinitions;
 
   bool get isDemo => sessionToken == null;
 }
@@ -164,6 +168,7 @@ class RemoteAuthService extends AuthService {
           role: user.role,
           allowedGroupIds: user.groups,
           sessionToken: login.sessionToken,
+          groupDefinitions: login.groups,
         ),
       );
     } on BackendException catch (error) {

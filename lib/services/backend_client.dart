@@ -33,11 +33,43 @@ class BackendUser {
   final Set<String> groups;
 }
 
+/// Operation group as configured on the backend.
+class GroupDefinition {
+  const GroupDefinition({
+    required this.id,
+    required this.name,
+    required this.channelIndex,
+    this.pttEnabled = true,
+    this.description = '',
+  });
+
+  final String id;
+  final String name;
+  final int channelIndex;
+  final bool pttEnabled;
+  final String description;
+
+  static GroupDefinition fromJson(Map<String, dynamic> json) => GroupDefinition(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    channelIndex: json['channelIndex'] as int,
+    pttEnabled: json['pttEnabled'] != false,
+    description: json['description'] as String? ?? '',
+  );
+}
+
 class BackendLogin {
-  const BackendLogin({required this.sessionToken, required this.user});
+  const BackendLogin({
+    required this.sessionToken,
+    required this.user,
+    this.groups = const [],
+  });
 
   final String sessionToken;
   final BackendUser user;
+
+  /// Definitions of the user's groups (empty from older backends).
+  final List<GroupDefinition> groups;
 }
 
 class GroupKeyMaterial {
@@ -100,6 +132,10 @@ class BackendClient {
         role: user['role'] as String,
         groups: {for (final group in user['groups'] as List) '$group'},
       ),
+      groups: [
+        for (final group in body['groups'] as List? ?? const [])
+          GroupDefinition.fromJson(group as Map<String, dynamic>),
+      ],
     );
   }
 
@@ -152,7 +188,10 @@ class BackendClient {
     }
     Map<String, dynamic> decoded;
     try {
-      decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      // JSON is UTF-8; response.body would fall back to Latin-1 without a
+      // charset in the content type and garble Czech names.
+      decoded =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
     } catch (_) {
       decoded = const {};
     }

@@ -689,7 +689,7 @@ class TacticalApi {
   static Response _json(int status, Object body) => Response(
     status,
     body: jsonEncode(body),
-    headers: {'content-type': 'application/json'},
+    headers: {'content-type': 'application/json; charset=utf-8'},
   );
 
   /// Tokens and keys must never end up in intermediary caches.

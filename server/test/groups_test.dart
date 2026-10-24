@@ -206,4 +206,23 @@ void main() {
     final reloaded = GroupDirectory.load(file);
     expect(reloaded.find('recon')?.channelIndex, 5);
   });
+
+  test('JSON responses declare UTF-8 for Czech names', () async {
+    final (admin, _) = await login('commander');
+    await call(
+      'PATCH',
+      '/admin/groups/bravo',
+      body: {'name': 'PRŮZKUM'},
+      token: admin,
+    );
+    final response = await handler(
+      Request(
+        'GET',
+        Uri.parse('http://localhost/admin/groups'),
+        headers: {'authorization': 'Bearer $admin'},
+      ),
+    );
+    expect(response.headers['content-type'], contains('charset=utf-8'));
+    expect(await response.readAsString(), contains('PRŮZKUM'));
+  });
 }

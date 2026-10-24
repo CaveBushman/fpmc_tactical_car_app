@@ -131,7 +131,8 @@ class TacticalController extends ChangeNotifier {
 
   final List<MeshNode> _nodes = MeshNode.demoNodes(DateTime.now());
   final List<MeshMessage> _messages = MeshMessage.demoMessages(DateTime.now());
-  final List<CommunicationGroup> _groups = CommunicationGroup.demoGroups;
+  List<CommunicationGroup> _groups = CommunicationGroup.demoGroups;
+  final Map<int, RadioChannel> _radioChannels = {};
   final List<TacticalWaypoint> _waypoints = [...TacticalWaypoint.demoWaypoints];
 
   /// User-facing notices (shown as snack bars).
@@ -165,6 +166,25 @@ class TacticalController extends ChangeNotifier {
     return _groups
         .where((group) => session.allowedGroupIds.contains(group.id))
         .toList();
+  }
+
+  /// Channel slots reported by the connected T-Beam (empty until its
+  /// config has been received).
+  List<RadioChannel> get radioChannels =>
+      _radioChannels.values.toList()..sort((a, b) => a.index - b.index);
+
+  /// Groups whose Meshtastic channel is not enabled on the T-Beam: their
+  /// messages would not reach the team.
+  List<String> get channelWarnings {
+    if (_radioChannels.isEmpty) {
+      return const [];
+    }
+    return [
+      for (final group in allowedGroups)
+        if (!(_radioChannels[group.channelIndex]?.enabled ?? false))
+          'Skupina ${group.name} používá kanál ${group.channelIndex}, '
+              'který T-Beam nemá zapnutý.',
+    ];
   }
 
   int get selectedGroupIndex {
@@ -214,6 +234,18 @@ class TacticalController extends ChangeNotifier {
     }
     final session = result.session!;
     _session = session;
+    _groups = session.groupDefinitions.isEmpty
+        ? CommunicationGroup.demoGroups
+        : [
+            for (final group in session.groupDefinitions)
+              CommunicationGroup.configured(
+                id: group.id,
+                name: group.name,
+                channelIndex: group.channelIndex,
+                pttEnabled: group.pttEnabled,
+                description: group.description,
+              ),
+          ];
     _selectedGroupIndex = await _preferredGroupIndex(session.userName);
     _notify();
     unawaited(_locationService.start());
@@ -227,6 +259,7 @@ class TacticalController extends ChangeNotifier {
     // Drop the session first so no in-flight persist can rewrite the store.
     _session = null;
     _selectedGroupIndex = 0;
+    _groups = CommunicationGroup.demoGroups;
     _notify();
     await _authService.logout();
     await _ptt.leave();
@@ -330,7 +363,9 @@ class TacticalController extends ChangeNotifier {
   /// the service runs whenever PTT is joined so audio survives screen-off.
   void _syncNativePtt() {
     final ptt = _ptt;
-    if (ptt.status == PttStatus.offline || ptt.isDemo) {
+    if (ptt.status == PttStatus.offline ||
+        ptt.status == PttStatus.disabled ||
+        ptt.isDemo) {
       if (_lastNativePttStatus != null) {
         _lastNativePttStatus = null;
         unawaited(_nativePtt.hide());
@@ -343,7 +378,7 @@ class TacticalController extends ChangeNotifier {
       PttStatus.transmitting => 'vysílám',
       PttStatus.receiving => 'mluví ${ptt.speaker ?? '?'}',
       PttStatus.error => ptt.error ?? 'chyba spojení',
-      PttStatus.offline => '',
+      PttStatus.offline || PttStatus.disabled => '',
     };
     final key = '${ptt.channel}|$status';
     if (key == _lastNativePttStatus) {
@@ -439,6 +474,10 @@ class TacticalController extends ChangeNotifier {
       return;
     }
     final group = selectedGroup;
+    if (!group.pttEnabled) {
+      await _ptt.disable(group.name);
+      return;
+    }
     await _ptt.joinGroup(group.id, group.name);
   }
 
@@ -484,7 +523,17 @@ class TacticalController extends ChangeNotifier {
     for (final event in events) {
       switch (event.type) {
         case DecodedMeshEventType.myInfo:
+          // A (re)connected radio sends its whole config again.
+          _radioChannels.clear();
           changed = _adoptRadioNodeNum(event.nodeNum) || changed;
+        case DecodedMeshEventType.channel:
+          final index = event.channelIndex ?? 0;
+          _radioChannels[index] = RadioChannel(
+            index: index,
+            name: event.channelName ?? '',
+            role: event.channelRole ?? 0,
+          );
+          changed = true;
         case DecodedMeshEventType.configComplete:
           break;
         case DecodedMeshEventType.nodeInfo:

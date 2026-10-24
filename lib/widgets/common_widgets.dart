@@ -317,6 +317,7 @@ class PttBar extends StatelessWidget {
       'PTT $channel | PŘIPRAVENO | ${demo ? 'DEMO BEZ ZVUKU' : 'E2EE'}',
     PttStatus.transmitting => 'PTT $channel | VYSÍLÁM',
     PttStatus.receiving => 'PTT $channel | MLUVÍ ${speaker ?? '?'}',
+    PttStatus.disabled => 'PTT $channel | PRO SKUPINU VYPNUTO',
     PttStatus.error => 'PTT $channel | CHYBA SPOJENÍ',
   };
 
@@ -350,6 +351,7 @@ class PttBar extends StatelessWidget {
                   style: TextStyle(
                     color: switch (status) {
                       PttStatus.error || PttStatus.offline => dangerRed,
+                      PttStatus.disabled => Colors.white54,
                       PttStatus.receiving => blueForce,
                       _ => Colors.white,
                     },
