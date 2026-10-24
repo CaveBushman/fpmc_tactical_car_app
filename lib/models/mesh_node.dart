@@ -72,6 +72,18 @@ class MeshNode {
     );
   }
 
+  /// Team list order: self, then OK, STALE, LOST; nearest first within each.
+  static int teamOrder(MeshNode a, MeshNode b) {
+    if (a.isSelf != b.isSelf) {
+      return a.isSelf ? -1 : 1;
+    }
+    final byStatus = a.linkStatus.index.compareTo(b.linkStatus.index);
+    if (byStatus != 0) {
+      return byStatus;
+    }
+    return a.distanceKm.compareTo(b.distanceKm);
+  }
+
   bool matchesSearch(String query) {
     final normalizedQuery = _normalizeSearchText(query);
     if (normalizedQuery.isEmpty) {

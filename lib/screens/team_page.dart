@@ -35,7 +35,8 @@ class _TeamPageState extends State<TeamPage> {
     final query = _searchController.text;
     final filteredNodes = widget.nodes
         .where((node) => node.matchesSearch(query))
-        .toList();
+        .toList()
+      ..sort(MeshNode.teamOrder);
     return Column(
       children: [
         Padding(

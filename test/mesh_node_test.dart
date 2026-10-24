@@ -46,6 +46,27 @@ void main() {
     expect(MeshNode.fromJson(json).linkStatus, MeshNodeLinkStatus.lost);
   });
 
+  test('team order: self, then by link status, then nearest', () {
+    final now = DateTime.now();
+    MeshNode at(String callSign, int minutesAgo, double km) => _node(
+      now.subtract(Duration(minutes: minutesAgo)),
+    ).copyWith(callSign: callSign, distanceKm: km);
+    final nodes = [
+      at('LOST-NEAR', 30, 0.5),
+      at('OK-FAR', 1, 9),
+      at('STALE', 10, 1),
+      at('OK-NEAR', 2, 2),
+      _node(now, isSelf: true).copyWith(callSign: 'ME'),
+    ]..sort(MeshNode.teamOrder);
+    expect(nodes.map((n) => n.callSign), [
+      'ME',
+      'OK-NEAR',
+      'OK-FAR',
+      'STALE',
+      'LOST-NEAR',
+    ]);
+  });
+
   test('MGRS is derived from coordinates', () {
     final node = _node(
       DateTime.now(),

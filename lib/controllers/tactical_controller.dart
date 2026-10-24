@@ -184,8 +184,16 @@ class TacticalController extends ChangeNotifier {
   Stream<String> get notices => _noticeController.stream;
 
   AuthSession? get session => _session;
-  List<MeshNode> get nodes => List.unmodifiable(_nodes);
-  List<MeshNode> get peers => _nodes.where((node) => !node.isSelf).toList();
+  /// Nodes not heard for this long disappear from the map and the team
+  /// list and are not saved any more.
+  static const nodeExpiry = Duration(hours: 24);
+
+  /// Self plus every node heard within [nodeExpiry].
+  List<MeshNode> get nodes => List.unmodifiable(_nodes.where(_isCurrent));
+
+  static bool _isCurrent(MeshNode node) =>
+      node.isSelf || DateTime.now().difference(node.lastSeenAt) <= nodeExpiry;
+  List<MeshNode> get peers => nodes.where((node) => !node.isSelf).toList();
   MeshNode get selfNode => _nodes.firstWhere((node) => node.isSelf);
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   List<TacticalWaypoint> get waypoints => List.unmodifiable(_waypoints);
@@ -1629,7 +1637,10 @@ class TacticalController extends ChangeNotifier {
     }
     try {
       await _stateStore.save(
-        nodes: [for (final node in _nodes) node.toJson()],
+        nodes: [
+          for (final node in _nodes)
+            if (_isCurrent(node)) node.toJson(),
+        ],
         messages: [for (final message in _messages.take(150)) message.toJson()],
         waypoints: [for (final waypoint in _waypoints) waypoint.toJson()],
         track: _mission.toJson(),

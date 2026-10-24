@@ -2,11 +2,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tactical_car_app/controllers/tactical_controller.dart';
+import 'package:tactical_car_app/models/mesh_node.dart';
 import 'package:tactical_car_app/models/messaging.dart';
 import 'package:tactical_car_app/models/navigation.dart';
 import 'package:tactical_car_app/services/location_service.dart';
 import 'package:tactical_car_app/services/mesh_packet_repository.dart';
 import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
+import 'package:tactical_car_app/services/tactical_state_store.dart';
 
 import 'support/fakes.dart';
 import 'support/mesh_bytes.dart';
@@ -253,6 +255,42 @@ void main() {
     final codes = restarted.waypoints.map((w) => w.code);
     expect(codes, contains('HILL'));
     expect(codes, isNot(contains('OBS-2')));
+  });
+
+  test('nodes not heard for a day are hidden and not saved again', () async {
+    MeshNode node(int num, String callSign, Duration ago) => MeshNode(
+      nodeNum: num,
+      callSign: callSign,
+      latitude: 50.1,
+      longitude: 14.4,
+      altitudeM: 200,
+      lastSeenAt: DateTime.now().subtract(ago),
+    );
+    await const TacticalStateStore().save(
+      nodes: [
+        for (final n in [
+          node(1, 'SELF', const Duration(days: 3)).copyWith(isSelf: true),
+          node(2, 'FRESH', const Duration(hours: 2)),
+          node(3, 'OLD', const Duration(hours: 25)),
+        ])
+          n.toJson(),
+      ],
+      messages: const [],
+      waypoints: const [],
+      track: const [],
+      owner: 'operator',
+    );
+
+    await controller.login('operator', 'operator-2026');
+    await pumpEventQueue(times: 50);
+
+    expect(controller.nodes.map((n) => n.callSign), ['SELF', 'FRESH']);
+    expect(controller.peers.map((n) => n.callSign), ['FRESH']);
+
+    // Ending the session saves the state; the expired node is left out.
+    await controller.endSession('test');
+    final saved = await const TacticalStateStore().load();
+    expect(saved!.nodes.map((json) => json['callSign']), ['SELF', 'FRESH']);
   });
 
   test('CONTACT reports become DANGER points for sender and receivers', () async {
