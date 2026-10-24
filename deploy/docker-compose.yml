@@ -1,0 +1,36 @@
+# PTT stack: LiveKit SFU + tactical backend.
+# 1. cp .env.example .env and fill in secrets
+# 2. cp ../server/config/users.example.json users.json and replace hashes
+#    (dart run bin/hash_password.dart in server/)
+# 3. docker compose up -d
+# Put a TLS reverse proxy (Caddy/Traefik/nginx) in front: the app needs
+# wss:// for LiveKit and https:// for the backend.
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13
+    command: --config /etc/livekit.yaml
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+
+  backend:
+    build: ../server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET}
+      LIVEKIT_URL: ${LIVEKIT_PUBLIC_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      USERS_FILE: /config/users.json
+      DATA_DIR: /data
+    volumes:
+      - ./users.json:/config/users.json:ro
+      - backend-data:/data
+
+volumes:
+  backend-data:
