@@ -216,7 +216,8 @@ class _CarPanel extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '${nearest.label}  AZ ${nearest.bearingDeg.toStringAsFixed(0)}°  '
-                      '${formatDistance(nearest.distanceKm)}',
+                      '${formatDistance(nearest.distanceKm)}  '
+                      '${nearest.etaLabelAt(controller.travelSpeedKmh)}',
                       key: const ValueKey('car-nearest'),
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

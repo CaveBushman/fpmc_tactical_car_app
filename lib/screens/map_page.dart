@@ -45,6 +45,7 @@ class MapPage extends StatefulWidget {
     this.onClearNavTarget,
     this.peerTrails = const {},
     this.onClearOldWaypoints,
+    this.speedKmh = TacticalNavSolution.walkingKmh,
     this.courseDeg,
     this.headingUp = false,
     this.onHeadingUpChanged,
@@ -60,6 +61,9 @@ class MapPage extends StatefulWidget {
 
   /// Deletes received points older than 6 h; returns how many.
   final int Function()? onClearOldWaypoints;
+
+  /// Own speed for ETAs.
+  final double speedKmh;
 
   /// Own direction of travel (GPS course), null before moving.
   final double? courseDeg;
@@ -331,6 +335,7 @@ class _MapPageState extends State<MapPage> {
                 channelLabel: widget.channelLabel,
                 onShareWaypoint: widget.onShareWaypoint,
                 onDeleteWaypoint: widget.onDeleteWaypoint,
+                speedKmh: widget.speedKmh,
                 onClearOld: widget.onClearOldWaypoints == null
                     ? null
                     : _confirmClearOld,
@@ -364,8 +369,10 @@ class _MapDetailsSheet extends StatelessWidget {
     this.navTarget,
     this.onNavigate,
     this.onClearNavTarget,
+    this.speedKmh = TacticalNavSolution.walkingKmh,
   });
 
+  final double speedKmh;
   final VoidCallback? onClearOld;
   final ValueChanged<TacticalWaypoint>? onEditWaypoint;
   final TacticalNavSolution? navTarget;
@@ -476,6 +483,7 @@ class _MapDetailsSheet extends StatelessWidget {
                 solutions: navSolutions,
                 onShareWaypoint: onShareWaypoint,
                 onNavigate: onNavigate,
+                speedKmh: speedKmh,
               ),
               const SizedBox(height: 10),
               WaypointStrip(

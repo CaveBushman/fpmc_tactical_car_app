@@ -21,6 +21,7 @@ import '../services/native_bridges.dart';
 import '../services/settings_store.dart';
 import '../services/ptt/livekit_voice_transport.dart';
 import '../services/ptt/voice_transport.dart';
+import 'battery_watch.dart';
 import 'contact_watch.dart';
 import 'danger_proximity.dart';
 import 'member_status_board.dart';
@@ -139,6 +140,11 @@ class TacticalController extends ChangeNotifier {
   final DangerProximity _danger = DangerProximity();
   final PeerTrails _peerTrails = PeerTrails();
   final ContactWatch _contactWatch = ContactWatch();
+  final BatteryWatch _batteryWatch = BatteryWatch();
+  double? _speedKmh;
+
+  /// Smoothed own speed while moving, else walking pace; for ETAs.
+  double get travelSpeedKmh => _speedKmh ?? TacticalNavSolution.walkingKmh;
 
   // --- Mission log ---------------------------------------------------------------
 
@@ -421,6 +427,8 @@ class TacticalController extends ChangeNotifier {
     _navTarget = null;
     _peerTrails.clear();
     _contactWatch.clear();
+    _batteryWatch.clear();
+    _speedKmh = null;
     _events.clear();
     _courseDeg = null;
     _statuses.clear();
@@ -1233,8 +1241,17 @@ class TacticalController extends ChangeNotifier {
       return;
     }
     final heading = fix.headingDeg;
-    if (heading != null && (fix.speedMps ?? 0) >= _minCourseSpeedMps) {
+    final speed = fix.speedMps ?? 0;
+    if (heading != null && speed >= _minCourseSpeedMps) {
       _courseDeg = heading % 360;
+    }
+    // Smoothed so a single GPS spike does not swing the ETA.
+    if (speed >= _minCourseSpeedMps) {
+      final kmh = speed * 3.6;
+      final previous = _speedKmh;
+      _speedKmh = previous == null ? kmh : previous * 0.7 + kmh * 0.3;
+    } else {
+      _speedKmh = null;
     }
     _nodes[selfIndex] = _nodes[selfIndex].copyWith(
       latitude: fix.latitude,
@@ -2085,6 +2102,14 @@ class TacticalController extends ChangeNotifier {
         _peerTrails.update(nodes);
         for (final lost in _contactWatch.update(nodes)) {
           _log(MissionEventKind.contact, 'Ztráta spojení: ${lost.callSign}');
+        }
+        for (final node in _batteryWatch.update(nodes)) {
+          final who = node.isSelf ? 'Můj T-Beam' : node.callSign;
+          _log(
+            MissionEventKind.contact,
+            '$who: slabá baterie ${node.batteryPercent} %',
+          );
+          _notice('$who: slabá baterie ${node.batteryPercent} %');
         }
       }
       _syncCarTargets();

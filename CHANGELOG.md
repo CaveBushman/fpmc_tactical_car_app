@@ -10,6 +10,8 @@
   as CSV.
 - Point age in the list, faded old points on the map and a clean-up of
   received points older than 6 h.
+- ETA from the own speed instead of a fixed walking pace; low battery
+  warnings for the own and teammates' T-Beams.
 - Layout fixes for the team phone found by screen-by-screen audits
   (Messages in landscape, map cards and buttons, forms with the keyboard,
   navigation rail).

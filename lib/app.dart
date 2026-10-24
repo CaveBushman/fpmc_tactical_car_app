@@ -272,6 +272,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       navTarget: controller.navTarget,
       peerTrails: controller.peerTrails,
       onClearOldWaypoints: controller.clearOldReceivedWaypoints,
+      speedKmh: controller.travelSpeedKmh,
       courseDeg: controller.courseDeg,
       statusOf: (callSign) => controller.statusOf(callSign)?.status,
       headingUp: controller.mapHeadingUp,

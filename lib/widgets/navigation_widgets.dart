@@ -11,8 +11,11 @@ class NavigationTargetStrip extends StatelessWidget {
     this.onShareWaypoint,
     this.onNavigate,
     this.compact = false,
+    this.speedKmh = TacticalNavSolution.walkingKmh,
     super.key,
   });
+
+  final double speedKmh;
 
   final List<TacticalNavSolution> solutions;
   final ValueChanged<TacticalWaypoint>? onShareWaypoint;
@@ -33,6 +36,7 @@ class NavigationTargetStrip extends StatelessWidget {
             solution: visibleSolutions[index],
             onShareWaypoint: onShareWaypoint,
             onNavigate: onNavigate,
+            speedKmh: speedKmh,
             compact: true,
           ),
         ),
@@ -59,6 +63,7 @@ class NavigationTargetStrip extends StatelessWidget {
                 solution: visibleSolutions[index],
                 onShareWaypoint: onShareWaypoint,
                 onNavigate: onNavigate,
+                speedKmh: speedKmh,
               ),
             ),
           ),
@@ -153,8 +158,12 @@ class NavigationTargetCard extends StatelessWidget {
     this.onShareWaypoint,
     this.onNavigate,
     this.compact = false,
+    this.speedKmh = TacticalNavSolution.walkingKmh,
     super.key,
   });
+
+  /// Own speed for the ETA.
+  final double speedKmh;
 
   final TacticalNavSolution solution;
   final ValueChanged<TacticalWaypoint>? onShareWaypoint;
@@ -264,7 +273,10 @@ class NavigationTargetCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: _NavMetric(label: 'ETA', value: solution.etaLabel),
+                  child: _NavMetric(
+                    label: 'ETA',
+                    value: solution.etaLabelAt(speedKmh),
+                  ),
                 ),
               ],
             ),

@@ -81,9 +81,19 @@ class TacticalNavSolution {
     return NavTarget.point(position);
   }
 
-  String get etaLabel {
-    final minutes = (distanceKm / 5.0 * 60).round().clamp(1, 999);
-    return '${minutes}m';
+  /// Walking pace used when not moving faster.
+  static const walkingKmh = 5.0;
+
+  /// Time to reach the target at [speedKmh] (default walking pace), e.g.
+  /// "12 min" or "1 h 25 min".
+  String etaLabelAt([double speedKmh = walkingKmh]) {
+    final speed = speedKmh < walkingKmh ? walkingKmh : speedKmh;
+    final minutes = (distanceKm / speed * 60).round().clamp(1, 5999);
+    if (minutes < 60) {
+      return '$minutes min';
+    }
+    final rest = minutes % 60;
+    return rest == 0 ? '${minutes ~/ 60} h' : '${minutes ~/ 60} h $rest min';
   }
 
   static List<TacticalNavSolution> fromMission({
