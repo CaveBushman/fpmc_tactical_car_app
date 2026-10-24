@@ -93,171 +93,197 @@ class _MessagesPageState extends State<MessagesPage> {
         .where((message) => message.groupId == selectedGroup.id)
         .toList();
     final filteredDirectNodes = _filteredDirectNodes;
-    return Column(
-      children: [
+    final header = <Widget>[
+      SizedBox(
+        height: 72,
+        child: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          scrollDirection: Axis.horizontal,
+          itemCount: widget.groups.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (context, index) {
+            final group = widget.groups[index];
+            final selected = index == widget.selectedGroupIndex;
+            return ChoiceChip(
+              selected: selected,
+              onSelected: (_) => widget.onGroupSelected(index),
+              avatar: UnreadBadge(
+                key: ValueKey('unread-${group.id}'),
+                count: widget.unreadIn?.call(group.id) ?? 0,
+                child: Icon(
+                  group.icon,
+                  size: 18,
+                  color: selected ? sand : sand.withValues(alpha: 0.82),
+                ),
+              ),
+              label: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    group.name,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  Text(
+                    group.transportLabel,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ],
+              ),
+              labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+              selectedColor: rangerGreen.withValues(alpha: 0.95),
+              backgroundColor: panelGreen,
+              side: BorderSide(
+                color: selected
+                    ? tacticalKhaki.withValues(alpha: 0.8)
+                    : Colors.white.withValues(alpha: 0.12),
+              ),
+            );
+          },
+        ),
+      ),
+      MessageComposer(
+        controller: _textController,
+        nodeSearchController: _nodeSearchController,
+        directMode: _directMode,
+        nodes: filteredDirectNodes,
+        selectedNodeIndex: _selectedNodeIndex,
+        selectedGroup: selectedGroup,
+        onModeChanged: (value) => setState(() => _directMode = value),
+        onNodeChanged: (index) => setState(() => _selectedNodeIndex = index),
+        onSend: _send,
+      ),
+      if (widget.quickMessages.isNotEmpty)
         SizedBox(
-          height: 72,
+          height: 44,
           child: ListView.separated(
+            key: const ValueKey('quick-messages'),
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             scrollDirection: Axis.horizontal,
-            itemCount: widget.groups.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            itemCount: widget.quickMessages.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 6),
             itemBuilder: (context, index) {
-              final group = widget.groups[index];
-              final selected = index == widget.selectedGroupIndex;
-              return ChoiceChip(
-                selected: selected,
-                onSelected: (_) => widget.onGroupSelected(index),
-                avatar: UnreadBadge(
-                  key: ValueKey('unread-${group.id}'),
-                  count: widget.unreadIn?.call(group.id) ?? 0,
-                  child: Icon(
-                    group.icon,
-                    size: 18,
-                    color: selected ? sand : sand.withValues(alpha: 0.82),
-                  ),
+              final text = widget.quickMessages[index];
+              return ActionChip(
+                label: Text(
+                  text,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
-                label: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      group.name,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    Text(
-                      group.transportLabel,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ],
-                ),
-                labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-                selectedColor: rangerGreen.withValues(alpha: 0.95),
                 backgroundColor: panelGreen,
-                side: BorderSide(
-                  color: selected
-                      ? tacticalKhaki.withValues(alpha: 0.8)
-                      : Colors.white.withValues(alpha: 0.12),
-                ),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                onPressed: () => _sendQuickMessage(text),
               );
             },
           ),
         ),
-        MessageComposer(
-          controller: _textController,
-          nodeSearchController: _nodeSearchController,
-          directMode: _directMode,
-          nodes: filteredDirectNodes,
-          selectedNodeIndex: _selectedNodeIndex,
-          selectedGroup: selectedGroup,
-          onModeChanged: (value) => setState(() => _directMode = value),
-          onNodeChanged: (index) => setState(() => _selectedNodeIndex = index),
-          onSend: _send,
-        ),
-        if (widget.quickMessages.isNotEmpty)
-          SizedBox(
-            height: 44,
-            child: ListView.separated(
-              key: const ValueKey('quick-messages'),
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              scrollDirection: Axis.horizontal,
-              itemCount: widget.quickMessages.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 6),
-              itemBuilder: (context, index) {
-                final text = widget.quickMessages[index];
-                return ActionChip(
-                  label: Text(
-                    text,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  backgroundColor: panelGreen,
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                  onPressed: () => _sendQuickMessage(text),
-                );
-              },
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: QuickActionButton(
+                label: 'OK',
+                icon: Icons.check_circle_outline,
+                onPressed: () => _sendQuickMessage('OK'),
+              ),
             ),
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          child: Row(
+            const SizedBox(width: 8),
+            Expanded(
+              child: QuickActionButton(
+                label: 'NA POZICI',
+                icon: Icons.place_outlined,
+                onPressed: _sendPositionReport,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: QuickActionButton(
+                label: 'SOS',
+                icon: Icons.warning_amber_outlined,
+                danger: true,
+                onPressed:
+                    widget.onSos ??
+                    () => _sendQuickMessage('SOS', priority: true),
+              ),
+            ),
+          ],
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: ReportActionButton(
+                label: 'CONTACT',
+                icon: Icons.radar_outlined,
+                onPressed: _showContactReportSheet,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ReportActionButton(
+                label: 'MEDEVAC',
+                icon: Icons.medical_services_outlined,
+                danger: true,
+                onPressed: _showMedevacReportSheet,
+              ),
+            ),
+          ],
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: ReportActionButton(
+          label: 'SITREP',
+          icon: Icons.assignment_turned_in_outlined,
+          onPressed: _showSitrepReportSheet,
+        ),
+      ),
+    ];
+    Widget messageCard(MeshMessage message) {
+      final onRetry = widget.onRetry;
+      return MessageCard(
+        message: message,
+        onRetry: onRetry == null ? null : () => onRetry(message),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Too short for the fixed controls plus a usable list (phone in
+        // landscape): scroll everything together instead.
+        if (constraints.maxHeight <
+            MediaQuery.textScalerOf(context).scale(600)) {
+          return ListView(
+            key: const ValueKey('messages-scroll'),
+            padding: const EdgeInsets.only(bottom: 12),
             children: [
-              Expanded(
-                child: QuickActionButton(
-                  label: 'OK',
-                  icon: Icons.check_circle_outline,
-                  onPressed: () => _sendQuickMessage('OK'),
+              ...header,
+              for (final message in filteredMessages)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: messageCard(message),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: QuickActionButton(
-                  label: 'NA POZICI',
-                  icon: Icons.place_outlined,
-                  onPressed: _sendPositionReport,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: QuickActionButton(
-                  label: 'SOS',
-                  icon: Icons.warning_amber_outlined,
-                  danger: true,
-                  onPressed:
-                      widget.onSos ??
-                      () => _sendQuickMessage('SOS', priority: true),
-                ),
-              ),
             ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: ReportActionButton(
-                  label: 'CONTACT',
-                  icon: Icons.radar_outlined,
-                  onPressed: _showContactReportSheet,
-                ),
+          );
+        }
+        return Column(
+          children: [
+            ...header,
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                itemCount: filteredMessages.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) =>
+                    messageCard(filteredMessages[index]),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ReportActionButton(
-                  label: 'MEDEVAC',
-                  icon: Icons.medical_services_outlined,
-                  danger: true,
-                  onPressed: _showMedevacReportSheet,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          child: ReportActionButton(
-            label: 'SITREP',
-            icon: Icons.assignment_turned_in_outlined,
-            onPressed: _showSitrepReportSheet,
-          ),
-        ),
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            itemCount: filteredMessages.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final message = filteredMessages[index];
-              final onRetry = widget.onRetry;
-              return MessageCard(
-                message: message,
-                onRetry: onRetry == null ? null : () => onRetry(message),
-              );
-            },
-          ),
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -623,141 +649,151 @@ class MessageComposer extends StatelessWidget {
     final canSendDirect = nodes.isNotEmpty;
     final selectedNode = canSendDirect ? nodes[selectedNodeIndex] : null;
     final canSend = !directMode || canSendDirect;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.22),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        child: Column(
-          children: [
-            Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The composer may sit in a side panel; decide on its own width.
+        final compactMode =
+            constraints.maxWidth < MediaQuery.textScalerOf(context).scale(420);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.22),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Column(
               children: [
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(
-                      value: false,
-                      icon: Icon(Icons.groups_2, size: 17),
-                      label: Text('Skupina'),
+                Row(
+                  children: [
+                    SegmentedButton<bool>(
+                      // Labels only where they fit next to the recipient field.
+                      segments: [
+                        ButtonSegment(
+                          value: false,
+                          icon: const Icon(Icons.groups_2, size: 17),
+                          tooltip: 'Skupina',
+                          label: compactMode ? null : const Text('Skupina'),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          icon: const Icon(Icons.person_pin_circle, size: 17),
+                          tooltip: 'Osoba',
+                          label: compactMode ? null : const Text('Osoba'),
+                        ),
+                      ],
+                      selected: {directMode},
+                      onSelectionChanged: (value) =>
+                          onModeChanged(value.single && canSendDirect),
+                      style: ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? Colors.white
+                              : sand,
+                        ),
+                        backgroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? rangerGreen
+                              : Colors.transparent,
+                        ),
+                      ),
                     ),
-                    ButtonSegment(
-                      value: true,
-                      icon: Icon(Icons.person_pin_circle, size: 17),
-                      label: Text('Osoba'),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: directMode
+                          ? canSendDirect
+                                ? DropdownButtonFormField<int>(
+                                    initialValue: selectedNodeIndex,
+                                    isExpanded: true,
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Adresát',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: [
+                                      for (
+                                        var index = 0;
+                                        index < nodes.length;
+                                        index++
+                                      )
+                                        DropdownMenuItem(
+                                          value: index,
+                                          child: Text(
+                                            '${nodes[index].callSign} / !${nodes[index].nodeNumHex}',
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                    ],
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        onNodeChanged(value);
+                                      }
+                                    },
+                                  )
+                                : const _TargetPill(
+                                    icon: Icons.person_off_outlined,
+                                    label: 'Adresát nenalezen',
+                                  )
+                          : _TargetPill(
+                              icon: Icons.radio,
+                              label:
+                                  '${selectedGroup.name} / kanál ${selectedGroup.channelIndex}',
+                            ),
                     ),
                   ],
-                  selected: {directMode},
-                  onSelectionChanged: (value) =>
-                      onModeChanged(value.single && canSendDirect),
-                  style: ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                    foregroundColor: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? Colors.white
-                          : sand,
-                    ),
-                    backgroundColor: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? rangerGreen
-                          : Colors.transparent,
-                    ),
-                  ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: directMode
-                      ? canSendDirect
-                            ? DropdownButtonFormField<int>(
-                                initialValue: selectedNodeIndex,
-                                isExpanded: true,
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  labelText: 'Adresát',
-                                  border: OutlineInputBorder(),
-                                ),
-                                items: [
-                                  for (
-                                    var index = 0;
-                                    index < nodes.length;
-                                    index++
-                                  )
-                                    DropdownMenuItem(
-                                      value: index,
-                                      child: Text(
-                                        '${nodes[index].callSign} / !${nodes[index].nodeNumHex}',
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                ],
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    onNodeChanged(value);
-                                  }
-                                },
-                              )
-                            : const _TargetPill(
-                                icon: Icons.person_off_outlined,
-                                label: 'Adresát nenalezen',
-                              )
-                      : _TargetPill(
-                          icon: Icons.radio,
-                          label:
-                              '${selectedGroup.name} / kanál ${selectedGroup.channelIndex}',
+                if (directMode) ...[
+                  const SizedBox(height: 8),
+                  TacticalSearchField(
+                    controller: nodeSearchController,
+                    label: 'Vyhledat adresáta',
+                    hint: 'Callsign, MGRS, node ID, stav',
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        minLines: 1,
+                        maxLines: 3,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => onSend(),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          hintText: directMode && selectedNode != null
+                              ? 'Zpráva pro ${selectedNode.callSign}'
+                              : directMode
+                              ? 'Vyber adresáta'
+                              : 'Zpráva skupině ${selectedGroup.name}',
+                          border: const OutlineInputBorder(),
                         ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed: canSend ? onSend : null,
+                      tooltip: 'Odeslat přes Meshtastic',
+                      style: IconButton.styleFrom(
+                        backgroundColor: rangerGreen,
+                        foregroundColor: Colors.white,
+                        fixedSize: const Size(48, 48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: const Icon(Icons.send),
+                    ),
+                  ],
                 ),
               ],
             ),
-            if (directMode) ...[
-              const SizedBox(height: 8),
-              TacticalSearchField(
-                controller: nodeSearchController,
-                label: 'Vyhledat adresáta',
-                hint: 'Callsign, MGRS, node ID, stav',
-              ),
-            ],
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    minLines: 1,
-                    maxLines: 3,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => onSend(),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: directMode && selectedNode != null
-                          ? 'Zpráva pro ${selectedNode.callSign}'
-                          : directMode
-                          ? 'Vyber adresáta'
-                          : 'Zpráva skupině ${selectedGroup.name}',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton.filled(
-                  onPressed: canSend ? onSend : null,
-                  tooltip: 'Odeslat přes Meshtastic',
-                  style: IconButton.styleFrom(
-                    backgroundColor: rangerGreen,
-                    foregroundColor: Colors.white,
-                    fixedSize: const Size(48, 48),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  icon: const Icon(Icons.send),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

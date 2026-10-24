@@ -48,7 +48,7 @@ class NavigationTargetStrip extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         SizedBox(
-          height: 136,
+          height: MediaQuery.textScalerOf(context).scale(136),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: visibleSolutions.length,

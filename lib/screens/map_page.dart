@@ -88,8 +88,13 @@ class MapPage extends StatefulWidget {
   final ValueChanged<NavTarget>? onNavigate;
   final VoidCallback? onClearNavTarget;
 
-  /// Height of the collapsed sheet: handle + nearest-target row.
+  /// Height of the collapsed sheet (handle + nearest-target row) at the
+  /// default font size.
   static const sheetPeekHeight = 76.0;
+
+  /// [sheetPeekHeight] grown with the font size, so the row fits.
+  static double peekHeightFor(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(sheetPeekHeight);
 
   @override
   State<MapPage> createState() => _MapPageState();
@@ -168,7 +173,11 @@ class _MapPageState extends State<MapPage> {
         // still toggle it.
         final positionExpanded = _positionExpanded ?? height >= 640;
         final showSheet = widget.showDetailsSheet && height >= 240;
-        final mapBottom = showSheet ? MapPage.sheetPeekHeight - 8 : 0.0;
+        final peekHeight = MapPage.peekHeightFor(context);
+        final mapBottom = showSheet ? peekHeight - 8 : 0.0;
+        // Ruler, coordinates and recenter buttons.
+        final cardLeft = MeshMap.cardLeft(height - mapBottom, 3);
+        final cardBottom = (showSheet ? peekHeight : 0.0) + 8;
 
         return Stack(
           children: [
@@ -208,47 +217,53 @@ class _MapPageState extends State<MapPage> {
             ),
             if (_measure case final measure?)
               Positioned(
-                left: 8,
+                left: cardLeft,
                 right: 8,
-                bottom: (showSheet ? MapPage.sheetPeekHeight : 0) + 8,
-                child: MeasurePanel(
-                  points: measure,
-                  onFromSelf: () =>
-                      setState(() => _measure = [self.latLng, ...measure]),
-                  onUndo: () => setState(
-                    () => _measure = measure.sublist(0, measure.length - 1),
+                bottom: cardBottom,
+                child: _FitAboveSheet(
+                  maxHeight: height - cardBottom - 8,
+                  child: MeasurePanel(
+                    points: measure,
+                    onFromSelf: () =>
+                        setState(() => _measure = [self.latLng, ...measure]),
+                    onUndo: () => setState(
+                      () => _measure = measure.sublist(0, measure.length - 1),
+                    ),
+                    onClose: () => setState(() => _measure = null),
                   ),
-                  onClose: () => setState(() => _measure = null),
                 ),
               )
             else if (_inspected != null)
               Positioned(
-                left: 8,
+                left: cardLeft,
                 right: 8,
-                bottom: (showSheet ? MapPage.sheetPeekHeight : 0) + 8,
-                child: PointInfoCard(
-                  point: _inspected!,
-                  from: self.latLng,
-                  onClose: () => setState(() => _inspected = null),
-                  onSave: widget.onCreateWaypoint == null
-                      ? null
-                      : () {
-                          final point = _inspected!;
-                          setState(() => _inspected = null);
-                          _createWaypointAt(point);
-                        },
-                  onShare: widget.onSharePoint == null
-                      ? null
-                      : () {
-                          widget.onSharePoint!(_inspected!);
-                          setState(() => _inspected = null);
-                        },
-                  onNavigate: widget.onNavigate == null
-                      ? null
-                      : () {
-                          widget.onNavigate!(NavTarget.point(_inspected!));
-                          setState(() => _inspected = null);
-                        },
+                bottom: cardBottom,
+                child: _FitAboveSheet(
+                  maxHeight: height - cardBottom - 8,
+                  child: PointInfoCard(
+                    point: _inspected!,
+                    from: self.latLng,
+                    onClose: () => setState(() => _inspected = null),
+                    onSave: widget.onCreateWaypoint == null
+                        ? null
+                        : () {
+                            final point = _inspected!;
+                            setState(() => _inspected = null);
+                            _createWaypointAt(point);
+                          },
+                    onShare: widget.onSharePoint == null
+                        ? null
+                        : () {
+                            widget.onSharePoint!(_inspected!);
+                            setState(() => _inspected = null);
+                          },
+                    onNavigate: widget.onNavigate == null
+                        ? null
+                        : () {
+                            widget.onNavigate!(NavTarget.point(_inspected!));
+                            setState(() => _inspected = null);
+                          },
+                  ),
                 ),
               ),
             Positioned(
@@ -274,10 +289,7 @@ class _MapPageState extends State<MapPage> {
             ),
             if (showSheet)
               _MapDetailsSheet(
-                peekFraction: (MapPage.sheetPeekHeight / height).clamp(
-                  0.05,
-                  0.5,
-                ),
+                peekFraction: (peekHeight / height).clamp(0.05, 0.5),
                 nodes: nodes,
                 navSolutions: navSolutions,
                 waypoints: widget.waypoints,
@@ -365,7 +377,7 @@ class _MapDetailsSheet extends StatelessWidget {
                 ),
               ),
               SizedBox(
-                height: 52,
+                height: MediaQuery.textScalerOf(context).scale(52),
                 child: Row(
                   children: [
                     Expanded(
@@ -542,6 +554,22 @@ class MeshMap extends StatefulWidget {
   /// Shows the ruler button.
   final VoidCallback? onToggleMeasure;
 
+  static const controlsBottom = 36.0;
+  static const _controlStep = 56.0;
+
+  /// Room kept free at the top for the position panel.
+  static const _controlsTopReserve = 120.0;
+
+  /// Whether [count] bottom-left buttons fit in a column on a map this
+  /// high; otherwise they line up along the bottom edge.
+  static bool controlsFitColumn(double mapHeight, int count) =>
+      controlsBottom + count * _controlStep + _controlsTopReserve <= mapHeight;
+
+  /// Left edge for cards floating over the map bottom, right of the
+  /// buttons so they never cover them.
+  static double cardLeft(double mapHeight, int count) =>
+      controlsFitColumn(mapHeight, count) ? 72 : 12 + count * _controlStep + 4;
+
   /// Moves the map here whenever it changes (stops following self).
   final LatLng? focus;
 
@@ -642,6 +670,8 @@ class _MeshMapState extends State<MeshMap> {
         }
       });
     }
+    // Marker boxes grow with the font size so their labels fit.
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
     final focus = widget.focus;
     if (focus != null && focus != _lastFocus) {
       _lastFocus = focus;
@@ -781,15 +811,15 @@ class _MeshMapState extends State<MeshMap> {
                 for (final waypoint in waypoints)
                   Marker(
                     point: waypoint.latLng,
-                    width: 112,
-                    height: 62,
+                    width: 112 * textScale,
+                    height: 66 * textScale,
                     child: WaypointMapMarker(waypoint: waypoint),
                   ),
                 for (final node in nodes)
                   Marker(
                     point: node.latLng,
-                    width: 92,
-                    height: 58,
+                    width: 92 * textScale,
+                    height: 64 * textScale,
                     child: node.isSelf
                         ? Builder(
                             // Arrow relative to the screen: course plus the
@@ -877,13 +907,11 @@ class _MeshMapState extends State<MeshMap> {
                   ),
                 ),
               ];
-              const bottom = 36.0;
-              const step = 56.0;
-              // Room kept free at the top for the position panel.
-              const topReserve = 120.0;
-              final fitsColumn =
-                  bottom + buttons.length * step + topReserve <=
-                  constraints.maxHeight;
+              const bottom = MeshMap.controlsBottom;
+              final fitsColumn = MeshMap.controlsFitColumn(
+                constraints.maxHeight,
+                buttons.length,
+              );
               return Stack(
                 children: [
                   Positioned(
@@ -1118,6 +1146,24 @@ class MapLegend extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Caps a floating card at [maxHeight] and scrolls its content, so on a
+/// short map (phone in landscape, large font) its top row with the close
+/// button stays on screen.
+class _FitAboveSheet extends StatelessWidget {
+  const _FitAboveSheet({required this.maxHeight, required this.child});
+
+  final double maxHeight;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight < 0 ? 0 : maxHeight),
+      child: SingleChildScrollView(child: child),
     );
   }
 }
