@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tactical_car_app/app.dart';
@@ -34,11 +35,37 @@ void main() {
   testWidgets('renders tactical dashboard smoke test', (tester) async {
     await login(tester);
 
-    expect(find.text('FIRST PRIVATE MILITARY COMPANY'), findsOneWidget);
+    expect(find.textContaining('MILITARY COMPANY'), findsOneWidget);
     expect(find.text('RAVEN-1'), findsWidgets);
     expect(find.byTooltip('T-Beam 868 nepřipojen'), findsOneWidget);
     expect(find.text('PTT'), findsOneWidget);
     expect(find.text('Mapa'), findsOneWidget);
+  });
+
+  testWidgets('company name is never cut off in the app bar', (tester) async {
+    for (final size in const [
+      Size(731, 328),
+      Size(800, 600),
+      Size(1280, 800),
+    ]) {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(const SizedBox()); // fresh app per size
+      await login(tester);
+
+      final name = find.textContaining('MILITARY COMPANY');
+      expect(name, findsOneWidget, reason: '$size');
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(of: name, matching: find.byType(RichText)),
+      );
+      expect(paragraph.didExceedMaxLines, isFalse, reason: '$size');
+      expect(
+        tester.getRect(name).right,
+        lessThanOrEqualTo(size.width),
+        reason: '$size',
+      );
+    }
   });
 
   testWidgets('uses bottom navigation in portrait', (tester) async {

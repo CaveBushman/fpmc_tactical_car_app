@@ -177,6 +177,8 @@ class AppBrand extends StatelessWidget {
   /// Logo only, for narrow screens.
   final bool compact;
 
+  static const _name = 'FIRST PRIVATE MILITARY COMPANY';
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -200,10 +202,37 @@ class AppBrand extends StatelessWidget {
         if (!compact) ...[
           const SizedBox(width: 10),
           Flexible(
-            child: Text(
-              'FIRST PRIVATE MILITARY COMPANY',
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w800),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final style = DefaultTextStyle.of(
+                  context,
+                ).style.merge(const TextStyle(fontWeight: FontWeight.w800));
+                final oneLine = TextPainter(
+                  text: TextSpan(text: _name, style: style),
+                  textDirection: Directionality.of(context),
+                  textScaler: MediaQuery.textScalerOf(context),
+                  maxLines: 1,
+                )..layout();
+                final fits = oneLine.width <= constraints.maxWidth;
+                oneLine.dispose();
+                if (fits) {
+                  return Text(_name, maxLines: 1, style: style);
+                }
+                // Too narrow for one line: two smaller lines, shrunk
+                // further only if even those do not fit.
+                return FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'FIRST PRIVATE\nMILITARY COMPANY',
+                    semanticsLabel: _name,
+                    style: style.copyWith(
+                      fontSize: (style.fontSize ?? 20) * 0.72,
+                      height: 1.1,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ],
