@@ -359,3 +359,91 @@ class PointInfoCard extends StatelessWidget {
     );
   }
 }
+
+/// Asks for coordinates (MGRS, short MGRS relative to [near], or decimal
+/// degrees) and returns the point; the target is previewed while typing.
+class CoordinateEntryDialog extends StatefulWidget {
+  const CoordinateEntryDialog({required this.near, super.key});
+
+  final LatLng near;
+
+  @override
+  State<CoordinateEntryDialog> createState() => _CoordinateEntryDialogState();
+}
+
+class _CoordinateEntryDialogState extends State<CoordinateEntryDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  LatLng? get _parsed =>
+      geo.parseCoordinates(_controller.text, near: widget.near);
+
+  void _submit() {
+    final point = _parsed;
+    if (point != null) {
+      Navigator.of(context).pop(point);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final point = _parsed;
+    final typed = _controller.text.trim().isNotEmpty;
+    return AlertDialog(
+      backgroundColor: panelGreen,
+      title: const Text('Zadat souřadnice'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            key: const ValueKey('coordinate-input'),
+            controller: _controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.characters,
+            style: const TextStyle(fontFamily: 'monospace'),
+            decoration: const InputDecoration(
+              hintText: '33U VR 58335 40478',
+              helperText:
+                  'MGRS, „VR 58335 40478“, „58335 40478“ nebo 50.01, 14.45',
+              helperMaxLines: 2,
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            point != null
+                ? '${geo.formatMgrs(point.latitude, point.longitude)} · '
+                      '${geo.distanceKm(widget.near, point).toStringAsFixed(1)} km '
+                      'AZ ${geo.bearingDeg(widget.near, point).round()}°'
+                : typed
+                ? 'Neplatné souřadnice'
+                : ' ',
+            key: const ValueKey('coordinate-preview'),
+            style: TextStyle(
+              color: point != null ? sand : dangerRed,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Zrušit'),
+        ),
+        FilledButton(
+          onPressed: point == null ? null : _submit,
+          child: const Text('Ukázat na mapě'),
+        ),
+      ],
+    );
+  }
+}

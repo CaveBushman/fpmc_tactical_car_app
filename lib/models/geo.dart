@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:latlong2/latlong.dart';
 import 'package:mgrs_dart/mgrs_dart.dart';
 
+import 'utm.dart';
+
 const _earthRadiusKm = 6371.0088;
 
 double _degToRad(double degrees) => degrees * math.pi / 180;
@@ -52,12 +54,78 @@ LatLng? parseMgrs(String value) {
   if (compact.isEmpty) {
     return null;
   }
+  final match = RegExp(r'^(\d{1,2})[C-X][A-Z]{2}(\d*)$').firstMatch(compact);
+  final digits = match?.group(2) ?? '';
+  if (match == null || digits.length.isOdd || digits.length > 10) {
+    return null;
+  }
   try {
-    final point = Mgrs.toPoint(compact);
-    return LatLng(point[1], point[0]);
+    final corner = Mgrs.toPoint(compact);
+    // MGRS names a square; take its centre so formatting the result gives
+    // back the same digits instead of the south-west corner minus 1 m.
+    final half = math.pow(10, 5 - digits.length ~/ 2) / 2;
+    final zone = int.parse(match.group(1)!);
+    final utm = toUtm(corner[1], corner[0], zone: zone);
+    return fromUtm(
+      UtmCoordinate(
+        zone: zone,
+        northern: utm.northern,
+        easting: utm.easting + half,
+        northing: utm.northing + half,
+      ),
+    );
   } catch (_) {
     return null;
   }
+}
+
+/// Coordinates typed by hand: full MGRS ("33U VR 58335 40478"), MGRS
+/// without the zone ("VR 58335 40478") or without zone and square
+/// ("58335 40478") taken from [near], or decimal degrees
+/// ("50.0123, 14.4567"). Null when it cannot be read.
+LatLng? parseCoordinates(String input, {LatLng? near}) {
+  final text = input.trim().toUpperCase();
+  if (text.isEmpty) {
+    return null;
+  }
+  final decimal = RegExp(
+    r'^(-?\d{1,2}(?:[.,]\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:[.,]\d+)?)$',
+  ).firstMatch(text);
+  if (decimal != null && (text.contains('.') || text.contains(';'))) {
+    final lat = double.tryParse(decimal.group(1)!.replaceAll(',', '.'));
+    final lon = double.tryParse(decimal.group(2)!.replaceAll(',', '.'));
+    if (lat != null && lon != null && lat.abs() <= 90 && lon.abs() <= 180) {
+      return LatLng(lat, lon);
+    }
+  }
+  final parts = text.split(RegExp(r'\s+'));
+  final digits = RegExp(r'^\d+$');
+  // Easting and northing typed apart must have the same precision.
+  if (parts.length >= 2 &&
+      digits.hasMatch(parts[parts.length - 1]) &&
+      digits.hasMatch(parts[parts.length - 2]) &&
+      parts[parts.length - 1].length != parts[parts.length - 2].length) {
+    return null;
+  }
+  final full = parseMgrs(text);
+  if (full != null) {
+    return full;
+  }
+  if (near == null) {
+    return null;
+  }
+  // Prefix what is missing from our own MGRS reference.
+  final own = formatMgrs(near.latitude, near.longitude).split(' ');
+  if (parts.length == 3 &&
+      RegExp(r'^[A-Z]{2}$').hasMatch(parts[0]) &&
+      digits.hasMatch(parts[1]) &&
+      digits.hasMatch(parts[2])) {
+    return parseMgrs('${own[0]} $text');
+  }
+  if (parts.length == 2 && parts.every(digits.hasMatch)) {
+    return parseMgrs('${own[0]} ${own[1]} $text');
+  }
+  return null;
 }
 
 /// Point reached from [from] after [distanceM] metres on [bearing] degrees

@@ -82,7 +82,13 @@ class _MapPageState extends State<MapPage> {
   /// Point tapped on the map, shown in an info card.
   LatLng? _inspected;
 
-  Future<void> _createWaypointAt(LatLng point) async {
+  /// Point entered by hand that the map should move to.
+  LatLng? _focus;
+
+  Future<void> _createWaypointAt(
+    LatLng point, {
+    TacticalWaypoint? editing,
+  }) async {
     final draft = await showModalBottomSheet<WaypointDraft>(
       context: context,
       isScrollControlled: true,
@@ -90,10 +96,24 @@ class _MapPageState extends State<MapPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
       ),
-      builder: (context) => WaypointEditorSheet(position: point),
+      builder: (context) =>
+          WaypointEditorSheet(position: point, editing: editing),
     );
     if (draft != null) {
       widget.onCreateWaypoint?.call(draft);
+    }
+  }
+
+  Future<void> _enterCoordinates(LatLng near) async {
+    final point = await showDialog<LatLng>(
+      context: context,
+      builder: (context) => CoordinateEntryDialog(near: near),
+    );
+    if (point != null && mounted) {
+      setState(() {
+        _focus = point;
+        _inspected = point;
+      });
     }
   }
 
@@ -136,6 +156,8 @@ class _MapPageState extends State<MapPage> {
                 track: widget.track,
                 showGrid: widget.showGrid,
                 navTarget: widget.navTarget?.position,
+                focus: _focus,
+                onEnterCoordinates: () => _enterCoordinates(self.latLng),
                 onTap: (point) => setState(() => _inspected = point),
               ),
             ),
@@ -203,6 +225,10 @@ class _MapPageState extends State<MapPage> {
                 channelLabel: widget.channelLabel,
                 onShareWaypoint: widget.onShareWaypoint,
                 onDeleteWaypoint: widget.onDeleteWaypoint,
+                onEditWaypoint: widget.onCreateWaypoint == null
+                    ? null
+                    : (waypoint) =>
+                          _createWaypointAt(waypoint.latLng, editing: waypoint),
                 navTarget: widget.navTarget,
                 onNavigate: widget.onNavigate,
                 onClearNavTarget: widget.onClearNavTarget,
@@ -224,11 +250,13 @@ class _MapDetailsSheet extends StatelessWidget {
     required this.channelLabel,
     required this.onShareWaypoint,
     this.onDeleteWaypoint,
+    this.onEditWaypoint,
     this.navTarget,
     this.onNavigate,
     this.onClearNavTarget,
   });
 
+  final ValueChanged<TacticalWaypoint>? onEditWaypoint;
   final TacticalNavSolution? navTarget;
   final ValueChanged<NavTarget>? onNavigate;
   final VoidCallback? onClearNavTarget;
@@ -343,6 +371,7 @@ class _MapDetailsSheet extends StatelessWidget {
                 waypoints: waypoints,
                 onShareWaypoint: onShareWaypoint,
                 onDeleteWaypoint: onDeleteWaypoint,
+                onEditWaypoint: onEditWaypoint,
               ),
               const SizedBox(height: 10),
               Align(
@@ -417,8 +446,16 @@ class MeshMap extends StatefulWidget {
     this.showGrid = true,
     this.onTap,
     this.navTarget,
+    this.focus,
+    this.onEnterCoordinates,
     super.key,
   });
+
+  /// Moves the map here whenever it changes (stops following self).
+  final LatLng? focus;
+
+  /// Shows a button that opens the coordinate entry.
+  final VoidCallback? onEnterCoordinates;
 
   final List<MeshNode> nodes;
   final List<TacticalWaypoint> waypoints;
@@ -457,6 +494,7 @@ class _MeshMapState extends State<MeshMap> {
   bool _mapReady = false;
   bool _followSelf = true;
   LatLng? _lastSelfPoint;
+  LatLng? _lastFocus;
 
   @override
   void dispose() {
@@ -489,6 +527,16 @@ class _MeshMapState extends State<MeshMap> {
           }
         });
       }
+    }
+    final focus = widget.focus;
+    if (focus != null && focus != _lastFocus) {
+      _lastFocus = focus;
+      _followSelf = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _mapReady) {
+          _mapController.move(focus, _mapController.camera.zoom);
+        }
+      });
     }
     return Stack(
       children: [
@@ -615,6 +663,24 @@ class _MeshMapState extends State<MeshMap> {
             ),
           ],
         ),
+        if (widget.onEnterCoordinates != null)
+          Positioned(
+            left: 12,
+            bottom: 92,
+            child: IconButton.filled(
+              key: const ValueKey('enter-coordinates'),
+              tooltip: 'Zadat souřadnice',
+              onPressed: widget.onEnterCoordinates,
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withValues(alpha: 0.76),
+                foregroundColor: sand,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: const Icon(Icons.edit_location_alt_outlined),
+            ),
+          ),
         Positioned(
           left: 12,
           bottom: 36,

@@ -270,13 +270,20 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       onShareWaypoint: controller.shareWaypoint,
       onDeleteWaypoint: controller.removeWaypoint,
       onCreateWaypoint: (draft) {
-        final waypoint = controller.addWaypoint(
-          type: draft.type,
-          latitude: draft.latitude,
-          longitude: draft.longitude,
-          code: draft.code,
-          note: draft.note,
-        );
+        final editing = draft.editing;
+        final waypoint = editing == null
+            ? controller.addWaypoint(
+                type: draft.type,
+                latitude: draft.latitude,
+                longitude: draft.longitude,
+                code: draft.code,
+                note: draft.note,
+              )
+            : controller.updateWaypoint(
+                editing,
+                type: draft.type,
+                note: draft.note,
+              );
         if (draft.share) {
           unawaited(controller.shareWaypoint(waypoint));
         }

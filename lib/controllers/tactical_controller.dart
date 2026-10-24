@@ -1416,6 +1416,36 @@ class TacticalController extends ChangeNotifier {
     return waypoint;
   }
 
+  /// Changes type and note of [waypoint], keeping its code and position
+  /// so a re-share replaces it on teammates' maps too.
+  TacticalWaypoint updateWaypoint(
+    TacticalWaypoint waypoint, {
+    required TacticalWaypointType type,
+    String note = '',
+  }) {
+    final updated = TacticalWaypoint(
+      code: waypoint.code,
+      type: type,
+      latitude: waypoint.latitude,
+      longitude: waypoint.longitude,
+      note: note.trim(),
+      priority:
+          type == TacticalWaypointType.medevac ||
+          type == TacticalWaypointType.danger,
+      sharedBy: waypoint.sharedBy,
+      createdAt: waypoint.createdAt,
+      meshWaypointId: waypoint.meshWaypointId,
+    );
+    final index = _waypoints.indexOf(waypoint);
+    if (index == -1) {
+      return waypoint;
+    }
+    _waypoints[index] = updated;
+    _notify();
+    unawaited(_persistState());
+    return updated;
+  }
+
   void removeWaypoint(TacticalWaypoint waypoint) {
     final removed = _waypoints.remove(waypoint);
     if (removed) {

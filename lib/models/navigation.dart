@@ -369,7 +369,11 @@ class WaypointDraft {
     this.code = '',
     this.note = '',
     this.share = false,
+    this.editing,
   });
+
+  /// The existing point this draft changes; null for a new point.
+  final TacticalWaypoint? editing;
 
   final TacticalWaypointType type;
   final double latitude;

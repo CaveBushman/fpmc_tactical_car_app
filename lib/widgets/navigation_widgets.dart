@@ -318,6 +318,7 @@ class WaypointStrip extends StatelessWidget {
     required this.waypoints,
     required this.onShareWaypoint,
     this.onDeleteWaypoint,
+    this.onEditWaypoint,
     this.compact = false,
     super.key,
   });
@@ -325,6 +326,7 @@ class WaypointStrip extends StatelessWidget {
   final List<TacticalWaypoint> waypoints;
   final ValueChanged<TacticalWaypoint> onShareWaypoint;
   final ValueChanged<TacticalWaypoint>? onDeleteWaypoint;
+  final ValueChanged<TacticalWaypoint>? onEditWaypoint;
   final bool compact;
 
   @override
@@ -367,6 +369,9 @@ class WaypointStrip extends StatelessWidget {
             onDelete: onDeleteWaypoint == null
                 ? null
                 : () => onDeleteWaypoint!(waypoint),
+            onEdit: onEditWaypoint == null
+                ? null
+                : () => onEditWaypoint!(waypoint),
           ),
           const SizedBox(height: 8),
         ],
@@ -380,6 +385,7 @@ class WaypointCard extends StatelessWidget {
     required this.waypoint,
     required this.onShare,
     this.onDelete,
+    this.onEdit,
     this.compact = false,
     super.key,
   });
@@ -387,6 +393,7 @@ class WaypointCard extends StatelessWidget {
   final TacticalWaypoint waypoint;
   final VoidCallback onShare;
   final VoidCallback? onDelete;
+  final VoidCallback? onEdit;
   final bool compact;
 
   @override
@@ -462,6 +469,14 @@ class WaypointCard extends StatelessWidget {
               ),
               icon: const Icon(Icons.send, size: 18),
             ),
+            if (onEdit != null)
+              IconButton(
+                key: ValueKey('edit-waypoint-${waypoint.code}'),
+                tooltip: 'Upravit ${waypoint.code}',
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
             if (onDelete != null)
               IconButton(
                 key: ValueKey('delete-waypoint-${waypoint.code}'),
@@ -477,20 +492,27 @@ class WaypointCard extends StatelessWidget {
   }
 }
 
-/// Bottom sheet for a new waypoint at [position].
+/// Bottom sheet for a new waypoint at [position], or for changing type
+/// and note of [editing].
 class WaypointEditorSheet extends StatefulWidget {
-  const WaypointEditorSheet({required this.position, super.key});
+  const WaypointEditorSheet({required this.position, this.editing, super.key});
 
   final LatLng position;
+  final TacticalWaypoint? editing;
 
   @override
   State<WaypointEditorSheet> createState() => _WaypointEditorSheetState();
 }
 
 class _WaypointEditorSheetState extends State<WaypointEditorSheet> {
-  final TextEditingController _codeController = TextEditingController();
-  final TextEditingController _noteController = TextEditingController();
-  TacticalWaypointType _type = TacticalWaypointType.rally;
+  late final TextEditingController _codeController = TextEditingController(
+    text: widget.editing?.code,
+  );
+  late final TextEditingController _noteController = TextEditingController(
+    text: widget.editing?.note,
+  );
+  late TacticalWaypointType _type =
+      widget.editing?.type ?? TacticalWaypointType.rally;
   bool _share = true;
 
   @override
@@ -515,9 +537,11 @@ class _WaypointEditorSheetState extends State<WaypointEditorSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Nový bod',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            Text(
+              widget.editing == null
+                  ? 'Nový bod'
+                  : 'Upravit ${widget.editing!.code}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 4),
             Text(
@@ -544,6 +568,8 @@ class _WaypointEditorSheetState extends State<WaypointEditorSheet> {
             const SizedBox(height: 12),
             TextField(
               controller: _codeController,
+              // The code identifies the point on teammates' maps.
+              enabled: widget.editing == null,
               textCapitalization: TextCapitalization.characters,
               decoration: InputDecoration(
                 labelText: 'Kód',
@@ -563,7 +589,11 @@ class _WaypointEditorSheetState extends State<WaypointEditorSheet> {
               contentPadding: EdgeInsets.zero,
               value: _share,
               onChanged: (value) => setState(() => _share = value),
-              title: const Text('Hned sdílet do skupiny'),
+              title: Text(
+                widget.editing == null
+                    ? 'Hned sdílet do skupiny'
+                    : 'Poslat změnu skupině',
+              ),
             ),
             FilledButton.icon(
               onPressed: () => Navigator.of(context).pop(
@@ -574,6 +604,7 @@ class _WaypointEditorSheetState extends State<WaypointEditorSheet> {
                   code: _codeController.text,
                   note: _noteController.text,
                   share: _share,
+                  editing: widget.editing,
                 ),
               ),
               style: FilledButton.styleFrom(
@@ -581,7 +612,9 @@ class _WaypointEditorSheetState extends State<WaypointEditorSheet> {
                 minimumSize: const Size.fromHeight(48),
               ),
               icon: const Icon(Icons.add_location_alt_outlined),
-              label: const Text('Uložit bod'),
+              label: Text(
+                widget.editing == null ? 'Uložit bod' : 'Uložit změny',
+              ),
             ),
           ],
         ),
