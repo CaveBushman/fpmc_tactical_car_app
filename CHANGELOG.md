@@ -11,6 +11,11 @@
   trip takes longer than the time left.
 - Fixed: next-day times were an hour off across a daylight saving change.
 - Navigation target, rendezvous and member statuses survive a restart.
+- An own SOS resumes after a restart; teammates' recent calls come back.
+- Faster: large states are saved off the UI thread, map tiles use one
+  filter layer.
+- Backend rewritten in Django with PostgreSQL and a web panel; the app has
+  no built-in training accounts any more.
 
 ## 1.2.0 (build 3) – 2026-10-24
 

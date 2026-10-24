@@ -167,8 +167,9 @@ const helpTopics = [
     'SOS a výstrahy',
     'SOS',
     'Tlačítko SOS (Zprávy nebo režim auta) po potvrzení posílá každou '
-        'minutu výzvu s vaší polohou, dokud ji nezrušíte. Výzvu od člena '
-        'týmu ukáže červený pruh s vibrací; „Beru“ mu odpoví.',
+        'minutu výzvu s vaší polohou, dokud ji nezrušíte – i když se mezitím '
+        'telefon nebo aplikace restartuje (po přihlášení se SOS samo obnoví). '
+        'Výzvu od člena týmu ukáže červený pruh s vibrací; „Beru“ mu odpoví.',
   ),
   HelpTopic(
     'SOS a výstrahy',

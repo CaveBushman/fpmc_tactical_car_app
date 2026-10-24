@@ -128,6 +128,30 @@ class SosCoordinator {
     }
   }
 
+  /// Own call state and teammates' calls, for saving with the mission.
+  Map<String, dynamic> toJson() => {
+    'active': _active,
+    'alerts': [for (final alert in _alerts.values) alert.toJson()],
+  };
+
+  /// Brings back teammates' calls from a saved state and reports whether
+  /// our own call was running (the caller decides to resume it).
+  bool restore(Map<String, dynamic> json, {required DateTime now}) {
+    final cutoff = now.subtract(alertLifetime);
+    for (final item in json['alerts'] as List? ?? const []) {
+      if (item is! Map) {
+        continue;
+      }
+      final alert = SosAlert.fromJson(
+        item.map((key, value) => MapEntry(key.toString(), value)),
+      );
+      if (alert != null && alert.lastAt.isAfter(cutoff)) {
+        _alerts.putIfAbsent(alert.callSign, () => alert);
+      }
+    }
+    return json['active'] == true;
+  }
+
   /// Logout/wipe: stop without sending anything and forget all calls.
   void reset() {
     _timer?.cancel();

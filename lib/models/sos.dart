@@ -106,6 +106,31 @@ class SosAlert {
   /// Hidden from the banner after "Beru"; the map point stays.
   final bool acknowledged;
 
+  Map<String, dynamic> toJson() => {
+    'callSign': callSign,
+    'lastAt': lastAt.toUtc().toIso8601String(),
+    'mgrs': ?mgrs,
+    'lat': ?latitude,
+    'lon': ?longitude,
+    'acknowledged': acknowledged,
+  };
+
+  static SosAlert? fromJson(Map<String, dynamic> json) {
+    final callSign = json['callSign'];
+    final lastAt = DateTime.tryParse(json['lastAt']?.toString() ?? '');
+    if (callSign is! String || lastAt == null) {
+      return null;
+    }
+    return SosAlert(
+      callSign: callSign,
+      lastAt: lastAt.toLocal(),
+      mgrs: json['mgrs'] as String?,
+      latitude: (json['lat'] as num?)?.toDouble(),
+      longitude: (json['lon'] as num?)?.toDouble(),
+      acknowledged: json['acknowledged'] == true,
+    );
+  }
+
   SosAlert copyWith({bool? acknowledged}) => SosAlert(
     callSign: callSign,
     lastAt: lastAt,

@@ -2222,6 +2222,14 @@ class TacticalController extends ChangeNotifier {
     if (statuses != null) {
       _statuses.restore(statuses);
     }
+    final sos = map(extras['sos']);
+    if (sos != null && _sos.restore(sos, now: _clock()) && !_sos.active) {
+      // The app was killed or the phone restarted during our own distress
+      // call; whoever needed it may not be able to start it again.
+      _log(MissionEventKind.sos, 'SOS obnoveno po restartu');
+      _notice('SOS obnoveno po restartu – výzva se dál opakuje.');
+      unawaited(_sos.start());
+    }
   }
 
   Future<void>? _saving;
@@ -2265,6 +2273,7 @@ class TacticalController extends ChangeNotifier {
           'navTarget': ?_navTarget?.toJson(),
           'rendezvous': ?_rendezvous?.toJson(),
           'statuses': _statuses.toJson(),
+          'sos': _sos.toJson(),
         },
         owner: session.userName,
       );
