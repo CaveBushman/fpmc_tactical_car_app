@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/geo.dart' as geo;
 import '../models/member_status.dart';
+import '../models/sun.dart' as sun;
 import '../models/mesh_node.dart';
 import '../models/messaging.dart';
 import '../models/navigation.dart';
@@ -53,7 +54,9 @@ class TacticalController extends ChangeNotifier {
     this.sosRepeat = const Duration(minutes: 1),
     MissionSharer? missionSharer,
     Duration agingTick = const Duration(seconds: 15),
-  }) : _backend = backend,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now,
+       _backend = backend,
        _nativePtt = nativePtt ?? NativePttBridge.platform(),
        _carBridge = carBridge ?? CarBridge.platform(),
        _mission = MissionRecorder(sharer: missionSharer),
@@ -123,6 +126,8 @@ class TacticalController extends ChangeNotifier {
     });
   }
 
+  /// Wall clock (tests pin it).
+  final DateTime Function() _clock;
   final BackendClient? _backend;
   final NativePttBridge _nativePtt;
   final CarBridge _carBridge;
@@ -374,6 +379,7 @@ class TacticalController extends ChangeNotifier {
     _peerTrails.clear();
     _courseDeg = null;
     _statuses.clear();
+    _acknowledgedStatuses.clear();
     _sos.reset();
     _mission.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
@@ -395,6 +401,7 @@ class TacticalController extends ChangeNotifier {
     _fontScale = 1.0;
     _volumeKeyPtt = false;
     _nightMode = false;
+    _nightModeAuto = false;
     _sharePositionToMesh = true;
     _mgrsGrid = true;
     _batterySaver = false;
@@ -447,6 +454,7 @@ class TacticalController extends ChangeNotifier {
     final fontScale = await settings.fontScale();
     final volumeKey = await settings.volumeKeyPtt();
     _nightMode = await settings.nightMode();
+    _nightModeAuto = await settings.nightModeAuto();
     _sharePositionToMesh = await settings.sharePositionToMesh();
     _mgrsGrid = await settings.mgrsGrid();
     final batterySaver = await settings.batterySaver();
@@ -504,6 +512,7 @@ class TacticalController extends ChangeNotifier {
   bool get volumeKeyPtt => _volumeKeyPtt;
 
   bool _nightMode = false;
+  bool _nightModeAuto = false;
   bool _sharePositionToMesh = true;
   bool _mgrsGrid = true;
   bool _batterySaver = false;
@@ -718,13 +727,76 @@ class TacticalController extends ChangeNotifier {
     }
   }
 
-  /// Red, dimmed display for preserving night vision.
-  bool get nightMode => _nightMode;
+  /// Red, dimmed display for preserving night vision. In automatic mode
+  /// it follows civil twilight at the own position.
+  bool get nightMode {
+    if (!_nightModeAuto) {
+      return _nightMode;
+    }
+    final self = selfNode;
+    return sun.isDark(_clock(), self.latitude, self.longitude);
+  }
 
+  /// Switching by hand ends the automatic mode.
   void setNightMode(bool enabled) {
     _nightMode = enabled;
     unawaited(settings.setNightMode(enabled));
+    if (_nightModeAuto) {
+      _nightModeAuto = false;
+      unawaited(settings.setNightModeAuto(false));
+    }
     _notify();
+  }
+
+  bool get nightModeAuto => _nightModeAuto;
+
+  void setNightModeAuto(bool enabled) {
+    _nightModeAuto = enabled;
+    unawaited(settings.setNightModeAuto(enabled));
+    _notify();
+  }
+
+  // --- Urgent member status -------------------------------------------------------
+
+  final Set<String> _acknowledgedStatuses = {};
+
+  static String _statusKey(String callSign, MemberStatusReport report) =>
+      '$callSign@${report.at.microsecondsSinceEpoch}';
+
+  /// Teammates who reported being wounded or needing support within the
+  /// last 30 minutes and have not been answered here, newest first.
+  List<({String callSign, MemberStatusReport report})> get urgentStatuses {
+    final cutoff = _clock().subtract(const Duration(minutes: 30));
+    final self = selfNode.callSign;
+    return [
+      for (final MapEntry(key: callSign, value: report) in _statuses.entries)
+        if (callSign != self &&
+            report.status.urgent &&
+            report.at.isAfter(cutoff) &&
+            !_acknowledgedStatuses.contains(_statusKey(callSign, report)))
+          (callSign: callSign, report: report),
+    ]..sort((a, b) => b.report.at.compareTo(a.report.at));
+  }
+
+  /// "Beru": hides the alert until the member reports again.
+  void acknowledgeStatus(String callSign) {
+    final report = _statuses[callSign];
+    if (report != null) {
+      _acknowledgedStatuses.add(_statusKey(callSign, report));
+      _notify();
+    }
+  }
+
+  /// Navigates to [callSign] when their position is known.
+  bool navigateToMember(String callSign) {
+    for (final node in nodes) {
+      if (!node.isSelf && node.callSign == callSign) {
+        navigateTo(NavTarget.node(node.nodeNum));
+        return true;
+      }
+    }
+    _notice('Poloha $callSign není známa.');
+    return false;
   }
 
   /// Volume-down as hold-to-talk while the app is in front (Android).

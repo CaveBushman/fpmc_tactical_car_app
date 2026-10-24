@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../controllers/danger_proximity.dart';
+import '../models/member_status.dart';
 import '../models/sos.dart';
 import '../theme.dart';
 
@@ -82,6 +83,47 @@ class SosBanners extends StatelessWidget {
   }
 }
 
+/// One red bar per teammate who reported being wounded or needing
+/// support, with "Navigovat" and "Beru".
+class MemberStatusBanners extends StatelessWidget {
+  const MemberStatusBanners({
+    required this.alerts,
+    required this.onAcknowledge,
+    this.onNavigate,
+    super.key,
+  });
+
+  final List<({String callSign, MemberStatusReport report})> alerts;
+  final ValueChanged<String> onAcknowledge;
+  final ValueChanged<String>? onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    if (alerts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final now = DateTime.now();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final alert in alerts)
+          _Banner(
+            key: ValueKey('status-alert-${alert.callSign}'),
+            icon: alert.report.status.icon,
+            title: '${alert.callSign}: ${alert.report.status.label}',
+            subtitle: 'před ${now.difference(alert.report.at).inMinutes} min',
+            secondaryLabel: onNavigate == null ? null : 'Navigovat',
+            onSecondary: onNavigate == null
+                ? null
+                : () => onNavigate!(alert.callSign),
+            actionLabel: 'Beru',
+            onAction: () => onAcknowledge(alert.callSign),
+          ),
+      ],
+    );
+  }
+}
+
 /// One red bar per DANGER point we are close to, with "Beru" to hide it.
 class DangerBanners extends StatelessWidget {
   const DangerBanners({
@@ -126,9 +168,13 @@ class _Banner extends StatelessWidget {
     required this.subtitle,
     required this.actionLabel,
     required this.onAction,
+    this.secondaryLabel,
+    this.onSecondary,
     super.key,
   });
 
+  final String? secondaryLabel;
+  final VoidCallback? onSecondary;
   final IconData icon;
   final String title;
   final String subtitle;
@@ -170,6 +216,14 @@ class _Banner extends StatelessWidget {
               ],
             ),
           ),
+          if (secondaryLabel != null && onSecondary != null) ...[
+            TextButton(
+              onPressed: onSecondary,
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+              child: Text(secondaryLabel!),
+            ),
+            const SizedBox(width: 4),
+          ],
           FilledButton(
             onPressed: onAction,
             style: FilledButton.styleFrom(

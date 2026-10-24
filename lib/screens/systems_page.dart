@@ -25,6 +25,8 @@ class SystemsPage extends StatelessWidget {
     this.onPttReconnect,
     this.nightMode = false,
     this.onNightModeChanged,
+    this.nightModeAuto = false,
+    this.onNightModeAutoChanged,
     this.mgrsGrid = true,
     this.onMgrsGridChanged,
     this.batterySaver = false,
@@ -65,6 +67,8 @@ class SystemsPage extends StatelessWidget {
   final VoidCallback? onPttReconnect;
   final bool nightMode;
   final ValueChanged<bool>? onNightModeChanged;
+  final bool nightModeAuto;
+  final ValueChanged<bool>? onNightModeAutoChanged;
   final bool mgrsGrid;
   final ValueChanged<bool>? onMgrsGridChanged;
   final bool batterySaver;
@@ -248,6 +252,16 @@ class SystemsPage extends StatelessWidget {
               title: const Text('Noční režim'),
               subtitle: const Text(
                 'Tlumený červený displej, šetří adaptaci očí na tmu',
+              ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: nightModeAuto,
+              onChanged: onNightModeAutoChanged,
+              secondary: const Icon(Icons.brightness_auto_outlined),
+              title: const Text('Automaticky podle soumraku'),
+              subtitle: const Text(
+                'Noční režim od konce soumraku do svítání v místě, kde jsi',
               ),
             ),
           ],

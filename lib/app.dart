@@ -176,6 +176,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     _syncSystemBars();
     _controller.addListener(_alertOnSos);
     _controller.addListener(_alertOnDanger);
+    _controller.addListener(_alertOnStatus);
     _offlineMaps = widget.offlineMaps ?? OfflineMapsController();
     unawaited(_offlineMaps.init());
     _noticeSubscription = _controller.notices.listen((message) {
@@ -226,6 +227,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     _controller.removeListener(_syncSystemBars);
     _controller.removeListener(_alertOnSos);
     _controller.removeListener(_alertOnDanger);
+    _controller.removeListener(_alertOnStatus);
     unawaited(_noticeSubscription.cancel());
     _controller.dispose();
     _offlineMaps.dispose();
@@ -323,6 +325,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         onPttReconnect: controller.reconnectPtt,
         nightMode: controller.nightMode,
         onNightModeChanged: controller.setNightMode,
+        nightModeAuto: controller.nightModeAuto,
+        onNightModeAutoChanged: controller.setNightModeAuto,
         mgrsGrid: controller.mgrsGrid,
         onMgrsGridChanged: controller.setMgrsGrid,
         batterySaver: controller.batterySaver,
@@ -418,6 +422,11 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
                 onCancelOwn: () => unawaited(controller.stopSos()),
                 onAcknowledge: (alert) =>
                     unawaited(controller.acknowledgeSos(alert)),
+              ),
+              MemberStatusBanners(
+                alerts: controller.urgentStatuses,
+                onAcknowledge: controller.acknowledgeStatus,
+                onNavigate: controller.navigateToMember,
               ),
               DangerBanners(
                 warnings: controller.dangerWarnings,
@@ -571,6 +580,23 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     for (final alert in _controller.activeSosAlerts) {
       if (_seenSos.add(
         '${alert.callSign}@${alert.lastAt.millisecondsSinceEpoch}',
+      )) {
+        fresh = true;
+      }
+    }
+    if (fresh) {
+      unawaited(HapticFeedback.vibrate());
+    }
+  }
+
+  final Set<String> _seenStatus = {};
+
+  /// Vibrates once for every new urgent status from a teammate.
+  void _alertOnStatus() {
+    var fresh = false;
+    for (final alert in _controller.urgentStatuses) {
+      if (_seenStatus.add(
+        '${alert.callSign}@${alert.report.at.microsecondsSinceEpoch}',
       )) {
         fresh = true;
       }

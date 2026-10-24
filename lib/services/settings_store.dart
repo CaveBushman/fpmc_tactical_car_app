@@ -25,6 +25,13 @@ class SettingsStore {
   Future<void> setNightMode(bool value) =>
       _set((prefs) => prefs.setBool('${prefix}nightMode', value));
 
+  /// Night mode follows civil twilight at the own position (default off).
+  Future<bool> nightModeAuto() async =>
+      await _get((prefs) => prefs.getBool('${prefix}nightModeAuto')) ?? false;
+
+  Future<void> setNightModeAuto(bool value) =>
+      _set((prefs) => prefs.setBool('${prefix}nightModeAuto', value));
+
   /// Send the phone GPS position into the mesh (default on).
   Future<bool> sharePositionToMesh() async =>
       await _get((prefs) => prefs.getBool('${prefix}sharePositionToMesh')) ??

@@ -39,6 +39,8 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Heading up: the compass button (top right of the map, also in car mode) turns the map so the direction of travel points up while it follows your position; the GPS course is used above 1.5 m/s and kept while stopped. The own arrow always shows the course. Panning the map returns it to north up until you recenter.
 - Quick messages: one-tap templates above the reports on the Messages tab, sent to the selected group. Edit them in System → Nastavení → Rychlé zprávy (one per line; empty restores the defaults).
 - Member status: pick your own status on the Team tab (OK, V POHYBU, NA POZICI, ZRANĚN, POTŘEBUJI PODPORU, MIMO AKCI). It is sent to the selected group as `STAV | <callsign> | <status>` (ZRANĚN and POTŘEBUJI PODPORU as priority) and shown with its age on team cards and, when not OK, under the member's map marker.
+- Urgent status alerts: a teammate reporting ZRANĚN or POTŘEBUJI PODPORU raises a red bar (and a vibration) like an SOS call, with "Navigovat" to their position and "Beru" to dismiss it until they report again; it lapses after 30 minutes or when they report another status.
+- Automatic night mode (System → Nastavení): night mode from the end of civil dusk to civil dawn at your position, computed offline. Switching night mode by hand turns the automatic mode off.
 - Car mode screen (car icon in the app bar): map, nearest target, last message, OK / NA POZICI / SOS and a large hold-to-talk button; keeps the display on.
 - Android Auto: POI screen with the nearest team members and mission points on the car map (tap to navigate), and incoming team messages as car-readable notifications with voice reply.
 - Adaptive portrait and landscape layouts.
