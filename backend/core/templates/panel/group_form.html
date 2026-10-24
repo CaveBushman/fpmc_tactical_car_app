@@ -1,0 +1,10 @@
+{% extends "panel/base.html" %}
+{% block title %}{% if group %}{{ group.name }}{% else %}Nová skupina{% endif %}{% endblock %}
+{% block content %}
+<h1>{% if group %}Skupina {{ group.name }}{% else %}Nová skupina{% endif %}</h1>
+<form method="post" class="card">
+  {% csrf_token %}
+  {{ form.as_div }}
+  <button type="submit">{% if group %}Uložit{% else %}Vytvořit{% endif %}</button>
+</form>
+{% endblock %}

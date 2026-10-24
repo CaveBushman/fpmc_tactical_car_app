@@ -19,7 +19,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Quick `NA POZICI` message includes full MGRS, latitude, and longitude.
 - SOS mode: after confirmation a distress call with MGRS and coordinates is repeated every minute (LoRa or internet fallback) until cancelled; teammates get a red banner with vibration, an SOS point on the map and a "Beru" acknowledgement; cancelling removes it everywhere. Plain-text format, readable in other Meshtastic apps.
 - Phone GPS is broadcast into the mesh (POSITION_APP, max once a minute / 50 m), so teammates see you even without a T-Beam GPS fix.
-- Hold-to-talk PTT over a self-hosted LiveKit server with end-to-end encrypted audio, half-duplex floor control (one speaker at a time, "MLUVÍ …" / "OBSAZENO") and per-group rooms. Without `BACKEND_URL` the app runs in demo mode with local accounts and silent PTT.
+- Hold-to-talk PTT over a self-hosted LiveKit server with end-to-end encrypted audio, half-duplex floor control (one speaker at a time, "MLUVÍ …" / "OBSAZENO") and per-group rooms. The app needs a build with `BACKEND_URL` to log in.
 - System screen with Meshtastic BLE, PTT server, and car mode status.
 - PTT keeps working with the screen off: Android foreground service (microphone type) with a notification PTT button, iOS background audio.
 - Hardware PTT: Bluetooth headset button toggles talking (also in background, Android); optional volume-down hold-to-talk while the app is open.
@@ -60,9 +60,9 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Meshtastic BLE service using the official BLE service and ToRadio/FromRadio/FromNum characteristics.
 - Meshtastic packet diagnostics in system settings: packet count, decoded NodeInfo/Position/Text events, last RX time, packet size, and hex preview.
 - Focused Meshtastic protobuf reader/writer for MyNodeInfo, NodeInfo, Position, TextMessage, Routing (ACK/NAK) and want_config handshake.
-- Local auth service with demo roles (`operator`, `commander`, `medic`), password check (demo password `<user>-2026`, e.g. `operator-2026`), lockout after 5 failed attempts, session chip, and logout.
+- Login against the backend (build with `BACKEND_URL`). The app ships no offline accounts; without a server it says so at login. The test suite logs in with its own accounts (`test/support/test_accounts.dart`).
 - Operation groups managed on the backend (name, Meshtastic channel slot 0–7, PTT on/off); the app receives them at login (demo mode: ALPHA, BRAVO, MED, COMMAND). The app reads the T-Beam's channel config and warns when a group uses a channel the radio does not have enabled.
-- Backend (`server/`) issues sessions, LiveKit room tokens limited to the user's groups, and random per-group E2EE keys with commander-triggered rotation; security events go to an audit log.
+- Backend (`backend/`, Django + PostgreSQL) issues sessions, LiveKit room tokens limited to the user's groups, and random per-group E2EE keys with commander-triggered rotation; security events go to an audit log; commanders manage everything in a web panel.
 - Node/message state persisted locally, AES-GCM encrypted with a key in the platform keystore, wiped on logout.
 - Emergency wipe (user menu → Nouzově smazat data, hold 3 s): removes messages, positions, trail, the storage key, offline maps and settings, disconnects the T-Beam and logs out, without contacting the backend.
 - GitHub Actions CI for dependency install, static analysis, tests, web build, and Android debug APK build.
@@ -128,31 +128,40 @@ Optional: `TILE_MAX_ZOOM` (default 18), `TILE_ALLOW_BULK=false` to disable packs
 1. CarPlay (needs Apple entitlements, see `docs/carplay.md`).
 2. Replace the synthetic replay fixture with real T-Beam captures (System → Kopírovat záznam paketů).
 
-## PTT Backend and LiveKit
+## Backend (Django) and LiveKit
 
-`server/` is a small Dart (shelf) service, `deploy/` a docker-compose stack with LiveKit:
+`backend/` is a Django project (`core` app) serving the JSON API for the app and a server-rendered web panel for commanders; `deploy/` is a docker-compose stack with PostgreSQL and LiveKit:
 
 ```sh
 cd deploy
-cp .env.example .env                                 # fill in secrets
-cp ../server/config/users.example.json users.json    # demo users: <user>-2026
-(cd ../server && dart run bin/hash_password.dart)    # hash for real users
+cp .env.example .env                       # fill in secrets and PUBLIC_HOST
 docker compose up -d
+docker compose exec backend python manage.py create_commander velitel
 ```
 
 Put a TLS reverse proxy in front (the app needs `https://` for the backend and `wss://` for LiveKit; open UDP 50000–50200 and TCP 7881 for media). Then build the app against it:
 
 ```sh
-flutter run --dart-define=BACKEND_URL=https://ptt.example.cz/api
+flutter build apk --release --dart-define=BACKEND_URL=https://ptt.example.cz/api
 ```
 
-Team administration: open `https://ptt.example.cz/api/admin` and log in as a commander. It manages users (create, display name, role, groups, block, new password), logs a user out everywhere, unbinds devices, rotates group keys and shows the audit log. Changes of role, groups, password or blocking end that user's sessions immediately. Users are seeded from `USERS_FILE` on first start and then kept in `DATA_DIR/users.json`.
+Web panel: `https://ptt.example.cz/api/panel/` (log in as a commander). Users (create, display name, role, groups, block, new password, log out everywhere, unbind devices), groups (name, Meshtastic channel 0–7, PTT on/off, description, new E2EE key, delete when empty) and the audit log. Plain HTML forms with CSRF protection, no JavaScript, strict CSP. Changes of role, groups, password or blocking end that user's sessions immediately.
 
-Login protection: 5 wrong passwords lock that user name for 5 minutes from the same address only (no lock-out of others from elsewhere), and one address may try at most 30 logins per 10 minutes. Behind the TLS proxy the backend uses `X-Forwarded-For` (`TRUST_PROXY=1`, set in docker-compose); every login is audited with the client address.
+Moving from the former Dart server: copy its data directory and run `python manage.py import_dart_data /path/to/data` (users with their password hashes, session versions and devices, groups, E2EE keys, audit log). Password hashes keep the same format (`pbkdf2-sha256$…`), so nobody has to change passwords. `python manage.py hash_password` prints a hash in that format.
+
+Login protection: 5 wrong passwords lock that user name for 5 minutes from the same address only, and one address may try at most 30 logins per 10 minutes; the counters live in the database cache so all workers share them. Behind the TLS proxy the backend uses `X-Forwarded-For` (`TRUST_PROXY=1`, set in docker-compose); every login is audited with the client address. The panel login has the same protection.
 
 Device binding: the app sends a random per-installation id at login; an account may use at most `MAX_DEVICES_PER_USER` devices (default 2, `0` = unlimited) until a commander unbinds one.
 
-API: `POST /auth/login`, `POST /auth/refresh`, `POST /auth/password`, `POST /ptt/<group>/join`, admin endpoints under `/admin/…` (commander), `GET /health`. Backend tests: `cd server && dart test`.
+API (unchanged from the Dart server): `POST /auth/login`, `POST /auth/refresh`, `POST /auth/password`, `POST /ptt/<group>/join`, admin endpoints under `/admin/…` (commander, Bearer token), `GET /health`. Configuration is documented in `backend/tactical/settings.py`.
+
+Development and tests (SQLite, no PostgreSQL needed):
+
+```sh
+cd backend
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python manage.py test
+```
 
 ## Code Layout
 
@@ -164,7 +173,7 @@ API: `POST /auth/login`, `POST /auth/refresh`, `POST /auth/password`, `POST /ptt
 - `lib/widgets/` – shared, node, position and navigation widgets.
 - `lib/controllers/ptt_controller.dart` – PTT state and floor control over a `VoiceTransport` (LiveKit in `lib/services/ptt/`).
 - `lib/services/` – BLE, protobuf, auth/backend client, location, storage and offline tile services.
-- `server/` – backend; `deploy/` – docker-compose with LiveKit.
+- `backend/` – Django backend (API + web panel); `deploy/` – docker-compose with PostgreSQL and LiveKit.
 
 ## Run
 

@@ -1,10 +1,13 @@
-# PTT stack: LiveKit SFU + tactical backend.
+# PTT stack: LiveKit SFU + Django backend (API for the app and the
+# commanders' web panel) + PostgreSQL.
 # 1. cp .env.example .env and fill in secrets
-# 2. cp ../server/config/users.example.json users.json and replace hashes
-#    (dart run bin/hash_password.dart in server/)
-# 3. docker compose up -d
+# 2. docker compose up -d
+# 3. docker compose exec backend python manage.py create_commander <name>
+#    (moving from the former Dart server instead: copy its data directory
+#    and run `python manage.py import_dart_data /path/to/data`)
 # Put a TLS reverse proxy (Caddy/Traefik/nginx) in front: the app needs
-# wss:// for LiveKit and https:// for the backend.
+# wss:// for LiveKit and https:// for the backend; the panel is at
+# https://<host>/panel/.
 services:
   livekit:
     image: livekit/livekit-server:v1.13
@@ -16,24 +19,44 @@ services:
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
 
-  backend:
-    build: ../server
+  db:
+    image: postgres:17
     restart: unless-stopped
+    environment:
+      POSTGRES_DB: tactical
+      POSTGRES_USER: tactical
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tactical -d tactical"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ../backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8080:8080"
     environment:
       SESSION_SECRET: ${SESSION_SECRET}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
       LIVEKIT_URL: ${LIVEKIT_PUBLIC_URL}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
-      USERS_FILE: /config/users.json
-      DATA_DIR: /data
+      POSTGRES_DB: tactical
+      POSTGRES_USER: tactical
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: db
+      ALLOWED_HOSTS: ${PUBLIC_HOST}
+      CSRF_TRUSTED_ORIGINS: https://${PUBLIC_HOST}
       # Only reachable through the local TLS proxy, which sets
-      # X-Forwarded-For; used for login rate limiting and audit.
+      # X-Forwarded-For / -Proto; used for rate limiting, audit and HTTPS.
       TRUST_PROXY: "1"
-    volumes:
-      - ./users.json:/config/users.json:ro
-      - backend-data:/data
+      FORWARDED_ALLOW_IPS: "*"
 
 volumes:
-  backend-data:
+  db-data:

@@ -1,0 +1,24 @@
+{% extends "panel/base.html" %}
+{% block title %}Skupiny{% endblock %}
+{% block content %}
+<h1>Skupiny</h1>
+<a class="button" href="{% url 'panel-group-create' %}">Nová skupina</a>
+<div class="wrap"><table>
+  <tr><th>Skupina</th><th>Kanál</th><th>PTT</th><th>Členové</th><th></th></tr>
+  {% for g in groups %}
+  <tr>
+    <td><strong>{{ g.name }}</strong> <span class="muted">{{ g.id }}</span><br><span class="muted">{{ g.description }}</span></td>
+    <td>{{ g.channel_index }}</td>
+    <td>{% if g.ptt_enabled %}ano{% else %}<span class="off">ne</span>{% endif %}</td>
+    <td>{% for m in g.members.all %}<span class="tag">{{ m.username }}</span>{% empty %}<span class="muted">nikdo</span>{% endfor %}</td>
+    <td>
+      <a href="{% url 'panel-group-edit' g.id %}">Upravit</a>
+      <form class="inline" method="post" action="{% url 'panel-group-rotate' g.id %}">{% csrf_token %}<button class="secondary" type="submit">Nový klíč</button></form>
+      <form class="inline" method="post" action="{% url 'panel-group-delete' g.id %}">{% csrf_token %}<button class="danger" type="submit">Smazat</button></form>
+    </td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="5" class="muted">Zatím žádné skupiny.</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

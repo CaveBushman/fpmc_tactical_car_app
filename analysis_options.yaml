@@ -16,8 +16,6 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
-    # Separate Dart package with its own pubspec and CI job.
-    - server/**
 include: package:flutter_lints/flutter.yaml
 
 linter:

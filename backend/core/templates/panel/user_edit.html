@@ -1,0 +1,38 @@
+{% extends "panel/base.html" %}
+{% block title %}{{ subject.username }}{% endblock %}
+{% block content %}
+<h1>{{ subject.username }}</h1>
+<form method="post" class="card">
+  {% csrf_token %}
+  {{ form.as_div }}
+  <p class="muted">Změna role, skupin nebo blokace uživatele odhlásí ze všech zařízení.</p>
+  <button type="submit">Uložit</button>
+</form>
+
+<h2>Zařízení</h2>
+<div class="wrap"><table>
+  <tr><th>Zařízení</th><th>Připojeno</th><th>Naposledy</th><th></th></tr>
+  {% for d in subject.devices.all %}
+  <tr>
+    <td>{{ d.name|default:d.device_id|truncatechars:12 }}</td>
+    <td>{{ d.bound_at|date:"j. n. Y H:i" }}</td>
+    <td>{{ d.last_seen|date:"j. n. Y H:i" }}</td>
+    <td><form class="inline" method="post" action="{% url 'panel-device-unbind' subject.username d.pk %}">{% csrf_token %}<button class="danger" type="submit">Odpojit</button></form></td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="4" class="muted">Žádné připojené zařízení.</td></tr>
+  {% endfor %}
+</table></div>
+<p class="muted">Odpojené zařízení se při dalším přihlášení musí znovu připojit; nové zařízení nad limit se nepřihlásí.</p>
+
+<h2>Heslo a relace</h2>
+<form method="post" class="card" action="{% url 'panel-user-password' subject.username %}">
+  {% csrf_token %}
+  {{ password_form.as_div }}
+  <button type="submit">Nastavit heslo</button>
+</form>
+<form method="post" action="{% url 'panel-user-revoke' subject.username %}">
+  {% csrf_token %}
+  <button class="danger" type="submit">Odhlásit ze všech zařízení</button>
+</form>
+{% endblock %}

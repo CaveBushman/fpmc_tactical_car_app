@@ -1,0 +1,21 @@
+{% extends "panel/base.html" %}
+{% block title %}Uživatelé{% endblock %}
+{% block content %}
+<h1>Uživatelé</h1>
+<a class="button" href="{% url 'panel-user-create' %}">Nový uživatel</a>
+<div class="wrap"><table>
+  <tr><th>Uživatel</th><th>Jméno</th><th>Role</th><th>Skupiny</th><th>Zařízení</th><th></th></tr>
+  {% for u in users %}
+  <tr>
+    <td>{{ u.username }}{% if u.disabled %} <span class="off">ZABLOKOVÁN</span>{% endif %}</td>
+    <td>{{ u.display_name }}</td>
+    <td>{{ u.get_role_display }}</td>
+    <td>{% for g in u.groups.all %}<span class="tag">{{ g.name }}</span>{% empty %}<span class="muted">žádné</span>{% endfor %}</td>
+    <td>{{ u.devices.all|length }}</td>
+    <td><a href="{% url 'panel-user-edit' u.username %}">Upravit</a></td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="6" class="muted">Zatím žádní uživatelé.</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

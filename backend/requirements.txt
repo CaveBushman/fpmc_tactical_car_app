@@ -1,0 +1,5 @@
+# Pinned; update deliberately and rerun `python manage.py test`.
+Django==5.2.18
+PyJWT==2.15.1
+psycopg[binary]==3.3.6
+gunicorn==23.0.0

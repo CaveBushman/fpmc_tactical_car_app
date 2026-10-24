@@ -69,30 +69,59 @@ jobs:
           path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 14
 
-  server:
-    name: Backend analyze and test
+  backend:
+    name: Backend (Django) check and test
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: server
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: tactical
+          POSTGRES_USER: tactical
+          POSTGRES_PASSWORD: tactical
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tactical" --health-interval 5s
+          --health-retries 10
+
+    env:
+      SESSION_SECRET: ci-session-secret-0123456789abcdefghij
+      LIVEKIT_URL: wss://livekit.ci
+      LIVEKIT_API_KEY: ci-key
+      LIVEKIT_API_SECRET: ci-livekit-secret-0123456789abcdef
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Dart
-        uses: dart-lang/setup-dart@v1
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          sdk: stable
+          python-version: "3.13"
 
       - name: Install dependencies
-        run: dart pub get
+        run: pip install -r requirements.txt
 
-      - name: Analyze
-        run: dart analyze --fatal-infos
+      - name: Check and migrations up to date
+        run: |
+          python manage.py check --deploy --fail-level ERROR
+          python manage.py makemigrations --check --dry-run
+
+      - name: Migrate against PostgreSQL
+        env:
+          POSTGRES_DB: tactical
+          POSTGRES_USER: tactical
+          POSTGRES_PASSWORD: tactical
+          POSTGRES_HOST: localhost
+        run: python manage.py migrate --noinput
 
       - name: Test
-        run: dart test
+        run: python manage.py test
 
   meshtastic-schema:
     name: Meshtastic schema conformance

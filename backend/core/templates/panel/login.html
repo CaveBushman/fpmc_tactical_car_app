@@ -1,0 +1,14 @@
+{% extends "panel/base.html" %}
+{% block title %}Přihlášení{% endblock %}
+{% block content %}
+<h1>Přihlášení velitele</h1>
+<form method="post" class="card">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  <label for="id_username">Uživatel</label>
+  <input type="text" name="username" id="id_username" autocomplete="username" autofocus required>
+  <label for="id_password">Heslo</label>
+  <input type="password" name="password" id="id_password" autocomplete="current-password" required>
+  <button type="submit">Přihlásit</button>
+</form>
+{% endblock %}
