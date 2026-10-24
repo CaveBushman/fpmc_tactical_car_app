@@ -850,12 +850,17 @@ class _MeshMapState extends State<MeshMap> {
             ),
           ),
           children: [
-            TileLayer(
-              urlTemplate: widget.tileSource.urlTemplate,
-              maxNativeZoom: widget.tileSource.maxZoom,
-              userAgentPackageName: 'first_pmc_tactical_car_app',
-              tileProvider: _tileProvider,
-              tileBuilder: _tacticalTileBuilder,
+            // One filter over the whole tile layer instead of a colour
+            // filter and an opacity per tile: each of those forced its own
+            // offscreen layer, dozens per frame while panning.
+            ColorFiltered(
+              colorFilter: _tacticalTileFilter,
+              child: TileLayer(
+                urlTemplate: widget.tileSource.urlTemplate,
+                maxNativeZoom: widget.tileSource.maxZoom,
+                userAgentPackageName: 'first_pmc_tactical_car_app',
+                tileProvider: _tileProvider,
+              ),
             ),
             if (widget.showGrid) const MgrsGridLayer(),
             PolylineLayer(
@@ -1071,37 +1076,14 @@ class _MeshMapState extends State<MeshMap> {
   }
 }
 
-Widget _tacticalTileBuilder(
-  BuildContext context,
-  Widget tileWidget,
-  TileImage tile,
-) {
-  return ColorFiltered(
-    colorFilter: const ColorFilter.matrix([
-      0.62,
-      0.18,
-      0.10,
-      0,
-      -18,
-      0.12,
-      0.58,
-      0.12,
-      0,
-      -16,
-      0.10,
-      0.18,
-      0.50,
-      0,
-      -18,
-      0,
-      0,
-      0,
-      1,
-      0,
-    ]),
-    child: Opacity(opacity: 0.86, child: tileWidget),
-  );
-}
+/// Muted, darkened tiles; the former 0.86 opacity over the black map
+/// background is folded into the matrix (colour rows × 0.86).
+const _tacticalTileFilter = ColorFilter.matrix([
+  0.62 * 0.86, 0.18 * 0.86, 0.10 * 0.86, 0, -18 * 0.86, //
+  0.12 * 0.86, 0.58 * 0.86, 0.12 * 0.86, 0, -16 * 0.86, //
+  0.10 * 0.86, 0.18 * 0.86, 0.50 * 0.86, 0, -18 * 0.86, //
+  0, 0, 0, 1, 0, //
+]);
 
 class MapNodeMarker extends StatelessWidget {
   const MapNodeMarker({

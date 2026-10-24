@@ -2224,7 +2224,29 @@ class TacticalController extends ChangeNotifier {
     }
   }
 
-  Future<void> _persistState() async {
+  Future<void>? _saving;
+  bool _saveAgain = false;
+
+  /// Saves the state, one save at a time: requests arriving during a save
+  /// are merged into one more save with the newest state. The returned
+  /// future completes once that state is written.
+  Future<void> _persistState() {
+    _saveAgain = true;
+    return _saving ??= _saveLoop();
+  }
+
+  Future<void> _saveLoop() async {
+    try {
+      while (_saveAgain) {
+        _saveAgain = false;
+        await _saveSnapshot();
+      }
+    } finally {
+      _saving = null;
+    }
+  }
+
+  Future<void> _saveSnapshot() async {
     final session = _session;
     if (session == null) {
       return;

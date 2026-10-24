@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math' as math;
 
 import 'package:cryptography/cryptography.dart';
@@ -132,6 +133,10 @@ class TacticalStateStore {
     return state;
   }
 
+  /// States larger than this (in JSON characters) are sealed in a
+  /// background isolate.
+  static const backgroundThreshold = 32 * 1024;
+
   Future<void> save({
     required List<Map<String, dynamic>> nodes,
     required List<Map<String, dynamic>> messages,
@@ -153,7 +158,16 @@ class TacticalStateStore {
       'events': events,
       'extras': extras,
     };
-    await prefs.setString(key, await _encrypt(jsonEncode(payload)));
+    final keyBytes = await _loadOrCreateKey();
+    final clear = jsonEncode(payload);
+    final aad = key;
+    // AES-GCM of a full mission (thousands of trail points) takes tens of
+    // milliseconds even on a desktop: off the UI isolate it no longer drops
+    // frames. Small states are cheaper to seal here than to spawn for.
+    final sealed = clear.length > backgroundThreshold
+        ? await Isolate.run(() => _seal(clear, keyBytes, aad))
+        : await _seal(clear, keyBytes, aad);
+    await prefs.setString(key, sealed);
   }
 
   Future<void> clear() async {
@@ -163,11 +177,16 @@ class TacticalStateStore {
     await _keys.deleteKey();
   }
 
-  Future<String> _encrypt(String clear) async {
+  /// Runs in a background isolate: everything it touches is passed in.
+  static Future<String> _seal(
+    String clear,
+    List<int> keyBytes,
+    String aad,
+  ) async {
     final box = await _cipher.encrypt(
       utf8.encode(clear),
-      secretKey: SecretKey(await _loadOrCreateKey()),
-      aad: utf8.encode(key),
+      secretKey: SecretKey(keyBytes),
+      aad: utf8.encode(aad),
     );
     return base64Encode(box.concatenation());
   }
