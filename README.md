@@ -8,6 +8,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 
 - Ranger Green dark tactical UI.
 - Real OpenStreetMap raster map with local Flutter map tile cache.
+- True MGRS/UTM grid overlay (1 km / 10 km / 100 km by zoom, principal-digit labels; switchable). Tap the map for the point's MGRS, coordinates and azimuth/distance from you, then save it as a waypoint or send it to the group.
 - Team map with live GPS own position (follow mode + recenter), demo baseline nodes, Meshtastic packet updates, links, range circles, and tactical grid overlay.
 - Own position panel with fully readable MGRS fields, latitude, longitude, altitude.
 - Local and UTC clock.

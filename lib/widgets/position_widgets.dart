@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
+import '../models/geo.dart' as geo;
 import '../models/mesh_node.dart';
 import '../services/location_service.dart';
 import '../theme.dart';
@@ -258,4 +260,94 @@ class _MgrsField {
 
   final String label;
   final String value;
+}
+
+/// Details of a point tapped on the map: MGRS, coordinates and the
+/// azimuth/distance from the own position.
+class PointInfoCard extends StatelessWidget {
+  const PointInfoCard({
+    required this.point,
+    required this.from,
+    required this.onClose,
+    this.onSave,
+    this.onShare,
+    super.key,
+  });
+
+  final LatLng point;
+  final LatLng from;
+  final VoidCallback onClose;
+  final VoidCallback? onSave;
+  final VoidCallback? onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final km = geo.distanceKm(from, point);
+    final azimuth = geo.bearingDeg(from, point);
+    return Card(
+      key: const ValueKey('point-info'),
+      color: Colors.black.withValues(alpha: 0.86),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    geo.formatMgrs(point.latitude, point.longitude),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Zavřít',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close, size: 20),
+                ),
+              ],
+            ),
+            Text(
+              '${point.latitude.toStringAsFixed(6)}, '
+              '${point.longitude.toStringAsFixed(6)}',
+              style: const TextStyle(color: sand, fontFamily: 'monospace'),
+            ),
+            Text(
+              'AZ ${azimuth.toStringAsFixed(0).padLeft(3, '0')}° · '
+              '${km < 1 ? '${(km * 1000).round()} m' : '${km.toStringAsFixed(2)} km'} od tebe',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              children: [
+                if (onSave != null)
+                  TextButton.icon(
+                    onPressed: onSave,
+                    icon: const Icon(Icons.add_location_alt_outlined, size: 18),
+                    label: const Text('Uložit bod'),
+                  ),
+                if (onShare != null)
+                  TextButton.icon(
+                    onPressed: onShare,
+                    icon: const Icon(Icons.send, size: 18),
+                    label: const Text('Poslat skupině'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

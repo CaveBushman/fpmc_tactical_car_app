@@ -33,6 +33,12 @@ class SettingsStore {
   Future<void> setSharePositionToMesh(bool value) =>
       _set((prefs) => prefs.setBool('${prefix}sharePositionToMesh', value));
 
+  Future<bool> mgrsGrid() async =>
+      await _get((prefs) => prefs.getBool('${prefix}mgrsGrid')) ?? true;
+
+  Future<void> setMgrsGrid(bool value) =>
+      _set((prefs) => prefs.setBool('${prefix}mgrsGrid', value));
+
   /// Last communication group chosen by [userName].
   Future<String?> groupFor(String userName) =>
       _get((prefs) => prefs.getString('${prefix}group.$userName'));

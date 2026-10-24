@@ -25,6 +25,8 @@ class SystemsPage extends StatelessWidget {
     this.onPttReconnect,
     this.nightMode = false,
     this.onNightModeChanged,
+    this.mgrsGrid = true,
+    this.onMgrsGridChanged,
     this.sharePositionToMesh = true,
     this.onSharePositionToMeshChanged,
     this.trackPoints = 0,
@@ -55,6 +57,8 @@ class SystemsPage extends StatelessWidget {
   final VoidCallback? onPttReconnect;
   final bool nightMode;
   final ValueChanged<bool>? onNightModeChanged;
+  final bool mgrsGrid;
+  final ValueChanged<bool>? onMgrsGridChanged;
   final bool sharePositionToMesh;
   final ValueChanged<bool>? onSharePositionToMeshChanged;
   final int trackPoints;
@@ -161,6 +165,14 @@ class SystemsPage extends StatelessWidget {
             MonoLine(
               label: 'Aktuálně',
               value: '${(fontScale * 100).round()} %',
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: mgrsGrid,
+              onChanged: onMgrsGridChanged,
+              secondary: const Icon(Icons.grid_4x4),
+              title: const Text('Mřížka MGRS na mapě'),
+              subtitle: const Text('1 km / 10 km / 100 km podle přiblížení'),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

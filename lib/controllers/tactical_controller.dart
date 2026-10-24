@@ -435,6 +435,7 @@ class TacticalController extends ChangeNotifier {
     _volumeKeyPtt = false;
     _nightMode = false;
     _sharePositionToMesh = true;
+    _mgrsGrid = true;
     unawaited(_nativePtt.setVolumeKeyPtt(false));
     _notify();
   }
@@ -480,6 +481,7 @@ class TacticalController extends ChangeNotifier {
     final volumeKey = await settings.volumeKeyPtt();
     _nightMode = await settings.nightMode();
     _sharePositionToMesh = await settings.sharePositionToMesh();
+    _mgrsGrid = await settings.mgrsGrid();
     if (_disposed) {
       return;
     }
@@ -527,6 +529,27 @@ class TacticalController extends ChangeNotifier {
 
   bool _nightMode = false;
   bool _sharePositionToMesh = true;
+  bool _mgrsGrid = true;
+
+  /// MGRS/UTM grid lines on the map.
+  bool get mgrsGrid => _mgrsGrid;
+
+  void setMgrsGrid(bool enabled) {
+    _mgrsGrid = enabled;
+    unawaited(settings.setMgrsGrid(enabled));
+    _notify();
+  }
+
+  /// Sends a map point to the selected group in a readable format.
+  Future<void> sharePoint(LatLng point) => sendMeshText(
+    MeshMessageDraft(
+      text:
+          'BOD | MGRS ${geo.formatMgrs(point.latitude, point.longitude)} | '
+          'LAT ${point.latitude.toStringAsFixed(6)} | '
+          'LON ${point.longitude.toStringAsFixed(6)}',
+      groupId: selectedGroup.id,
+    ),
+  );
   DateTime? _lastMeshPositionAt;
   LatLng? _lastMeshPosition;
 

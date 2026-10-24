@@ -69,6 +69,7 @@ class _CarModeScreenState extends State<CarModeScreen> {
               tileSource: widget.offlineMaps.source,
               offlineStore: widget.offlineMaps.store,
               track: [for (final point in controller.track) point.latLng],
+              showGrid: controller.mgrsGrid,
             );
             final panel = Column(
               children: [

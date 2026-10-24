@@ -11,6 +11,7 @@ import '../services/offline_tiles/tile_math.dart';
 import '../services/offline_tiles/tile_source.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/mgrs_grid_layer.dart';
 import '../widgets/navigation_widgets.dart';
 import '../widgets/node_widgets.dart';
 import '../widgets/position_widgets.dart';
@@ -31,6 +32,8 @@ class MapPage extends StatefulWidget {
     this.offlineStore,
     this.onVisibleBoundsChanged,
     this.track = const [],
+    this.showGrid = true,
+    this.onSharePoint,
     this.locationState = LocationState.idle,
     this.channelLabel = 'ALPHA',
     this.showDetailsSheet = true,
@@ -47,6 +50,10 @@ class MapPage extends StatefulWidget {
   final OfflineTileStore? offlineStore;
   final ValueChanged<TileBounds>? onVisibleBoundsChanged;
   final List<LatLng> track;
+  final bool showGrid;
+
+  /// Sends an inspected map point to the group.
+  final ValueChanged<LatLng>? onSharePoint;
   final LocationState locationState;
   final String channelLabel;
 
@@ -62,6 +69,9 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   bool? _positionExpanded;
+
+  /// Point tapped on the map, shown in an info card.
+  LatLng? _inspected;
 
   Future<void> _createWaypointAt(LatLng point) async {
     final draft = await showModalBottomSheet<WaypointDraft>(
@@ -115,8 +125,34 @@ class _MapPageState extends State<MapPage> {
                 offlineStore: widget.offlineStore,
                 onVisibleBoundsChanged: widget.onVisibleBoundsChanged,
                 track: widget.track,
+                showGrid: widget.showGrid,
+                onTap: (point) => setState(() => _inspected = point),
               ),
             ),
+            if (_inspected != null)
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: (showSheet ? MapPage.sheetPeekHeight : 0) + 8,
+                child: PointInfoCard(
+                  point: _inspected!,
+                  from: self.latLng,
+                  onClose: () => setState(() => _inspected = null),
+                  onSave: widget.onCreateWaypoint == null
+                      ? null
+                      : () {
+                          final point = _inspected!;
+                          setState(() => _inspected = null);
+                          _createWaypointAt(point);
+                        },
+                  onShare: widget.onSharePoint == null
+                      ? null
+                      : () {
+                          widget.onSharePoint!(_inspected!);
+                          setState(() => _inspected = null);
+                        },
+                ),
+              ),
             Positioned(
               left: 8,
               top: 8,
@@ -347,12 +383,18 @@ class MeshMap extends StatefulWidget {
     this.offlineStore,
     this.onVisibleBoundsChanged,
     this.track = const [],
+    this.showGrid = true,
+    this.onTap,
     super.key,
   });
 
   final List<MeshNode> nodes;
   final List<TacticalWaypoint> waypoints;
   final ValueChanged<LatLng>? onLongPress;
+
+  /// MGRS/UTM grid overlay.
+  final bool showGrid;
+  final ValueChanged<LatLng>? onTap;
 
   /// Own recorded trail, drawn under the markers.
   final List<LatLng> track;
@@ -424,6 +466,9 @@ class _MeshMapState extends State<MeshMap> {
             onLongPress: widget.onLongPress == null
                 ? null
                 : (_, point) => widget.onLongPress!(point),
+            onTap: widget.onTap == null
+                ? null
+                : (_, point) => widget.onTap!(point),
             onPositionChanged: (camera, hasGesture) {
               final bounds = camera.visibleBounds;
               widget.onVisibleBoundsChanged?.call(
@@ -459,6 +504,7 @@ class _MeshMapState extends State<MeshMap> {
               tileProvider: _tileProvider,
               tileBuilder: _tacticalTileBuilder,
             ),
+            if (widget.showGrid) const MgrsGridLayer(),
             PolylineLayer(
               polylines: [
                 if (widget.track.length > 1)
@@ -525,7 +571,6 @@ class _MeshMapState extends State<MeshMap> {
             ),
           ],
         ),
-        const Positioned.fill(child: TacticalMapGrid()),
         Positioned(
           left: 12,
           bottom: 36,
@@ -583,42 +628,6 @@ Widget _tacticalTileBuilder(
     ]),
     child: Opacity(opacity: 0.86, child: tileWidget),
   );
-}
-
-class TacticalMapGrid extends StatelessWidget {
-  const TacticalMapGrid({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: CustomPaint(
-        painter: TacticalMapGridPainter(),
-        child: const SizedBox.expand(),
-      ),
-    );
-  }
-}
-
-class TacticalMapGridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bg = Paint()..color = Colors.black.withValues(alpha: 0.18);
-    canvas.drawRect(Offset.zero & size, bg);
-
-    final gridPaint = Paint()
-      ..color = rangerGreen.withValues(alpha: 0.28)
-      ..strokeWidth = 1;
-    const gridStep = 42.0;
-    for (double x = 0; x < size.width; x += gridStep) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
-    }
-    for (double y = 0; y < size.height; y += gridStep) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant TacticalMapGridPainter oldDelegate) => false;
 }
 
 class MapNodeMarker extends StatelessWidget {
