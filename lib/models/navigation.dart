@@ -178,6 +178,30 @@ class NavTarget {
     ).where(matches).firstOrNull;
   }
 
+  Map<String, dynamic> toJson() => {
+    'node': ?nodeNum,
+    'waypoint': ?waypointCode,
+    if (point case final p?) ...{'lat': p.latitude, 'lon': p.longitude},
+  };
+
+  /// Null for anything unreadable.
+  static NavTarget? fromJson(Map<String, dynamic> json) {
+    final node = (json['node'] as num?)?.toInt();
+    if (node != null) {
+      return NavTarget.node(node);
+    }
+    final code = json['waypoint'];
+    if (code is String && code.isNotEmpty) {
+      return NavTarget.waypoint(code);
+    }
+    final lat = (json['lat'] as num?)?.toDouble();
+    final lon = (json['lon'] as num?)?.toDouble();
+    if (lat != null && lon != null && lat.abs() <= 90 && lon.abs() <= 180) {
+      return NavTarget.point(LatLng(lat, lon));
+    }
+    return null;
+  }
+
   bool matches(TacticalNavSolution solution) =>
       (nodeNum != null && solution.nodeNum == nodeNum) ||
       (waypointCode != null && solution.waypoint?.code == waypointCode);

@@ -10,6 +10,7 @@
 - Rendezvous at a point and time with a countdown and a warning when the
   trip takes longer than the time left.
 - Fixed: next-day times were an hour off across a daylight saving change.
+- Navigation target, rendezvous and member statuses survive a restart.
 
 ## 1.2.0 (build 3) – 2026-10-24
 

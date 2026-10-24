@@ -638,6 +638,7 @@ class TacticalController extends ChangeNotifier {
       _navTarget?.resolve(self: selfNode, nodes: nodes, waypoints: _waypoints);
 
   void navigateTo(NavTarget target) {
+    unawaited(Future(_persistState));
     _navTarget = target;
     final solution = navTarget;
     if (solution != null) {
@@ -647,6 +648,7 @@ class TacticalController extends ChangeNotifier {
   }
 
   void clearNavTarget() {
+    unawaited(Future(_persistState));
     _navTarget = null;
     _notify();
   }
@@ -1221,6 +1223,7 @@ class TacticalController extends ChangeNotifier {
     }
     final callSign = selfNode.callSign;
     _statuses.report(callSign, status, DateTime.now());
+    unawaited(_persistState());
     _log(MissionEventKind.status, 'Můj stav: ${status.label}');
     _notify();
     await sendMeshText(
@@ -1642,6 +1645,7 @@ class TacticalController extends ChangeNotifier {
       setBy: selfNode.callSign,
     );
     _rendezvous = meeting;
+    unawaited(_persistState());
     _log(
       MissionEventKind.navigation,
       'Sraz ${meeting.code} v ${meeting.clock}',
@@ -1671,6 +1675,7 @@ class TacticalController extends ChangeNotifier {
 
   /// Hides a meeting someone else set, here only.
   void dismissRendezvous() {
+    unawaited(Future(_persistState));
     _rendezvous = null;
     _notify();
   }
@@ -2174,6 +2179,7 @@ class TacticalController extends ChangeNotifier {
       }
       // Events logged since this login are newer than the snapshot.
       _missionLog.appendRestored(restoredEvents);
+      _restoreExtras(snapshot.extras);
       _notify();
       final liveFix = _locationState.lastFix;
       if (liveFix != null) {
@@ -2181,6 +2187,40 @@ class TacticalController extends ChangeNotifier {
       }
     } catch (_) {
       // Ignore corrupt or incompatible local state and keep demo defaults.
+    }
+  }
+
+  /// Navigation target, rendezvous and statuses from the last session,
+  /// unless something newer happened since login or they are stale.
+  void _restoreExtras(Map<String, dynamic>? extras) {
+    if (extras == null) {
+      return;
+    }
+    Map<String, dynamic>? map(Object? value) => value is Map
+        ? value.map((key, value) => MapEntry(key.toString(), value))
+        : null;
+    final target = map(extras['navTarget']);
+    if (_navTarget == null && target != null) {
+      final restored = NavTarget.fromJson(target);
+      if (restored?.resolve(
+            self: selfNode,
+            nodes: nodes,
+            waypoints: _waypoints,
+          ) !=
+          null) {
+        _navTarget = restored;
+      }
+    }
+    final meeting = map(extras['rendezvous']);
+    if (_rendezvous == null && meeting != null) {
+      final restored = Rendezvous.fromJson(meeting);
+      if (restored != null && !restored.isOverAt(_clock())) {
+        _rendezvous = restored;
+      }
+    }
+    final statuses = map(extras['statuses']);
+    if (statuses != null) {
+      _statuses.restore(statuses);
     }
   }
 
@@ -2199,6 +2239,11 @@ class TacticalController extends ChangeNotifier {
         waypoints: [for (final waypoint in _waypoints) waypoint.toJson()],
         track: _mission.toJson(),
         events: _missionLog.toJson(),
+        extras: {
+          'navTarget': ?_navTarget?.toJson(),
+          'rendezvous': ?_rendezvous?.toJson(),
+          'statuses': _statuses.toJson(),
+        },
         owner: session.userName,
       );
     } catch (_) {

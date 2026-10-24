@@ -14,6 +14,22 @@ class Rendezvous {
 
   bool isOverAt(DateTime now) => now.isAfter(at.add(graceAfter));
 
+  Map<String, dynamic> toJson() => {
+    'code': code,
+    'at': at.toUtc().toIso8601String(),
+    'setBy': setBy,
+  };
+
+  static Rendezvous? fromJson(Map<String, dynamic> json) {
+    final code = json['code'];
+    final at = DateTime.tryParse(json['at']?.toString() ?? '');
+    final setBy = json['setBy'];
+    if (code is! String || at == null || setBy is! String) {
+      return null;
+    }
+    return Rendezvous(code: code, at: at.toLocal(), setBy: setBy);
+  }
+
   String get clock => _clock(at);
 
   String get shareText => 'SRAZ | $code | $clock | $setBy';

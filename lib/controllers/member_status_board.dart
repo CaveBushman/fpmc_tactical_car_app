@@ -40,6 +40,33 @@ class MemberStatusBoard {
     return report != null && _acknowledged.add(_key(callSign, report));
   }
 
+  Map<String, dynamic> toJson() => {
+    for (final MapEntry(key: callSign, value: report) in _reports.entries)
+      callSign: {
+        'status': report.status.name,
+        'at': report.at.toUtc().toIso8601String(),
+      },
+  };
+
+  /// Adds saved reports; unreadable entries are skipped.
+  void restore(Map<String, dynamic> json) {
+    for (final MapEntry(key: callSign, :value) in json.entries) {
+      if (value is! Map) {
+        continue;
+      }
+      final status = MemberStatus.values
+          .where((status) => status.name == value['status'])
+          .firstOrNull;
+      final at = DateTime.tryParse(value['at']?.toString() ?? '');
+      if (status != null && at != null) {
+        _reports.putIfAbsent(
+          callSign,
+          () => MemberStatusReport(status: status, at: at.toLocal()),
+        );
+      }
+    }
+  }
+
   void clear() {
     _reports.clear();
     _acknowledged.clear();

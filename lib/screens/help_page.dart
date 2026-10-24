@@ -212,7 +212,8 @@ const helpTopics = [
     'Nastavení a zařízení',
     'Mise a deník',
     'Systém → Mise: stopa, deník událostí (SOS, stavy, výstrahy, body) a '
-        'export mise do GPX a CSV.',
+        'export mise do GPX a CSV. Po restartu telefonu nebo aplikace se '
+        'po přihlášení obnoví i zprávy, body, navigace, sraz a stavy týmu.',
   ),
   // Bezpečnost
   HelpTopic(
