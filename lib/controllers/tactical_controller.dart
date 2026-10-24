@@ -25,11 +25,13 @@ import 'battery_watch.dart';
 import 'contact_watch.dart';
 import 'danger_proximity.dart';
 import 'member_status_board.dart';
+import 'mission_log.dart';
 import 'mission_recorder.dart';
 import 'peer_trails.dart';
 import 'ptt_controller.dart';
 import 'session_keeper.dart';
 import 'sos_coordinator.dart';
+import 'unread_counter.dart';
 import 'user_preferences.dart';
 import '../services/location_service.dart';
 import '../services/mesh_packet_repository.dart';
@@ -148,19 +150,14 @@ class TacticalController extends ChangeNotifier {
 
   // --- Mission log ---------------------------------------------------------------
 
-  static const _maxEvents = 500;
-  final List<MissionEvent> _events = [];
+  final MissionLog _missionLog = MissionLog();
 
   /// Notable events of this mission, newest first.
-  List<MissionEvent> get missionEvents => List.unmodifiable(_events);
+  List<MissionEvent> get missionEvents => _missionLog.events;
 
   void _log(MissionEventKind kind, String text) {
-    if (_session == null) {
-      return;
-    }
-    _events.insert(0, MissionEvent(at: _clock(), kind: kind, text: text));
-    if (_events.length > _maxEvents) {
-      _events.removeLast();
+    if (_session != null) {
+      _missionLog.add(MissionEvent(at: _clock(), kind: kind, text: text));
     }
   }
 
@@ -410,7 +407,7 @@ class TacticalController extends ChangeNotifier {
   Future<void> exportMission() async {
     try {
       await _mission.export(
-        events: _events,
+        events: _missionLog.events,
         callSign: selfNode.callSign,
         waypoints: _waypoints,
         messages: _messages,
@@ -429,7 +426,7 @@ class TacticalController extends ChangeNotifier {
     _contactWatch.clear();
     _batteryWatch.clear();
     _speedKmh = null;
-    _events.clear();
+    _missionLog.clear();
     _courseDeg = null;
     _statuses.clear();
     _sos.reset();
@@ -817,15 +814,14 @@ class TacticalController extends ChangeNotifier {
 
   // --- Unread messages ---------------------------------------------------------
 
-  final Map<String, int> _unread = {};
+  final UnreadCounter _unread = UnreadCounter();
   bool _messagesVisible = false;
 
   /// Incoming messages in [groupId] not yet seen on the Messages tab.
-  int unreadIn(String groupId) => _unread[groupId] ?? 0;
+  int unreadIn(String groupId) => _unread.countIn(groupId);
 
   /// Unread messages over all groups this user is in.
-  int get unreadTotal =>
-      allowedGroups.fold(0, (sum, group) => sum + unreadIn(group.id));
+  int get unreadTotal => _unread.total(allowedGroups.map((group) => group.id));
 
   /// Set by the app shell: the Messages tab is on screen, showing the
   /// selected group.
@@ -838,7 +834,7 @@ class TacticalController extends ChangeNotifier {
     if (_messagesVisible &&
         _appInForeground &&
         _session != null &&
-        _unread.remove(selectedGroup.id) != null) {
+        _unread.markRead(selectedGroup.id)) {
       _notify();
     }
   }
@@ -847,7 +843,7 @@ class TacticalController extends ChangeNotifier {
     if (_messagesVisible && _appInForeground && groupId == selectedGroup.id) {
       return;
     }
-    _unread[groupId] = unreadIn(groupId) + 1;
+    _unread.add(groupId);
   }
 
   void _onPttChanged() {
@@ -2053,7 +2049,7 @@ class TacticalController extends ChangeNotifier {
         _mission.replace(restoredTrack);
       }
       // Events logged since this login are newer than the snapshot.
-      _events.addAll(restoredEvents.take(_maxEvents - _events.length));
+      _missionLog.appendRestored(restoredEvents);
       _notify();
       final liveFix = _locationState.lastFix;
       if (liveFix != null) {
@@ -2078,7 +2074,7 @@ class TacticalController extends ChangeNotifier {
         messages: [for (final message in _messages.take(150)) message.toJson()],
         waypoints: [for (final waypoint in _waypoints) waypoint.toJson()],
         track: _mission.toJson(),
-        events: [for (final event in _events) event.toJson()],
+        events: _missionLog.toJson(),
         owner: session.userName,
       );
     } catch (_) {
