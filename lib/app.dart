@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'controllers/offline_maps_controller.dart';
 import 'controllers/tactical_controller.dart';
+import 'screens/car_mode_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/map_page.dart';
 import 'screens/messages_page.dart';
@@ -103,7 +104,8 @@ class TacticalHomeScreen extends StatefulWidget {
   State<TacticalHomeScreen> createState() => _TacticalHomeScreenState();
 }
 
-class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
+class _TacticalHomeScreenState extends State<TacticalHomeScreen>
+    with WidgetsBindingObserver {
   late final TacticalController _controller;
   late final OfflineMapsController _offlineMaps;
   late final StreamSubscription<String> _noticeSubscription;
@@ -112,6 +114,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = TacticalController(
       locationService: widget.locationService,
       meshPacketRepository: widget.meshPacketRepository,
@@ -136,7 +139,13 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _controller.setAppInForeground(state == AppLifecycleState.resumed);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_noticeSubscription.cancel());
     _controller.dispose();
     _offlineMaps.dispose();
@@ -204,6 +213,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         meshConnected: controller.meshConnected,
         ptt: ptt,
         onPttReconnect: controller.reconnectPtt,
+        volumeKeyPtt: controller.volumeKeyPtt,
+        onVolumeKeyPttChanged: controller.setVolumeKeyPtt,
         onBleConnect: controller.connectRadio,
         bleState: controller.bleState,
         packetDiagnostics: controller.packetDiagnostics,
@@ -242,8 +253,19 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
             meshConnected: controller.meshConnected,
             voiceOnline: controller.voiceOnline,
             pttActive: controller.pttActive,
+            dense: narrow,
           ),
-          SizedBox(width: narrow ? 2 : 8),
+          IconButton(
+            tooltip: 'Režim auta',
+            visualDensity: VisualDensity.compact,
+            padding: narrow ? EdgeInsets.zero : null,
+            constraints: narrow
+                ? const BoxConstraints(minWidth: 30, minHeight: 40)
+                : null,
+            iconSize: narrow ? 22 : null,
+            onPressed: _openCarMode,
+            icon: const Icon(Icons.directions_car_filled_outlined),
+          ),
           UserSessionChip(
             session: session,
             onLogout: _confirmLogout,
@@ -334,6 +356,18 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
   }
 
   void _selectTab(int index) => setState(() => _selectedIndex = index);
+
+  void _openCarMode() {
+    unawaited(
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) =>
+              CarModeScreen(controller: _controller, offlineMaps: _offlineMaps),
+        ),
+      ),
+    );
+  }
 
   Future<void> _confirmLogout() async {
     final confirmed = await showDialog<bool>(

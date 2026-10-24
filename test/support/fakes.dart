@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:tactical_car_app/services/backend_client.dart';
 import 'package:tactical_car_app/services/location_service.dart';
 import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
+import 'package:tactical_car_app/services/native_bridges.dart';
 import 'package:tactical_car_app/services/ptt/voice_transport.dart';
 
 class FakeLocationService implements LocationService {
@@ -124,3 +125,56 @@ PttJoinInfo fakeJoinInfo({String identity = 'operator', int keyId = 3}) =>
         GroupKeyMaterial(id: keyId, bytes: List.filled(32, 2)),
       ],
     );
+
+class FakeNativePttBridge implements NativePttBridge {
+  final StreamController<NativePttButton> buttonController =
+      StreamController.broadcast();
+  final List<String> calls = [];
+  bool volumeKeyPtt = false;
+
+  @override
+  Stream<NativePttButton> get buttons => buttonController.stream;
+
+  @override
+  Stream<String> get errors => const Stream.empty();
+
+  @override
+  Future<void> show({required String channel, required String status}) async =>
+      calls.add('show $channel $status');
+
+  @override
+  Future<void> hide() async => calls.add('hide');
+
+  @override
+  Future<void> setVolumeKeyPtt(bool enabled) async => volumeKeyPtt = enabled;
+}
+
+class FakeCarBridge implements CarBridge {
+  final StreamController<CarReply> replyController =
+      StreamController.broadcast();
+  List<CarTargetData> targets = const [];
+  int targetUpdates = 0;
+  final List<String> notifications = [];
+  int clears = 0;
+
+  @override
+  Stream<CarReply> get replies => replyController.stream;
+
+  @override
+  Future<void> updateTargets(List<CarTargetData> targets) async {
+    this.targets = targets;
+    targetUpdates++;
+  }
+
+  @override
+  Future<void> notifyMessage({
+    required String groupId,
+    required String groupName,
+    required String sender,
+    required String body,
+    required DateTime sentAt,
+  }) async => notifications.add('$groupId $sender: $body');
+
+  @override
+  Future<void> clearMessages() async => clears++;
+}

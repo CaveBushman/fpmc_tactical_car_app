@@ -43,3 +43,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Android Auto (Car App Library) and MessagingStyle notifications.
+    implementation("androidx.car.app:app:1.7.0")
+    implementation("androidx.core:core:1.17.0")
+}

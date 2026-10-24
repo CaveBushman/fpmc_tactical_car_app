@@ -12,6 +12,9 @@ import 'support/fakes.dart';
 import 'support/mesh_bytes.dart';
 
 void main() {
+  // Platform channels (native PTT / car bridges) need the binding.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late FakeLocationService location;
   late FakeBleService ble;
   late MeshPacketRepository repository;

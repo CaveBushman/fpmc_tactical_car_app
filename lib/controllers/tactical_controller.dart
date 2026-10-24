@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../models/mesh_node.dart';
 import '../models/messaging.dart';
@@ -9,6 +10,7 @@ import '../models/navigation.dart';
 import '../models/reports.dart';
 import '../services/auth_service.dart';
 import '../services/backend_client.dart';
+import '../services/native_bridges.dart';
 import '../services/ptt/livekit_voice_transport.dart';
 import '../services/ptt/voice_transport.dart';
 import 'ptt_controller.dart';
@@ -31,8 +33,12 @@ class TacticalController extends ChangeNotifier {
     TacticalStateStore? stateStore,
     BackendClient? backend,
     VoiceTransport Function()? voiceTransportFactory,
+    NativePttBridge? nativePtt,
+    CarBridge? carBridge,
     Duration agingTick = const Duration(seconds: 15),
   }) : _backend = backend,
+       _nativePtt = nativePtt ?? NativePttBridge.platform(),
+       _carBridge = carBridge ?? CarBridge.platform(),
        _authService =
            authService ??
            (backend == null ? AuthService() : RemoteAuthService(backend)),
@@ -52,7 +58,12 @@ class TacticalController extends ChangeNotifier {
     _ptt = PttController(
       joiner: backend == null ? null : _joinPtt,
       transportFactory: voiceTransportFactory ?? LiveKitVoiceTransport.new,
-    )..addListener(_notify);
+    )..addListener(_onPttChanged);
+    _nativeButtonSubscription = _nativePtt.buttons.listen(_onNativeButton);
+    _nativeErrorSubscription = _nativePtt.errors.listen(
+      (error) => _notice('PTT na pozadí nelze spustit ($error).'),
+    );
+    _carReplySubscription = _carBridge.replies.listen(_onCarReply);
     _blePacketSubscription = _meshtasticBleService.packets.listen(
       _meshPacketRepository.ingest,
     );
@@ -74,6 +85,15 @@ class TacticalController extends ChangeNotifier {
   }
 
   final BackendClient? _backend;
+  final NativePttBridge _nativePtt;
+  final CarBridge _carBridge;
+  late final StreamSubscription<NativePttButton> _nativeButtonSubscription;
+  late final StreamSubscription<String> _nativeErrorSubscription;
+  late final StreamSubscription<CarReply> _carReplySubscription;
+  bool _appInForeground = true;
+  bool _volumeKeyPtt = false;
+  String? _lastCarTargets;
+  String? _lastNativePttStatus;
   final AuthService _authService;
   late final PttController _ptt;
   final LocationService _locationService;
@@ -163,8 +183,14 @@ class TacticalController extends ChangeNotifier {
     unawaited(_meshtasticBleService.dispose());
     unawaited(_meshPacketRepository.dispose());
     _ptt
-      ..removeListener(_notify)
+      ..removeListener(_onPttChanged)
       ..dispose();
+    unawaited(_nativeButtonSubscription.cancel());
+    unawaited(_nativeErrorSubscription.cancel());
+    unawaited(_carReplySubscription.cancel());
+    if (_lastNativePttStatus != null) {
+      unawaited(_nativePtt.hide());
+    }
     _backend?.close();
     unawaited(_noticeController.close());
     super.dispose();
@@ -199,6 +225,9 @@ class TacticalController extends ChangeNotifier {
     _notify();
     await _authService.logout();
     await _ptt.leave();
+    unawaited(_carBridge.clearMessages());
+    unawaited(_carBridge.updateTargets(const []));
+    _lastCarTargets = null;
     await _locationService.stop();
     try {
       await _meshtasticBleService.disconnect();
@@ -244,6 +273,120 @@ class TacticalController extends ChangeNotifier {
   }
 
   Future<void> reconnectPtt() => _joinSelectedGroupPtt();
+
+  bool get volumeKeyPtt => _volumeKeyPtt;
+
+  /// Volume-down as hold-to-talk while the app is in front (Android).
+  void setVolumeKeyPtt(bool enabled) {
+    _volumeKeyPtt = enabled;
+    unawaited(_nativePtt.setVolumeKeyPtt(enabled));
+    _notify();
+  }
+
+  /// Set by the app shell; message notifications only when in background.
+  void setAppInForeground(bool value) => _appInForeground = value;
+
+  void _onPttChanged() {
+    _syncNativePtt();
+    _notify();
+  }
+
+  /// Mirrors PTT state into the Android foreground service notification;
+  /// the service runs whenever PTT is joined so audio survives screen-off.
+  void _syncNativePtt() {
+    final ptt = _ptt;
+    if (ptt.status == PttStatus.offline || ptt.isDemo) {
+      if (_lastNativePttStatus != null) {
+        _lastNativePttStatus = null;
+        unawaited(_nativePtt.hide());
+      }
+      return;
+    }
+    final status = switch (ptt.status) {
+      PttStatus.connecting => 'připojuji',
+      PttStatus.ready => 'připraveno',
+      PttStatus.transmitting => 'vysílám',
+      PttStatus.receiving => 'mluví ${ptt.speaker ?? '?'}',
+      PttStatus.error => ptt.error ?? 'chyba spojení',
+      PttStatus.offline => '',
+    };
+    final key = '${ptt.channel}|$status';
+    if (key == _lastNativePttStatus) {
+      return;
+    }
+    _lastNativePttStatus = key;
+    unawaited(_nativePtt.show(channel: ptt.channel, status: status));
+  }
+
+  void _onNativeButton(NativePttButton button) {
+    switch (button) {
+      case NativePttButton.down:
+        unawaited(_ptt.press());
+      case NativePttButton.up:
+        unawaited(_ptt.release());
+      case NativePttButton.toggle:
+        unawaited(
+          _ptt.status == PttStatus.transmitting ? _ptt.release() : _ptt.press(),
+        );
+    }
+  }
+
+  void _onCarReply(CarReply reply) {
+    if (_session == null ||
+        !allowedGroups.any((group) => group.id == reply.groupId)) {
+      return;
+    }
+    unawaited(
+      sendMeshText(MeshMessageDraft(text: reply.text, groupId: reply.groupId)),
+    );
+  }
+
+  /// Pushes the nearest/priority targets to Android Auto when they change.
+  void _syncCarTargets() {
+    if (_session == null) {
+      return;
+    }
+    final solutions = TacticalNavSolution.fromMission(
+      self: selfNode,
+      nodes: _nodes,
+      waypoints: _waypoints,
+    ).take(6);
+    final targets = [
+      for (final solution in solutions)
+        if (_targetPosition(solution) case final position?)
+          CarTargetData(
+            title: solution.label,
+            kind: solution.kind.label,
+            latitude: position.latitude,
+            longitude: position.longitude,
+            distanceKm: solution.distanceKm,
+            bearingDeg: solution.bearingDeg,
+            priority: solution.priority,
+          ),
+    ];
+    final signature = [
+      for (final t in targets)
+        '${t.title}:${t.distanceKm.toStringAsFixed(2)}:${t.bearingDeg.round()}',
+    ].join(',');
+    if (signature == _lastCarTargets) {
+      return;
+    }
+    _lastCarTargets = signature;
+    unawaited(_carBridge.updateTargets(targets));
+  }
+
+  LatLng? _targetPosition(TacticalNavSolution solution) {
+    final waypoint = solution.waypoint;
+    if (waypoint != null) {
+      return waypoint.latLng;
+    }
+    for (final node in _nodes) {
+      if (!node.isSelf && node.callSign == solution.label) {
+        return node.latLng;
+      }
+    }
+    return null;
+  }
 
   void selectGroup(int index) {
     final session = _session;
@@ -470,18 +613,28 @@ class TacticalController extends ChangeNotifier {
         ? group.name
         : 'DM ${_nodeCallSign(event.to) ?? _nodeHex(event.to)}';
     _applyStructuredText(text, sender: sender);
-    _messages.insert(
-      0,
-      MeshMessage(
-        sender: sender,
-        body: text,
-        sentAt: event.heardAt ?? DateTime.now(),
-        groupId: group.id,
-        targetLabel: target,
-        packetId: packetId,
-        fromNode: event.from,
-      ),
+    final message = MeshMessage(
+      sender: sender,
+      body: text,
+      sentAt: event.heardAt ?? DateTime.now(),
+      groupId: group.id,
+      targetLabel: target,
+      packetId: packetId,
+      fromNode: event.from,
     );
+    _messages.insert(0, message);
+    if (!_appInForeground &&
+        allowedGroups.any((allowed) => allowed.id == group.id)) {
+      unawaited(
+        _carBridge.notifyMessage(
+          groupId: group.id,
+          groupName: group.name,
+          sender: sender,
+          body: text,
+          sentAt: message.sentAt,
+        ),
+      );
+    }
     return true;
   }
 
@@ -868,6 +1021,7 @@ class TacticalController extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) {
+      _syncCarTargets();
       notifyListeners();
     }
   }

@@ -17,6 +17,8 @@ class SystemsPage extends StatelessWidget {
     required this.meshConnected,
     required this.ptt,
     this.onPttReconnect,
+    this.volumeKeyPtt = false,
+    this.onVolumeKeyPttChanged,
     required this.onBleConnect,
     required this.bleState,
     required this.packetDiagnostics,
@@ -33,6 +35,8 @@ class SystemsPage extends StatelessWidget {
   final bool meshConnected;
   final PttController ptt;
   final VoidCallback? onPttReconnect;
+  final bool volumeKeyPtt;
+  final ValueChanged<bool>? onVolumeKeyPttChanged;
   final VoidCallback onBleConnect;
   final MeshtasticBleState bleState;
   final MeshPacketDiagnostics packetDiagnostics;
@@ -214,6 +218,23 @@ class SystemsPage extends StatelessWidget {
                   : 'E2EE AES-GCM, klíč #${ptt.keyId}',
             ),
             if (ptt.error != null) MonoLine(label: 'Chyba', value: ptt.error!),
+            const MonoLine(
+              label: 'Na pozadí',
+              value: 'Android: služba s notifikací, iOS: background audio',
+            ),
+            const MonoLine(
+              label: 'HW tlačítko',
+              value: 'tlačítko headsetu = přepnout vysílání',
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: volumeKeyPtt,
+              onChanged: onVolumeKeyPttChanged,
+              title: const Text('Hlasitost dolů = PTT'),
+              subtitle: const Text(
+                'Držet pro vysílání, jen s otevřenou aplikací',
+              ),
+            ),
             if (!ptt.isDemo) ...[
               const SizedBox(height: 8),
               OutlinedButton.icon(

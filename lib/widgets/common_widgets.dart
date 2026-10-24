@@ -180,6 +180,7 @@ class StatusIcons extends StatelessWidget {
     required this.meshConnected,
     required this.voiceOnline,
     required this.pttActive,
+    this.dense = false,
     super.key,
   });
 
@@ -187,13 +188,16 @@ class StatusIcons extends StatelessWidget {
   final bool voiceOnline;
   final bool pttActive;
 
+  /// Tighter spacing for narrow phones.
+  final bool dense;
+
   @override
   Widget build(BuildContext context) {
     Widget icon(IconData data, String tooltip, Color color) => Tooltip(
       message: tooltip,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: Icon(data, size: 20, color: color),
+        padding: EdgeInsets.symmetric(horizontal: dense ? 1 : 3),
+        child: Icon(data, size: dense ? 18 : 20, color: color),
       ),
     );
     return Row(

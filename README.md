@@ -17,6 +17,10 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Quick `NA POZICI` message includes full MGRS, latitude, and longitude.
 - Hold-to-talk PTT over a self-hosted LiveKit server with end-to-end encrypted audio, half-duplex floor control (one speaker at a time, "MLUVÍ …" / "OBSAZENO") and per-group rooms. Without `BACKEND_URL` the app runs in demo mode with local accounts and silent PTT.
 - System screen with Meshtastic BLE, PTT server, and car mode status.
+- PTT keeps working with the screen off: Android foreground service (microphone type) with a notification PTT button, iOS background audio.
+- Hardware PTT: Bluetooth headset button toggles talking (also in background, Android); optional volume-down hold-to-talk while the app is open.
+- Car mode screen (car icon in the app bar): map, nearest target, last message, OK / NA POZICI / SOS and a large hold-to-talk button; keeps the display on.
+- Android Auto: POI screen with the nearest team members and mission points on the car map (tap to navigate), and incoming team messages as car-readable notifications with voice reply.
 - Adaptive portrait and landscape layouts.
 - Font size slider in system settings for all operational UI text except the main title.
 - Meshtastic BLE service using the official BLE service and ToRadio/FromRadio/FromNum characteristics.
@@ -87,11 +91,10 @@ Optional: `TILE_MAX_ZOOM` (default 18), `TILE_ALLOW_BULK=false` to disable packs
 ## Next Implementation Steps
 
 1. Replace the focused manual Meshtastic protobuf layer with generated classes when `protoc` is available in CI.
-2. Add offline map package management by operation area.
-3. Add Android foreground audio service and iOS audio session / CallKit so PTT works with the screen off.
-4. Add native Android Auto and CarPlay modules with restricted car-safe UI.
-5. Add server-side teams management UI, operation groups, device binding, and audit logs.
-6. Add end-to-end integration tests with recorded Meshtastic BLE packets.
+2. Named offline map packs per operation area (today: radius around own position).
+3. CarPlay (needs Apple entitlements, see `docs/carplay.md`).
+4. Add server-side teams management UI, operation groups, device binding, and audit logs.
+5. Add end-to-end integration tests with recorded Meshtastic BLE packets.
 
 ## PTT Backend and LiveKit
 

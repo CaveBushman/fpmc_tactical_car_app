@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<automotiveApp>
+    <!-- Car App Library screen (POI list on the car map). -->
+    <uses name="template" />
+    <!-- MessagingStyle notifications read aloud with voice reply. -->
+    <uses name="notification" />
+</automotiveApp>
