@@ -525,10 +525,18 @@ class WaypointCard extends StatelessWidget {
 /// Bottom sheet for a new waypoint at [position], or for changing type
 /// and note of [editing].
 class WaypointEditorSheet extends StatefulWidget {
-  const WaypointEditorSheet({required this.position, this.editing, super.key});
+  const WaypointEditorSheet({
+    required this.position,
+    this.editing,
+    this.isBase = false,
+    super.key,
+  });
 
   final LatLng position;
   final TacticalWaypoint? editing;
+
+  /// [editing] is the user's base.
+  final bool isBase;
 
   @override
   State<WaypointEditorSheet> createState() => _WaypointEditorSheetState();
@@ -544,6 +552,7 @@ class _WaypointEditorSheetState extends State<WaypointEditorSheet> {
   late TacticalWaypointType _type =
       widget.editing?.type ?? TacticalWaypointType.rally;
   bool _share = true;
+  late bool _isBase = widget.isBase;
 
   @override
   void dispose() {
@@ -616,6 +625,17 @@ class _WaypointEditorSheetState extends State<WaypointEditorSheet> {
               ),
             ),
             SwitchListTile(
+              key: const ValueKey('base-switch'),
+              contentPadding: EdgeInsets.zero,
+              value: _isBase,
+              onChanged: (value) => setState(() => _isBase = value),
+              secondary: const Icon(Icons.home_outlined),
+              title: const Text('Moje základna'),
+              subtitle: const Text(
+                'Jen v tomto zařízení; ostatním se neposílá',
+              ),
+            ),
+            SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: _share,
               onChanged: (value) => setState(() => _share = value),
@@ -635,6 +655,7 @@ class _WaypointEditorSheetState extends State<WaypointEditorSheet> {
                   note: _noteController.text,
                   share: _share,
                   editing: widget.editing,
+                  isBase: _isBase,
                 ),
               ),
               style: FilledButton.styleFrom(

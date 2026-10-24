@@ -45,6 +45,7 @@ class MapPage extends StatefulWidget {
     this.onClearNavTarget,
     this.peerTrails = const {},
     this.onClearOldWaypoints,
+    this.baseCode,
     this.speedKmh = TacticalNavSolution.walkingKmh,
     this.courseDeg,
     this.headingUp = false,
@@ -64,6 +65,9 @@ class MapPage extends StatefulWidget {
 
   /// Own speed for ETAs.
   final double speedKmh;
+
+  /// Code of the user's base point (drawn with a house).
+  final String? baseCode;
 
   /// Own direction of travel (GPS course), null before moving.
   final double? courseDeg;
@@ -142,8 +146,11 @@ class _MapPageState extends State<MapPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
       ),
-      builder: (context) =>
-          WaypointEditorSheet(position: point, editing: editing),
+      builder: (context) => WaypointEditorSheet(
+        position: point,
+        editing: editing,
+        isBase: editing != null && editing.code == widget.baseCode,
+      ),
     );
     if (draft != null) {
       widget.onCreateWaypoint?.call(draft);
@@ -240,6 +247,7 @@ class _MapPageState extends State<MapPage> {
                 focus: _focus,
                 onEnterCoordinates: () => _enterCoordinates(self.latLng),
                 peerTrails: widget.peerTrails,
+                baseCode: widget.baseCode,
                 courseDeg: widget.courseDeg,
                 statusOf: widget.statusOf,
                 headingUp: widget.headingUp,
@@ -576,8 +584,12 @@ class MeshMap extends StatefulWidget {
     this.headingUp = false,
     this.onHeadingUpChanged,
     this.statusOf,
+    this.baseCode,
     super.key,
   });
+
+  /// Code of the user's base point.
+  final String? baseCode;
 
   /// Peers' reported status by callsign.
   final MemberStatus? Function(String callSign)? statusOf;
@@ -864,7 +876,10 @@ class _MeshMapState extends State<MeshMap> {
                     // Old information steps back behind fresh reports.
                     child: Opacity(
                       opacity: waypoint.isStaleAt(DateTime.now()) ? 0.45 : 1,
-                      child: WaypointMapMarker(waypoint: waypoint),
+                      child: WaypointMapMarker(
+                        waypoint: waypoint,
+                        isBase: waypoint.code == widget.baseCode,
+                      ),
                     ),
                   ),
                 for (final node in nodes)
@@ -1120,9 +1135,16 @@ class MapNodeMarker extends StatelessWidget {
 }
 
 class WaypointMapMarker extends StatelessWidget {
-  const WaypointMapMarker({required this.waypoint, super.key});
+  const WaypointMapMarker({
+    required this.waypoint,
+    this.isBase = false,
+    super.key,
+  });
 
   final TacticalWaypoint waypoint;
+
+  /// The user's base: drawn with a house.
+  final bool isBase;
 
   @override
   Widget build(BuildContext context) {
@@ -1145,7 +1167,11 @@ class WaypointMapMarker extends StatelessWidget {
               ),
             ],
           ),
-          child: Icon(waypoint.icon, size: 15, color: color),
+          child: Icon(
+            isBase ? Icons.home : waypoint.icon,
+            size: 15,
+            color: color,
+          ),
         ),
         const SizedBox(height: 3),
         Container(

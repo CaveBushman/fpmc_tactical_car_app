@@ -365,6 +365,7 @@ class TacticalController extends ChangeNotifier {
               ),
           ];
     _selectedGroupIndex = await _preferredGroupIndex(session.userName);
+    _baseCode = await settings.baseFor(session.userName);
     _notify();
     if (_backend != null) {
       _sessionKeeper.schedule(session);
@@ -457,6 +458,7 @@ class TacticalController extends ChangeNotifier {
   Future<void> logout() async {
     // Drop the session first so no in-flight persist can rewrite the store.
     _sessionKeeper.cancel();
+    _baseCode = null;
     _session = null;
     _selectedGroupIndex = 0;
     _groups = CommunicationGroup.demoGroups;
@@ -1604,6 +1606,42 @@ class TacticalController extends ChangeNotifier {
     _notify();
     unawaited(_persistState());
     return updated;
+  }
+
+  // --- Base ------------------------------------------------------------------------
+
+  String? _baseCode;
+
+  /// The point this user marked as their base (kept on this device only).
+  TacticalWaypoint? get baseWaypoint {
+    final code = _baseCode;
+    return code == null
+        ? null
+        : _waypoints.where((w) => w.code == code).firstOrNull;
+  }
+
+  /// Marks [waypoint] as the base; null clears it.
+  void setBase(TacticalWaypoint? waypoint) {
+    final session = _session;
+    if (session == null || waypoint?.code == _baseCode) {
+      return;
+    }
+    _baseCode = waypoint?.code;
+    unawaited(settings.setBaseFor(session.userName, _baseCode));
+    if (waypoint != null) {
+      _log(MissionEventKind.navigation, 'Základna: ${waypoint.code}');
+    }
+    _notify();
+  }
+
+  /// Starts navigation to the base; false when none is set.
+  bool navigateToBase() {
+    final base = baseWaypoint;
+    if (base == null) {
+      return false;
+    }
+    navigateTo(NavTarget.waypoint(base.code));
+    return true;
   }
 
   /// Received points older than [TacticalWaypoint.oldAfter].

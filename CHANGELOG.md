@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Own base point: marked in the point editor, shown with a house and
+  offered first in the car-mode target list.
+
 ## 1.2.0 (build 3) – 2026-10-24
 
 - Lost contact alerts with navigation to the last known position.

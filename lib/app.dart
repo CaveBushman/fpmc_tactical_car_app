@@ -272,6 +272,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       navTarget: controller.navTarget,
       peerTrails: controller.peerTrails,
       onClearOldWaypoints: controller.clearOldReceivedWaypoints,
+      baseCode: controller.baseWaypoint?.code,
       speedKmh: controller.travelSpeedKmh,
       courseDeg: controller.courseDeg,
       statusOf: (callSign) => controller.statusOf(callSign)?.status,
@@ -296,6 +297,11 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
                 type: draft.type,
                 note: draft.note,
               );
+        if (draft.isBase) {
+          controller.setBase(waypoint);
+        } else if (controller.baseWaypoint?.code == waypoint.code) {
+          controller.setBase(null);
+        }
         if (draft.share) {
           unawaited(controller.shareWaypoint(waypoint));
         }

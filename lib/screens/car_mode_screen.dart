@@ -72,6 +72,7 @@ class _CarModeScreenState extends State<CarModeScreen> {
               offlineStore: widget.offlineMaps.store,
               track: [for (final point in controller.track) point.latLng],
               showGrid: controller.mgrsGrid,
+              baseCode: controller.baseWaypoint?.code,
               navTarget: controller.navTarget?.position,
               peerTrails: controller.peerTrails,
               courseDeg: controller.courseDeg,
@@ -323,11 +324,19 @@ class _CarPanel extends StatelessWidget {
     BuildContext context,
     List<TacticalNavSolution> solutions,
   ) async {
+    final base = controller.baseWaypoint;
     final options = solutions.take(12).toList();
     final index = await showBigChoices(
       context,
       title: 'Navigovat k',
       choices: [
+        if (base != null)
+          BigChoice(
+            label: 'ZÁKLADNA ${base.code}',
+            icon: Icons.home,
+            color: rangerGreen,
+            selected: controller.navTarget?.label == base.code,
+          ),
         for (final solution in options)
           BigChoice(
             label:
@@ -339,8 +348,13 @@ class _CarPanel extends StatelessWidget {
           ),
       ],
     );
-    if (index != null) {
-      controller.navigateTo(options[index].target);
+    if (index == null) {
+      return;
+    }
+    if (base != null && index == 0) {
+      controller.navigateToBase();
+    } else {
+      controller.navigateTo(options[index - (base == null ? 0 : 1)].target);
     }
   }
 

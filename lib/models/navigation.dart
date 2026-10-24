@@ -417,7 +417,11 @@ class WaypointDraft {
     this.note = '',
     this.share = false,
     this.editing,
+    this.isBase = false,
   });
+
+  /// Marked as the user's own base.
+  final bool isBase;
 
   /// The existing point this draft changes; null for a new point.
   final TacticalWaypoint? editing;

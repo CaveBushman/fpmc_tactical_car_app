@@ -105,6 +105,17 @@ class SettingsStore {
   Future<void> setGroupFor(String userName, String groupId) =>
       _set((prefs) => prefs.setString('${prefix}group.$userName', groupId));
 
+  /// Code of the point [userName] marked as their base.
+  Future<String?> baseFor(String userName) =>
+      _get((prefs) => prefs.getString('${prefix}base.$userName'));
+
+  /// Null clears the base.
+  Future<void> setBaseFor(String userName, String? code) => _set(
+    (prefs) => code == null
+        ? prefs.remove('${prefix}base.$userName')
+        : prefs.setString('${prefix}base.$userName', code),
+  );
+
   /// Removes every stored preference (emergency wipe).
   Future<void> clearAll() async {
     try {

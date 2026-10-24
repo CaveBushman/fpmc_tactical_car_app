@@ -47,6 +47,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Point age: received points show their age in the point list ("před 35 min"); points older than 1 h are drawn faded on the map. "Smazat staré přijaté body" in the point list deletes points from teammates older than 6 h after a confirmation (own points stay) and logs it.
 - ETA from your speed: navigation cards and the car-mode target row estimate the time to the target from the smoothed GPS speed (walking pace, 5 km/h, below 1.5 m/s), e.g. "12 min" or "1 h 25 min".
 - Low battery: when the own T-Beam or a teammate's drops to 20 % or below, a notice is shown once and logged; it warns again only after the battery was back above 30 %. Readings above 100 % (external power) never warn.
+- Base: "Moje základna" in the point editor marks a point as your base (kept on this device per user, never sent). It is drawn with a house and offered first as "ZÁKLADNA" in the car-mode target list.
 - Automatic night mode (System → Nastavení): night mode from the end of civil dusk to civil dawn at your position, computed offline. Switching night mode by hand turns the automatic mode off.
 - Car mode screen (car icon in the app bar): map, nearest target, last message, OK / NA POZICI / SOS and a large hold-to-talk button; keeps the display on.
 - Android Auto: POI screen with the nearest team members and mission points on the car map (tap to navigate), and incoming team messages as car-readable notifications with voice reply.
