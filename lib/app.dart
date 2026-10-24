@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'controllers/offline_maps_controller.dart';
 import 'controllers/tactical_controller.dart';
@@ -19,6 +20,7 @@ import 'services/mesh_radio.dart';
 import 'services/offline_tiles/tile_math.dart';
 import 'theme.dart';
 import 'widgets/common_widgets.dart';
+import 'widgets/sos_widgets.dart';
 
 /// Red, dimmed rendering that keeps night vision: luminance goes to the red
 /// channel only, at reduced intensity. Applied over the whole navigator,
@@ -170,6 +172,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       voiceTransportFactory: widget.voiceTransportFactory,
     );
     _controller.addListener(_syncNightMode);
+    _controller.addListener(_alertOnSos);
     _offlineMaps = widget.offlineMaps ?? OfflineMapsController();
     unawaited(_offlineMaps.init());
     _noticeSubscription = _controller.notices.listen((message) {
@@ -195,6 +198,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_syncNightMode);
+    _controller.removeListener(_alertOnSos);
     unawaited(_noticeSubscription.cancel());
     _controller.dispose();
     _offlineMaps.dispose();
@@ -259,6 +263,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         onGroupSelected: controller.selectGroup,
         onSend: controller.sendMeshText,
         onRetry: controller.retryMessage,
+        onSos: _toggleSos,
       ),
       SystemsPage(
         meshConnected: controller.meshConnected,
@@ -342,53 +347,67 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       body: SafeArea(
         child: _ScaledTextContent(
           fontScale: controller.fontScale,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final landscape =
-                  constraints.maxWidth > constraints.maxHeight &&
-                  constraints.maxWidth >= 720;
-              if (landscape) {
-                final fullMapMode = _selectedIndex == 0;
-                return Column(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Column(
+            children: [
+              SosBanners(
+                ownActive: controller.sosActive,
+                alerts: controller.activeSosAlerts,
+                onCancelOwn: () => unawaited(controller.stopSos()),
+                onAcknowledge: (alert) =>
+                    unawaited(controller.acknowledgeSos(alert)),
+              ),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final landscape =
+                        constraints.maxWidth > constraints.maxHeight &&
+                        constraints.maxWidth >= 720;
+                    if (landscape) {
+                      final fullMapMode = _selectedIndex == 0;
+                      return Column(
                         children: [
-                          TacticalNavigationRail(
-                            selectedIndex: _selectedIndex,
-                            onDestinationSelected: _selectTab,
-                          ),
                           Expanded(
-                            flex: fullMapMode ? 1 : 7,
-                            child: mapPage(showDetailsSheet: fullMapMode),
-                          ),
-                          if (!fullMapMode)
-                            SizedBox(
-                              width:
-                                  (constraints.maxWidth.clamp(320, 430) * 0.95)
-                                      .toDouble(),
-                              child: detailPages[_selectedIndex - 1],
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                TacticalNavigationRail(
+                                  selectedIndex: _selectedIndex,
+                                  onDestinationSelected: _selectTab,
+                                ),
+                                Expanded(
+                                  flex: fullMapMode ? 1 : 7,
+                                  child: mapPage(showDetailsSheet: fullMapMode),
+                                ),
+                                if (!fullMapMode)
+                                  SizedBox(
+                                    width:
+                                        (constraints.maxWidth.clamp(320, 430) *
+                                                0.95)
+                                            .toDouble(),
+                                    child: detailPages[_selectedIndex - 1],
+                                  ),
+                              ],
                             ),
+                          ),
+                          pttBar(compact: true),
                         ],
-                      ),
-                    ),
-                    pttBar(compact: true),
-                  ],
-                );
-              }
+                      );
+                    }
 
-              return Column(
-                children: [
-                  Expanded(
-                    child: _selectedIndex == 0
-                        ? mapPage()
-                        : detailPages[_selectedIndex - 1],
-                  ),
-                  pttBar(compact: short),
-                ],
-              );
-            },
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: _selectedIndex == 0
+                              ? mapPage()
+                              : detailPages[_selectedIndex - 1],
+                        ),
+                        pttBar(compact: short),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -419,6 +438,31 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
   }
 
   void _selectTab(int index) => setState(() => _selectedIndex = index);
+
+  Future<void> _toggleSos() async {
+    if (_controller.sosActive) {
+      await _controller.stopSos();
+    } else if (await confirmSosStart(context)) {
+      await _controller.startSos();
+    }
+  }
+
+  final Set<String> _seenSos = {};
+
+  /// Vibrates once for every new or repeated distress call.
+  void _alertOnSos() {
+    var fresh = false;
+    for (final alert in _controller.activeSosAlerts) {
+      if (_seenSos.add(
+        '${alert.callSign}@${alert.lastAt.millisecondsSinceEpoch}',
+      )) {
+        fresh = true;
+      }
+    }
+    if (fresh) {
+      unawaited(HapticFeedback.vibrate());
+    }
+  }
 
   void _openCarMode() {
     unawaited(

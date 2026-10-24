@@ -11,6 +11,7 @@ import '../models/messaging.dart';
 import '../models/navigation.dart';
 import '../models/track.dart';
 import '../models/reports.dart';
+import '../models/sos.dart';
 import '../services/auth_service.dart';
 import '../services/backend_client.dart';
 import '../services/native_bridges.dart';
@@ -43,6 +44,7 @@ class TacticalController extends ChangeNotifier {
     CarBridge? carBridge,
     this.settings = const SettingsStore(),
     this.minSessionRefreshDelay = const Duration(seconds: 30),
+    this.sosRepeat = const Duration(minutes: 1),
     MissionSharer? missionSharer,
     Duration agingTick = const Duration(seconds: 15),
   }) : _backend = backend,
@@ -107,6 +109,9 @@ class TacticalController extends ChangeNotifier {
 
   /// Lower bound for scheduling a session refresh (tests use a short one).
   final Duration minSessionRefreshDelay;
+
+  /// How often an active SOS call is repeated.
+  final Duration sosRepeat;
   late final StreamSubscription<NativePttButton> _nativeButtonSubscription;
   late final StreamSubscription<String> _nativeErrorSubscription;
   late final StreamSubscription<CarReply> _carReplySubscription;
@@ -238,6 +243,7 @@ class TacticalController extends ChangeNotifier {
     unawaited(_carReplySubscription.cancel());
     unawaited(_roomDataSubscription.cancel());
     _refreshTimer?.cancel();
+    _sosTimer?.cancel();
     if (_lastNativePttStatus != null) {
       unawaited(_nativePtt.hide());
     }
@@ -407,6 +413,7 @@ class TacticalController extends ChangeNotifier {
   }
 
   void _resetOperationalData() {
+    _stopSosSilently();
     _track.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
     _messages
@@ -1295,6 +1302,14 @@ class TacticalController extends ChangeNotifier {
   /// CONTACT reports (plotted as a DANGER point at the estimated position).
   void _applyStructuredText(String text, {required String sender}) {
     final now = DateTime.now();
+    final sos = SosSignal.parse(text);
+    if (sos != null) {
+      // Our own outgoing calls are shown by the "SOS AKTIVNÍ" banner.
+      if (sender != selfNode.callSign) {
+        _applySos(sos, sender: sender, at: now);
+      }
+      return;
+    }
     final shared = TacticalWaypoint.parseShareText(
       text,
       sharedBy: sender,
@@ -1328,6 +1343,147 @@ class TacticalController extends ChangeNotifier {
         ),
       );
     }
+  }
+
+  // --- SOS ----------------------------------------------------------------------
+
+  static const _sosAlertLifetime = Duration(minutes: 30);
+  bool _sosActive = false;
+  Timer? _sosTimer;
+  final Map<String, SosAlert> _sosAlerts = {};
+
+  /// Our own distress call is being repeated.
+  bool get sosActive => _sosActive;
+
+  /// Teammates' calls not yet acknowledged here and repeated within the
+  /// last 30 minutes, newest first.
+  List<SosAlert> get activeSosAlerts {
+    final cutoff = DateTime.now().subtract(_sosAlertLifetime);
+    return _sosAlerts.values
+        .where((alert) => !alert.acknowledged && alert.lastAt.isAfter(cutoff))
+        .toList()
+      ..sort((a, b) => b.lastAt.compareTo(a.lastAt));
+  }
+
+  /// Starts repeating a distress call with the current position every
+  /// minute until [stopSos].
+  Future<void> startSos() async {
+    if (_sosActive || _session == null) {
+      return;
+    }
+    _sosActive = true;
+    _notify();
+    _sosTimer = Timer.periodic(sosRepeat, (_) => unawaited(_sendSosCall()));
+    await _sendSosCall();
+  }
+
+  Future<void> stopSos() async {
+    if (!_sosActive) {
+      return;
+    }
+    _sosTimer?.cancel();
+    _sosActive = false;
+    _notify();
+    await sendMeshText(
+      MeshMessageDraft(
+        text: SosSignal.cancel(selfNode.callSign),
+        groupId: selectedGroup.id,
+        priority: true,
+      ),
+    );
+  }
+
+  Future<void> _sendSosCall() async {
+    if (!_sosActive || _session == null) {
+      return;
+    }
+    final self = selfNode;
+    unawaited(_shareInternetPosition(force: true));
+    await sendMeshText(
+      MeshMessageDraft(
+        text: SosSignal.call(
+          callSign: self.callSign,
+          mgrs: self.mgrs,
+          latitude: self.latitude,
+          longitude: self.longitude,
+        ),
+        groupId: selectedGroup.id,
+        priority: true,
+      ),
+    );
+  }
+
+  /// "Beru": tells the caller help is on it and hides the banner here.
+  Future<void> acknowledgeSos(SosAlert alert) async {
+    final current = _sosAlerts[alert.callSign];
+    if (current == null) {
+      return;
+    }
+    _sosAlerts[alert.callSign] = current.copyWith(acknowledged: true);
+    _notify();
+    await sendMeshText(
+      MeshMessageDraft(
+        text: SosSignal.ack(from: selfNode.callSign, to: alert.callSign),
+        groupId: selectedGroup.id,
+        priority: true,
+      ),
+    );
+  }
+
+  void _applySos(
+    SosSignal signal, {
+    required String sender,
+    required DateTime at,
+  }) {
+    switch (signal) {
+      case SosCall(
+        :final callSign,
+        :final mgrs,
+        :final latitude,
+        :final longitude,
+      ):
+        final name = callSign ?? sender;
+        final previous = _sosAlerts[name];
+        _sosAlerts[name] = SosAlert(
+          callSign: name,
+          lastAt: at,
+          mgrs: mgrs ?? previous?.mgrs,
+          latitude: latitude ?? previous?.latitude,
+          longitude: longitude ?? previous?.longitude,
+          // A repeated call after "Beru" stays acknowledged.
+          acknowledged: previous?.acknowledged ?? false,
+        );
+        if (latitude != null && longitude != null) {
+          _upsertWaypoint(
+            TacticalWaypoint(
+              code: 'SOS-$name',
+              type: TacticalWaypointType.danger,
+              latitude: latitude,
+              longitude: longitude,
+              note: 'SOS ${_clock(at)}',
+              priority: true,
+              sharedBy: name,
+              createdAt: at,
+            ),
+          );
+        }
+      case SosCancel(:final callSign):
+        _sosAlerts.remove(callSign);
+        _waypoints.removeWhere((w) => w.code == 'SOS-$callSign');
+      case SosAck():
+        break; // shown as a normal message
+    }
+  }
+
+  static String _clock(DateTime at) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(at.hour)}:${two(at.minute)}';
+  }
+
+  void _stopSosSilently() {
+    _sosTimer?.cancel();
+    _sosActive = false;
+    _sosAlerts.clear();
   }
 
   /// Same code (text share) or same Meshtastic id replaces the old point.

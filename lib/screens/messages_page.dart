@@ -19,6 +19,7 @@ class MessagesPage extends StatefulWidget {
     required this.onGroupSelected,
     required this.onSend,
     this.onRetry,
+    this.onSos,
     super.key,
   });
 
@@ -31,6 +32,9 @@ class MessagesPage extends StatefulWidget {
   final ValueChanged<int> onGroupSelected;
   final Future<void> Function(MeshMessageDraft draft) onSend;
   final ValueChanged<MeshMessage>? onRetry;
+
+  /// Starts (or, while active, cancels) the repeated distress call.
+  final VoidCallback? onSos;
 
   @override
   State<MessagesPage> createState() => _MessagesPageState();
@@ -164,7 +168,9 @@ class _MessagesPageState extends State<MessagesPage> {
                   label: 'SOS',
                   icon: Icons.warning_amber_outlined,
                   danger: true,
-                  onPressed: () => _sendQuickMessage('SOS', priority: true),
+                  onPressed:
+                      widget.onSos ??
+                      () => _sendQuickMessage('SOS', priority: true),
                 ),
               ),
             ],

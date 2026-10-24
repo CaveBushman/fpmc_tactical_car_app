@@ -16,6 +16,8 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Internet fallback through the group's PTT room (E2EE data channel): own position is shared every 30 s / 25 m and merged with LoRa nodes (cloud icon for internet-only members); without a connected T-Beam, group messages go over the room instead of failing. Direct messages and other groups still need the radio.
 - Message view with Meshtastic group messages, direct messages, quick actions, and internet PTT system messages.
 - Quick `NA POZICI` message includes full MGRS, latitude, and longitude.
+- SOS mode: after confirmation a distress call with MGRS and coordinates is repeated every minute (LoRa or internet fallback) until cancelled; teammates get a red banner with vibration, an SOS point on the map and a "Beru" acknowledgement; cancelling removes it everywhere. Plain-text format, readable in other Meshtastic apps.
+- Phone GPS is broadcast into the mesh (POSITION_APP, max once a minute / 50 m), so teammates see you even without a T-Beam GPS fix.
 - Hold-to-talk PTT over a self-hosted LiveKit server with end-to-end encrypted audio, half-duplex floor control (one speaker at a time, "MLUVÍ …" / "OBSAZENO") and per-group rooms. Without `BACKEND_URL` the app runs in demo mode with local accounts and silent PTT.
 - System screen with Meshtastic BLE, PTT server, and car mode status.
 - PTT keeps working with the screen off: Android foreground service (microphone type) with a notification PTT button, iOS background audio.

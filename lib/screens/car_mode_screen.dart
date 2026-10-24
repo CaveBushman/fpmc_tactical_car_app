@@ -9,6 +9,7 @@ import '../controllers/tactical_controller.dart';
 import '../models/messaging.dart';
 import '../models/navigation.dart';
 import '../theme.dart';
+import '../widgets/sos_widgets.dart';
 import 'map_page.dart';
 
 /// Simplified screen for a phone in a car holder: map, nearest target, last
@@ -69,7 +70,18 @@ class _CarModeScreenState extends State<CarModeScreen> {
               offlineStore: widget.offlineMaps.store,
               track: [for (final point in controller.track) point.latLng],
             );
-            final panel = _CarPanel(controller: controller);
+            final panel = Column(
+              children: [
+                SosBanners(
+                  ownActive: controller.sosActive,
+                  alerts: controller.activeSosAlerts,
+                  onCancelOwn: () => unawaited(controller.stopSos()),
+                  onAcknowledge: (alert) =>
+                      unawaited(controller.acknowledgeSos(alert)),
+                ),
+                Expanded(child: _CarPanel(controller: controller)),
+              ],
+            );
             return LayoutBuilder(
               builder: (context, constraints) {
                 if (constraints.maxWidth > constraints.maxHeight) {
@@ -196,9 +208,15 @@ class _CarPanel extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               _QuickButton(
-                label: 'SOS',
+                label: controller.sosActive ? 'ZRUŠIT SOS' : 'SOS',
                 danger: true,
-                onPressed: () => _send(context, 'SOS', priority: true),
+                onPressed: () async {
+                  if (controller.sosActive) {
+                    await controller.stopSos();
+                  } else if (await confirmSosStart(context)) {
+                    await controller.startSos();
+                  }
+                },
               ),
             ],
           ),
