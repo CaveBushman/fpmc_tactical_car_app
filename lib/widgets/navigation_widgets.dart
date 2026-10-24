@@ -319,9 +319,13 @@ class WaypointStrip extends StatelessWidget {
     required this.onShareWaypoint,
     this.onDeleteWaypoint,
     this.onEditWaypoint,
+    this.onClearOld,
     this.compact = false,
     super.key,
   });
+
+  /// Shows "Smazat staré přijaté body" when there are any.
+  final VoidCallback? onClearOld;
 
   final List<TacticalWaypoint> waypoints;
   final ValueChanged<TacticalWaypoint> onShareWaypoint;
@@ -361,6 +365,17 @@ class WaypointStrip extends StatelessWidget {
             color: Colors.white.withValues(alpha: 0.6),
           ),
         ),
+        if (onClearOld != null &&
+            waypoints.any((w) => w.isOldReceivedAt(DateTime.now())))
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('clear-old-waypoints'),
+              onPressed: onClearOld,
+              icon: const Icon(Icons.cleaning_services_outlined, size: 18),
+              label: const Text('Smazat staré přijaté body'),
+            ),
+          ),
         const SizedBox(height: 8),
         for (final waypoint in waypoints) ...[
           WaypointCard(
@@ -442,9 +457,12 @@ class WaypointCard extends StatelessWidget {
                   if (!compact) ...[
                     const SizedBox(height: 2),
                     Text(
-                      waypoint.sharedBy == null
-                          ? waypoint.note
-                          : '${waypoint.note} (od ${waypoint.sharedBy})'.trim(),
+                      [
+                        if (waypoint.note.isNotEmpty) waypoint.note,
+                        if (waypoint.sharedBy != null)
+                          'od ${waypoint.sharedBy}',
+                        ?waypoint.ageLabelAt(DateTime.now()),
+                      ].join(' · '),
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.66),

@@ -8,6 +8,8 @@
   large buttons.
 - Mission log for the after-action review, shown in System and exported
   as CSV.
+- Point age in the list, faded old points on the map and a clean-up of
+  received points older than 6 h.
 - Layout fixes for the team phone found by screen-by-screen audits
   (Messages in landscape, map cards and buttons, forms with the keyboard,
   navigation rail).

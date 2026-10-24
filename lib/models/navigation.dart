@@ -217,6 +217,43 @@ class TacticalWaypoint {
 
   LatLng get latLng => LatLng(latitude, longitude);
 
+  /// Shown faded on the map from this age on.
+  static const staleAfter = Duration(hours: 1);
+
+  /// Received points older than this are offered for clean-up.
+  static const oldAfter = Duration(hours: 6);
+
+  /// Time since it was created or received; null for built-in points.
+  Duration? ageAt(DateTime now) {
+    final created = createdAt;
+    if (created == null) {
+      return null;
+    }
+    final age = now.difference(created);
+    return age.isNegative ? Duration.zero : age;
+  }
+
+  bool isStaleAt(DateTime now) => (ageAt(now) ?? Duration.zero) >= staleAfter;
+
+  /// Came from a teammate (not created here) and is older than [oldAfter].
+  bool isOldReceivedAt(DateTime now) =>
+      sharedBy != null && (ageAt(now) ?? Duration.zero) >= oldAfter;
+
+  /// "před 35 min" / "před 3 h"; null for built-in points.
+  String? ageLabelAt(DateTime now) {
+    final age = ageAt(now);
+    if (age == null) {
+      return null;
+    }
+    if (age.inMinutes < 1) {
+      return 'teď';
+    }
+    if (age.inHours < 1) {
+      return 'před ${age.inMinutes} min';
+    }
+    return 'před ${age.inHours} h';
+  }
+
   /// Human-readable share format; [parseShareText] reads it back.
   String get shareText =>
       'WP $code | $typeLabel | MGRS $mgrs | LAT ${latitude.toStringAsFixed(6)} | LON ${longitude.toStringAsFixed(6)} | $note';

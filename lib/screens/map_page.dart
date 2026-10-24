@@ -44,6 +44,7 @@ class MapPage extends StatefulWidget {
     this.onNavigate,
     this.onClearNavTarget,
     this.peerTrails = const {},
+    this.onClearOldWaypoints,
     this.courseDeg,
     this.headingUp = false,
     this.onHeadingUpChanged,
@@ -56,6 +57,9 @@ class MapPage extends StatefulWidget {
 
   /// Teammates' recent positions by node number.
   final Map<int, List<LatLng>> peerTrails;
+
+  /// Deletes received points older than 6 h; returns how many.
+  final int Function()? onClearOldWaypoints;
 
   /// Own direction of travel (GPS course), null before moving.
   final double? courseDeg;
@@ -139,6 +143,36 @@ class _MapPageState extends State<MapPage> {
     );
     if (draft != null) {
       widget.onCreateWaypoint?.call(draft);
+    }
+  }
+
+  Future<void> _confirmClearOld() async {
+    final now = DateTime.now();
+    final count = widget.waypoints.where((w) => w.isOldReceivedAt(now)).length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        backgroundColor: panelGreen,
+        title: const Text('Smazat staré přijaté body?'),
+        content: Text(
+          'Smaže body od ostatních starší než 6 h (počet: $count). '
+          'Vlastní body zůstanou.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Zrušit'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Smazat'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      widget.onClearOldWaypoints?.call();
     }
   }
 
@@ -297,6 +331,9 @@ class _MapPageState extends State<MapPage> {
                 channelLabel: widget.channelLabel,
                 onShareWaypoint: widget.onShareWaypoint,
                 onDeleteWaypoint: widget.onDeleteWaypoint,
+                onClearOld: widget.onClearOldWaypoints == null
+                    ? null
+                    : _confirmClearOld,
                 onEditWaypoint: widget.onCreateWaypoint == null
                     ? null
                     : (waypoint) =>
@@ -323,11 +360,13 @@ class _MapDetailsSheet extends StatelessWidget {
     required this.onShareWaypoint,
     this.onDeleteWaypoint,
     this.onEditWaypoint,
+    this.onClearOld,
     this.navTarget,
     this.onNavigate,
     this.onClearNavTarget,
   });
 
+  final VoidCallback? onClearOld;
   final ValueChanged<TacticalWaypoint>? onEditWaypoint;
   final TacticalNavSolution? navTarget;
   final ValueChanged<NavTarget>? onNavigate;
@@ -444,6 +483,7 @@ class _MapDetailsSheet extends StatelessWidget {
                 onShareWaypoint: onShareWaypoint,
                 onDeleteWaypoint: onDeleteWaypoint,
                 onEditWaypoint: onEditWaypoint,
+                onClearOld: onClearOld,
               ),
               const SizedBox(height: 10),
               Align(
@@ -813,7 +853,11 @@ class _MeshMapState extends State<MeshMap> {
                     point: waypoint.latLng,
                     width: 112 * textScale,
                     height: 66 * textScale,
-                    child: WaypointMapMarker(waypoint: waypoint),
+                    // Old information steps back behind fresh reports.
+                    child: Opacity(
+                      opacity: waypoint.isStaleAt(DateTime.now()) ? 0.45 : 1,
+                      child: WaypointMapMarker(waypoint: waypoint),
+                    ),
                   ),
                 for (final node in nodes)
                   Marker(

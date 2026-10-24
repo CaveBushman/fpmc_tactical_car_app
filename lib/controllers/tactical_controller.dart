@@ -1593,6 +1593,31 @@ class TacticalController extends ChangeNotifier {
     return updated;
   }
 
+  /// Received points older than [TacticalWaypoint.oldAfter].
+  List<TacticalWaypoint> get oldReceivedWaypoints {
+    final now = _clock();
+    return [
+      for (final waypoint in _waypoints)
+        if (waypoint.isOldReceivedAt(now)) waypoint,
+    ];
+  }
+
+  /// Deletes [oldReceivedWaypoints]; returns how many went.
+  int clearOldReceivedWaypoints() {
+    final old = oldReceivedWaypoints.toSet();
+    if (old.isEmpty) {
+      return 0;
+    }
+    _waypoints.removeWhere(old.contains);
+    _log(
+      MissionEventKind.waypoint,
+      'Smazány staré přijaté body (počet: ${old.length})',
+    );
+    _notify();
+    unawaited(_persistState());
+    return old.length;
+  }
+
   void removeWaypoint(TacticalWaypoint waypoint) {
     final removed = _waypoints.remove(waypoint);
     if (removed) {
