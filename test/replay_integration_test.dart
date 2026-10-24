@@ -122,6 +122,8 @@ void main() {
 
     await tester.tap(find.text('Systém'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Vyhledat T-Beam'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Vyhledat T-Beam'));
     // Replay timers run on the test's fake clock: pump until all frames
     // have been delivered.

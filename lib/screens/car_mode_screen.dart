@@ -140,6 +140,19 @@ class _CarPanel extends StatelessWidget {
                 ),
               ),
               IconButton(
+                tooltip: controller.nightMode
+                    ? 'Vypnout noční režim'
+                    : 'Zapnout noční režim',
+                iconSize: 28,
+                onPressed: () => controller.setNightMode(!controller.nightMode),
+                icon: Icon(
+                  controller.nightMode
+                      ? Icons.nightlight
+                      : Icons.nightlight_outlined,
+                  color: Colors.white70,
+                ),
+              ),
+              IconButton(
                 tooltip: 'Ukončit režim auta',
                 iconSize: 32,
                 onPressed: () => Navigator.of(context).maybePop(),

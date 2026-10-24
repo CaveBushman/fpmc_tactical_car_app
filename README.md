@@ -20,6 +20,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - System screen with Meshtastic BLE, PTT server, and car mode status.
 - PTT keeps working with the screen off: Android foreground service (microphone type) with a notification PTT button, iOS background audio.
 - Hardware PTT: Bluetooth headset button toggles talking (also in background, Android); optional volume-down hold-to-talk while the app is open.
+- Night mode (System → Nastavení, or the moon in car mode): the whole app, map included, is rendered in dimmed red to keep night vision; colours of status badges are then distinguished only by brightness and their labels.
 - Car mode screen (car icon in the app bar): map, nearest target, last message, OK / NA POZICI / SOS and a large hold-to-talk button; keeps the display on.
 - Android Auto: POI screen with the nearest team members and mission points on the car map (tap to navigate), and incoming team messages as car-readable notifications with voice reply.
 - Adaptive portrait and landscape layouts.

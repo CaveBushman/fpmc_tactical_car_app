@@ -19,7 +19,17 @@ import 'services/offline_tiles/tile_math.dart';
 import 'theme.dart';
 import 'widgets/common_widgets.dart';
 
-class TacticalCarApp extends StatelessWidget {
+/// Red, dimmed rendering that keeps night vision: luminance goes to the red
+/// channel only, at reduced intensity. Applied over the whole navigator,
+/// map tiles and dialogs included.
+const nightModeFilter = ColorFilter.matrix([
+  0.30, 0.50, 0.08, 0, 0, //
+  0.02, 0.04, 0.01, 0, 0, //
+  0, 0, 0, 0, 0, //
+  0, 0, 0, 1, 0, //
+]);
+
+class TacticalCarApp extends StatefulWidget {
   const TacticalCarApp({
     this.locationService,
     this.meshPacketRepository,
@@ -40,10 +50,33 @@ class TacticalCarApp extends StatelessWidget {
   final VoiceTransport Function()? voiceTransportFactory;
 
   @override
+  State<TacticalCarApp> createState() => _TacticalCarAppState();
+}
+
+class _TacticalCarAppState extends State<TacticalCarApp> {
+  final ValueNotifier<bool> _nightMode = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _nightMode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Tactical Mesh',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) => ValueListenableBuilder<bool>(
+        valueListenable: _nightMode,
+        builder: (context, night, _) => night
+            ? ColorFiltered(
+                key: const ValueKey('night-mode'),
+                colorFilter: nightModeFilter,
+                child: child,
+              )
+            : child ?? const SizedBox.shrink(),
+      ),
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: fieldBlack,
@@ -70,12 +103,13 @@ class TacticalCarApp extends StatelessWidget {
         ),
       ),
       home: TacticalHomeScreen(
-        locationService: locationService,
-        meshPacketRepository: meshPacketRepository,
-        meshtasticBleService: meshtasticBleService,
-        offlineMaps: offlineMaps,
-        backend: backend,
-        voiceTransportFactory: voiceTransportFactory,
+        locationService: widget.locationService,
+        meshPacketRepository: widget.meshPacketRepository,
+        meshtasticBleService: widget.meshtasticBleService,
+        offlineMaps: widget.offlineMaps,
+        backend: widget.backend,
+        voiceTransportFactory: widget.voiceTransportFactory,
+        nightMode: _nightMode,
       ),
     );
   }
@@ -89,6 +123,7 @@ class TacticalHomeScreen extends StatefulWidget {
     this.offlineMaps,
     this.backend,
     this.voiceTransportFactory,
+    this.nightMode,
     super.key,
   });
 
@@ -100,6 +135,9 @@ class TacticalHomeScreen extends StatefulWidget {
   /// Defaults to BACKEND_URL; null there means demo accounts and PTT.
   final BackendClient? backend;
   final VoiceTransport Function()? voiceTransportFactory;
+
+  /// App-level switch for the red night filter, driven by the setting.
+  final ValueNotifier<bool>? nightMode;
 
   @override
   State<TacticalHomeScreen> createState() => _TacticalHomeScreenState();
@@ -130,6 +168,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
               : BackendClient(baseUrl: backendUrlFromEnvironment)),
       voiceTransportFactory: widget.voiceTransportFactory,
     );
+    _controller.addListener(_syncNightMode);
     _offlineMaps = widget.offlineMaps ?? OfflineMapsController();
     unawaited(_offlineMaps.init());
     _noticeSubscription = _controller.notices.listen((message) {
@@ -142,6 +181,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     });
   }
 
+  void _syncNightMode() {
+    widget.nightMode?.value = _controller.nightMode;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _controller.setAppInForeground(state == AppLifecycleState.resumed);
@@ -150,6 +193,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _controller.removeListener(_syncNightMode);
     unawaited(_noticeSubscription.cancel());
     _controller.dispose();
     _offlineMaps.dispose();
@@ -218,6 +262,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         meshConnected: controller.meshConnected,
         ptt: ptt,
         onPttReconnect: controller.reconnectPtt,
+        nightMode: controller.nightMode,
+        onNightModeChanged: controller.setNightMode,
         onCopyPacketRecording: controller.exportPacketRecording,
         radioChannels: controller.radioChannels,
         channelWarnings: controller.channelWarnings,

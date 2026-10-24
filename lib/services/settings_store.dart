@@ -19,6 +19,12 @@ class SettingsStore {
   Future<void> setVolumeKeyPtt(bool value) =>
       _set((prefs) => prefs.setBool('${prefix}volumeKeyPtt', value));
 
+  Future<bool> nightMode() async =>
+      await _get((prefs) => prefs.getBool('${prefix}nightMode')) ?? false;
+
+  Future<void> setNightMode(bool value) =>
+      _set((prefs) => prefs.setBool('${prefix}nightMode', value));
+
   /// Last communication group chosen by [userName].
   Future<String?> groupFor(String userName) =>
       _get((prefs) => prefs.getString('${prefix}group.$userName'));

@@ -23,6 +23,8 @@ class SystemsPage extends StatelessWidget {
     required this.meshConnected,
     required this.ptt,
     this.onPttReconnect,
+    this.nightMode = false,
+    this.onNightModeChanged,
     this.onCopyPacketRecording,
     this.radioChannels = const [],
     this.channelWarnings = const [],
@@ -45,6 +47,8 @@ class SystemsPage extends StatelessWidget {
   final bool meshConnected;
   final PttController ptt;
   final VoidCallback? onPttReconnect;
+  final bool nightMode;
+  final ValueChanged<bool>? onNightModeChanged;
   final String Function()? onCopyPacketRecording;
   final List<RadioChannel> radioChannels;
   final List<String> channelWarnings;
@@ -145,6 +149,16 @@ class SystemsPage extends StatelessWidget {
             MonoLine(
               label: 'Aktuálně',
               value: '${(fontScale * 100).round()} %',
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: nightMode,
+              onChanged: onNightModeChanged,
+              secondary: const Icon(Icons.nightlight_outlined),
+              title: const Text('Noční režim'),
+              subtitle: const Text(
+                'Tlumený červený displej, šetří adaptaci očí na tmu',
+              ),
             ),
           ],
         ),

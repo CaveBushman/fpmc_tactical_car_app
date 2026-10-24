@@ -306,6 +306,7 @@ class TacticalController extends ChangeNotifier {
   Future<void> _loadSettings() async {
     final fontScale = await settings.fontScale();
     final volumeKey = await settings.volumeKeyPtt();
+    _nightMode = await settings.nightMode();
     if (_disposed) {
       return;
     }
@@ -350,6 +351,17 @@ class TacticalController extends ChangeNotifier {
   Future<void> reconnectPtt() => _joinSelectedGroupPtt();
 
   bool get volumeKeyPtt => _volumeKeyPtt;
+
+  bool _nightMode = false;
+
+  /// Red, dimmed display for preserving night vision.
+  bool get nightMode => _nightMode;
+
+  void setNightMode(bool enabled) {
+    _nightMode = enabled;
+    unawaited(settings.setNightMode(enabled));
+    _notify();
+  }
 
   /// Volume-down as hold-to-talk while the app is in front (Android).
   void setVolumeKeyPtt(bool enabled) {
