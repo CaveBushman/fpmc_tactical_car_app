@@ -28,6 +28,9 @@ services:
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       USERS_FILE: /config/users.json
       DATA_DIR: /data
+      # Only reachable through the local TLS proxy, which sets
+      # X-Forwarded-For; used for login rate limiting and audit.
+      TRUST_PROXY: "1"
     volumes:
       - ./users.json:/config/users.json:ro
       - backend-data:/data

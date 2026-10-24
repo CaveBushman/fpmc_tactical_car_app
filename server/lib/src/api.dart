@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
@@ -38,12 +39,15 @@ class TacticalApi {
     required this.keys,
     required this.audit,
     LoginGuard? loginGuard,
+    RateLimiter? loginRateLimiter,
+    this.trustProxy = false,
     this.hasher = const PasswordHasher(),
     this.maxDevicesPerUser = 2,
     GroupDirectory? groups,
     this.knownRoles = const {'operator', 'commander', 'medic'},
     DateTime Function()? clock,
-  }) : groups = groups ?? GroupDirectory(GroupRecord.defaults),
+  }) : loginRateLimiter = loginRateLimiter ?? RateLimiter(),
+       groups = groups ?? GroupDirectory(GroupRecord.defaults),
        loginGuard = loginGuard ?? LoginGuard(),
        _clock = clock ?? DateTime.now;
 
@@ -56,6 +60,10 @@ class TacticalApi {
   final GroupKeyStore keys;
   final AuditLog audit;
   final LoginGuard loginGuard;
+  final RateLimiter loginRateLimiter;
+
+  /// Use X-Forwarded-For (set by our own TLS proxy) as the client address.
+  final bool trustProxy;
   final PasswordHasher hasher;
 
   /// 0 = unlimited. A login from a further device is refused until an admin
@@ -104,9 +112,21 @@ class TacticalApi {
       return _json(400, {'error': 'missing_credentials'});
     }
 
-    final locked = loginGuard.lockedFor(userName);
+    final ip = _clientIp(request);
+    if (!loginRateLimiter.allow(ip)) {
+      audit.record('login_rate_limited', user: userName, details: {'ip': ip});
+      return _json(429, {
+        'error': 'rate_limited',
+        'retryAfterSeconds': loginRateLimiter.retryAfter(ip).inSeconds + 1,
+      });
+    }
+
+    // Lockout per user *and* source: failures from one address cannot
+    // lock the account for everyone else.
+    final guardKey = '$userName|$ip';
+    final locked = loginGuard.lockedFor(guardKey);
     if (locked != null) {
-      audit.record('login_locked', user: userName);
+      audit.record('login_locked', user: userName, details: {'ip': ip});
       return _json(429, {
         'error': 'locked',
         'retryAfterSeconds': locked.inSeconds + 1,
@@ -116,8 +136,8 @@ class TacticalApi {
     final user = users.find(userName);
     final valid = hasher.verify(password, user?.passwordHash ?? _dummyHash);
     if (user == null || !valid) {
-      loginGuard.recordFailure(userName);
-      audit.record('login_failed', user: userName);
+      loginGuard.recordFailure(guardKey);
+      audit.record('login_failed', user: userName, details: {'ip': ip});
       return _json(401, {'error': 'invalid_credentials'});
     }
     if (user.disabled) {
@@ -165,8 +185,8 @@ class TacticalApi {
       users.put(account);
     }
 
-    loginGuard.recordSuccess(userName);
-    audit.record('login', user: userName);
+    loginGuard.recordSuccess(guardKey);
+    audit.record('login', user: userName, details: {'ip': ip});
     return _json(200, {
       'sessionToken': sessions.issue(
         account.userName,
@@ -623,6 +643,20 @@ class TacticalApi {
   );
 
   // --- Helpers ---------------------------------------------------------------
+
+  String _clientIp(Request request) {
+    if (trustProxy) {
+      final forwarded = request.headers['x-forwarded-for'];
+      if (forwarded != null && forwarded.trim().isNotEmpty) {
+        return forwarded.split(',').first.trim();
+      }
+    }
+    final info = request.context['shelf.io.connection_info'];
+    if (info is HttpConnectionInfo) {
+      return info.remoteAddress.address;
+    }
+    return 'unknown';
+  }
 
   SessionClaims? _claims(Request request) {
     final header = request.headers['authorization'] ?? '';

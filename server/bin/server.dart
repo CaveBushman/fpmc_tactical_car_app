@@ -13,6 +13,8 @@ import 'package:tactical_server/tactical_server.dart';
 ///   the editable copy in `DATA_DIR/users.json` is used
 /// - `DATA_DIR` (default data)
 /// - `MAX_DEVICES_PER_USER` (default 2, 0 = unlimited)
+/// - `TRUST_PROXY=1` when behind our own TLS proxy (client IP from
+///   X-Forwarded-For for login rate limiting and audit)
 Future<void> main() async {
   String require(String name) {
     final value = Platform.environment[name];
@@ -35,6 +37,7 @@ Future<void> main() async {
       Platform.environment['USERS_FILE'] ?? 'config/users.json',
       stateFile: File('$dataDir/users.json'),
     ),
+    trustProxy: Platform.environment['TRUST_PROXY'] == '1',
     maxDevicesPerUser:
         int.tryParse(Platform.environment['MAX_DEVICES_PER_USER'] ?? '') ?? 2,
     sessions: SessionIssuer(secret: sessionSecret),

@@ -9,7 +9,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Ranger Green dark tactical UI.
 - Real OpenStreetMap raster map with local Flutter map tile cache.
 - True MGRS/UTM grid overlay (1 km / 10 km / 100 km by zoom, principal-digit labels; switchable). Tap the map for the point's MGRS, coordinates and azimuth/distance from you, then save it as a waypoint or send it to the group.
-- Team map with live GPS own position (follow mode + recenter), demo baseline nodes, Meshtastic packet updates, links, range circles, and tactical grid overlay.
+- Team map with live GPS own position (follow mode + recenter), demo baseline nodes, Meshtastic packet updates, links and range circles.
 - Own position panel with fully readable MGRS fields, latitude, longitude, altitude.
 - Local and UTC clock.
 - Team list with distance, bearing, battery, and last seen status that ages to STALE/LOST.
@@ -120,6 +120,8 @@ flutter run --dart-define=BACKEND_URL=https://ptt.example.cz/api
 ```
 
 Team administration: open `https://ptt.example.cz/api/admin` and log in as a commander. It manages users (create, display name, role, groups, block, new password), logs a user out everywhere, unbinds devices, rotates group keys and shows the audit log. Changes of role, groups, password or blocking end that user's sessions immediately. Users are seeded from `USERS_FILE` on first start and then kept in `DATA_DIR/users.json`.
+
+Login protection: 5 wrong passwords lock that user name for 5 minutes from the same address only (no lock-out of others from elsewhere), and one address may try at most 30 logins per 10 minutes. Behind the TLS proxy the backend uses `X-Forwarded-For` (`TRUST_PROXY=1`, set in docker-compose); every login is audited with the client address.
 
 Device binding: the app sends a random per-installation id at login; an account may use at most `MAX_DEVICES_PER_USER` devices (default 2, `0` = unlimited) until a commander unbinds one.
 
