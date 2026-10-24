@@ -141,10 +141,15 @@ void main() {
       await controller.exportMission();
       final (files, subject) = sharer.shares.single;
       expect(subject, startsWith('Mise '));
-      expect(files.map((f) => f.name.split('-').first), ['mise', 'zpravy']);
+      expect(files.map((f) => f.name.split('-').first), [
+        'mise',
+        'zpravy',
+        'udalosti',
+      ]);
       expect(files.first.mimeType, 'application/gpx+xml');
       expect('<trkpt '.allMatches(files.first.content), hasLength(3));
-      expect(files.last.content, contains('cas_utc'));
+      expect(files[1].content, contains('cas_utc'));
+      expect(files.last.content, startsWith('cas_utc;druh;udalost'));
     });
 
     test('the trail survives a restart and can be cleared', () async {

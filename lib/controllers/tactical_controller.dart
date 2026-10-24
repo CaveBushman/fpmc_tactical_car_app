@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/geo.dart' as geo;
 import '../models/member_status.dart';
+import '../models/mission_event.dart';
 import '../models/sun.dart' as sun;
 import '../models/mesh_node.dart';
 import '../models/messaging.dart';
@@ -138,6 +139,24 @@ class TacticalController extends ChangeNotifier {
   final DangerProximity _danger = DangerProximity();
   final PeerTrails _peerTrails = PeerTrails();
   final ContactWatch _contactWatch = ContactWatch();
+
+  // --- Mission log ---------------------------------------------------------------
+
+  static const _maxEvents = 500;
+  final List<MissionEvent> _events = [];
+
+  /// Notable events of this mission, newest first.
+  List<MissionEvent> get missionEvents => List.unmodifiable(_events);
+
+  void _log(MissionEventKind kind, String text) {
+    if (_session == null) {
+      return;
+    }
+    _events.insert(0, MissionEvent(at: _clock(), kind: kind, text: text));
+    if (_events.length > _maxEvents) {
+      _events.removeLast();
+    }
+  }
 
   /// Alert when a teammate goes LOST.
   bool get lostContactAlerts => _prefs.lostContactAlerts;
@@ -385,6 +404,7 @@ class TacticalController extends ChangeNotifier {
   Future<void> exportMission() async {
     try {
       await _mission.export(
+        events: _events,
         callSign: selfNode.callSign,
         waypoints: _waypoints,
         messages: _messages,
@@ -401,6 +421,7 @@ class TacticalController extends ChangeNotifier {
     _navTarget = null;
     _peerTrails.clear();
     _contactWatch.clear();
+    _events.clear();
     _courseDeg = null;
     _statuses.clear();
     _sos.reset();
@@ -582,6 +603,11 @@ class TacticalController extends ChangeNotifier {
     }
     final entered = _danger.update(selfNode.latLng, _waypoints);
     for (final warning in entered) {
+      _log(
+        MissionEventKind.danger,
+        'Přiblížení k ${warning.waypoint.code} '
+        '(${warning.distanceM.round()} m)',
+      );
       _notice(
         'POZOR: ${warning.waypoint.code} '
         '${warning.distanceM.round()} m, '
@@ -604,6 +630,10 @@ class TacticalController extends ChangeNotifier {
 
   void navigateTo(NavTarget target) {
     _navTarget = target;
+    final solution = navTarget;
+    if (solution != null) {
+      _log(MissionEventKind.navigation, 'Navigace k ${solution.label}');
+    }
     _notify();
   }
 
@@ -625,6 +655,7 @@ class TacticalController extends ChangeNotifier {
       _notice('Cíl navigace už neexistuje.');
     } else if (solution.distanceKm * 1000 <= arrivalRadiusM) {
       _navTarget = null;
+      _log(MissionEventKind.navigation, 'Cíl ${solution.label} dosažen');
       _notice('Cíl ${solution.label} dosažen.');
     }
   }
@@ -1182,6 +1213,7 @@ class TacticalController extends ChangeNotifier {
     }
     final callSign = selfNode.callSign;
     _statuses.report(callSign, status, DateTime.now());
+    _log(MissionEventKind.status, 'Můj stav: ${status.label}');
     _notify();
     await sendMeshText(
       MeshMessageDraft(
@@ -1521,6 +1553,10 @@ class TacticalController extends ChangeNotifier {
           type == TacticalWaypointType.danger,
       createdAt: DateTime.now(),
     );
+    _log(
+      MissionEventKind.waypoint,
+      'Nový bod ${waypoint.code} (${waypoint.typeLabel}) ${waypoint.mgrs}',
+    );
     _waypoints.add(waypoint);
     _notify();
     unawaited(_persistState());
@@ -1560,6 +1596,7 @@ class TacticalController extends ChangeNotifier {
   void removeWaypoint(TacticalWaypoint waypoint) {
     final removed = _waypoints.remove(waypoint);
     if (removed) {
+      _log(MissionEventKind.waypoint, 'Smazán bod ${waypoint.code}');
       _notify();
       unawaited(_persistState());
     }
@@ -1591,6 +1628,10 @@ class TacticalController extends ChangeNotifier {
     if (status != null) {
       if (status.callSign != selfNode.callSign) {
         _statuses.report(status.callSign, status.status, now);
+        _log(
+          MissionEventKind.status,
+          '${status.callSign}: ${status.status.label}',
+        );
       }
       return;
     }
@@ -1598,6 +1639,7 @@ class TacticalController extends ChangeNotifier {
     if (sos != null) {
       // Our own outgoing calls are shown by the "SOS AKTIVNÍ" banner.
       if (sender != selfNode.callSign) {
+        _logSos(sos, sender);
         _sos.apply(sos, sender: sender, at: now);
       }
       return;
@@ -1609,10 +1651,18 @@ class TacticalController extends ChangeNotifier {
     );
     if (shared != null) {
       _upsertWaypoint(shared);
+      _log(
+        MissionEventKind.waypoint,
+        'Bod ${shared.code} (${shared.typeLabel}) od $sender',
+      );
       return;
     }
     final contact = ContactReport.parse(text);
     if (contact != null) {
+      _log(
+        MissionEventKind.waypoint,
+        'CONTACT od $sender: ${contact.contactType} ${contact.size}',
+      );
       String two(int value) => value.toString().padLeft(2, '0');
       final position = contact.position;
       _waypoints.add(
@@ -1652,13 +1702,43 @@ class TacticalController extends ChangeNotifier {
     if (_session == null) {
       return;
     }
+    if (!_sos.active) {
+      _log(MissionEventKind.sos, 'SOS vyhlášeno (${selfNode.mgrs})');
+    }
     await _sos.start();
   }
 
-  Future<void> stopSos() => _sos.stop();
+  Future<void> stopSos() async {
+    if (_sos.active) {
+      _log(MissionEventKind.sos, 'SOS zrušeno');
+    }
+    await _sos.stop();
+  }
+
+  /// Logs the first call of an SOS series (they repeat every minute), its
+  /// cancellation and answers.
+  void _logSos(SosSignal signal, String sender) {
+    switch (signal) {
+      case SosCall(:final callSign, :final mgrs):
+        final name = callSign ?? sender;
+        if (!_sos.hasCall(name)) {
+          _log(
+            MissionEventKind.sos,
+            'SOS od $name${mgrs == null ? '' : ' ($mgrs)'}',
+          );
+        }
+      case SosCancel(:final callSign):
+        _log(MissionEventKind.sos, '$callSign zrušil SOS');
+      case SosAck(:final from, :final to):
+        _log(MissionEventKind.sos, '$from: beru SOS $to');
+    }
+  }
 
   /// "Beru": tells the caller help is on it and hides the banner here.
-  Future<void> acknowledgeSos(SosAlert alert) => _sos.acknowledge(alert);
+  Future<void> acknowledgeSos(SosAlert alert) {
+    _log(MissionEventKind.sos, 'Beru SOS ${alert.callSign}');
+    return _sos.acknowledge(alert);
+  }
 
   Future<void> _sendSosCall() async {
     if (_session == null) {
@@ -1902,6 +1982,10 @@ class TacticalController extends ChangeNotifier {
           ?.map(TacticalWaypoint.fromJson)
           .toList();
       final restoredTrack = snapshot.track?.map(TrackPoint.fromJson).toList();
+      final restoredEvents = [
+        for (final json in snapshot.events ?? const <Map<String, dynamic>>[])
+          ?MissionEvent.fromJson(json),
+      ];
       if (restoredNodes.isEmpty &&
           restoredMessages.isEmpty &&
           restoredWaypoints == null) {
@@ -1926,6 +2010,8 @@ class TacticalController extends ChangeNotifier {
       if (restoredTrack != null) {
         _mission.replace(restoredTrack);
       }
+      // Events logged since this login are newer than the snapshot.
+      _events.addAll(restoredEvents.take(_maxEvents - _events.length));
       _notify();
       final liveFix = _locationState.lastFix;
       if (liveFix != null) {
@@ -1950,6 +2036,7 @@ class TacticalController extends ChangeNotifier {
         messages: [for (final message in _messages.take(150)) message.toJson()],
         waypoints: [for (final waypoint in _waypoints) waypoint.toJson()],
         track: _mission.toJson(),
+        events: [for (final event in _events) event.toJson()],
         owner: session.userName,
       );
     } catch (_) {
@@ -1971,7 +2058,9 @@ class TacticalController extends ChangeNotifier {
       _checkNavTarget();
       if (_session != null) {
         _peerTrails.update(nodes);
-        _contactWatch.update(nodes);
+        for (final lost in _contactWatch.update(nodes)) {
+          _log(MissionEventKind.contact, 'Ztráta spojení: ${lost.callSign}');
+        }
       }
       _syncCarTargets();
       notifyListeners();

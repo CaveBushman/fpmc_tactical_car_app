@@ -110,7 +110,11 @@ void main() {
       const MeshMessageDraft(text: 'Uchovat', groupId: 'alpha'),
     );
 
-    await Future<void>.delayed(const Duration(milliseconds: 80));
+    // The refresh fires after a short delay; wait for it without relying
+    // on exact timing (the full suite runs under load).
+    for (var i = 0; i < 100 && controller.session != null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
 
     expect(controller.session, isNull);
     expect(notices.last, contains('Přihlas se znovu'));

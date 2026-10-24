@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../controllers/offline_maps_controller.dart';
 import '../controllers/ptt_controller.dart';
 import '../models/messaging.dart';
+import '../models/mission_event.dart';
 import '../services/backend_client.dart';
 import '../services/offline_tiles/tile_math.dart';
 import '../widgets/offline_maps_section.dart';
@@ -42,6 +43,7 @@ class SystemsPage extends StatelessWidget {
     this.sharePositionToMesh = true,
     this.onSharePositionToMeshChanged,
     this.trackPoints = 0,
+    this.missionEvents = const [],
     this.trackLengthKm = 0,
     this.onExportMission,
     this.onClearTrack,
@@ -86,6 +88,9 @@ class SystemsPage extends StatelessWidget {
   final bool sharePositionToMesh;
   final ValueChanged<bool>? onSharePositionToMeshChanged;
   final int trackPoints;
+
+  /// Mission log, newest first.
+  final List<MissionEvent> missionEvents;
   final double trackLengthKm;
   final VoidCallback? onExportMission;
   final VoidCallback? onClearTrack;
@@ -487,8 +492,24 @@ class SystemsPage extends StatelessWidget {
                 ),
               ],
             ),
+            if (missionEvents.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final event in missionEvents.take(3))
+                MissionEventTile(event: event, dense: true),
+              TextButton.icon(
+                key: const ValueKey('mission-log'),
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: panelGreen,
+                  builder: (_) => MissionLogSheet(events: missionEvents),
+                ),
+                icon: const Icon(Icons.list_alt, size: 18),
+                label: Text('Deník mise (${missionEvents.length})'),
+              ),
+            ],
             Text(
-              'GPX (body mise a stopa) + CSV log zpráv',
+              'GPX (body mise a stopa) + CSV zpráv a deníku událostí',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.white.withValues(alpha: 0.6),
@@ -637,6 +658,76 @@ class _QuickMessagesDialogState extends State<QuickMessagesDialog> {
           child: const Text('Uložit'),
         ),
       ],
+    );
+  }
+}
+
+/// One mission log line: time, kind and text.
+class MissionEventTile extends StatelessWidget {
+  const MissionEventTile({required this.event, this.dense = false, super.key});
+
+  final MissionEvent event;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    final at = event.at;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: dense ? 2 : 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${two(at.hour)}:${two(at.minute)}',
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              color: sand,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(event.kind.icon, size: 16, color: Colors.white70),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              event.text,
+              maxLines: dense ? 1 : 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The whole mission log, newest first.
+class MissionLogSheet extends StatelessWidget {
+  const MissionLogSheet({required this.events, super.key});
+
+  final List<MissionEvent> events;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+          children: [
+            const Text(
+              'Deník mise',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            for (final event in events) MissionEventTile(event: event),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/messaging.dart';
 import '../models/navigation.dart';
 import '../models/track.dart';
+import '../models/mission_event.dart';
 
 /// GPX 1.1 with mission waypoints and the own trail (QGIS, Google Earth,
 /// OsmAnd, Garmin BaseCamp…).
@@ -95,6 +96,16 @@ String buildMessagesCsv({
         message.viaInternet ? 'internet' : 'LoRa',
         message.priority ? 'ano' : 'ne',
       ],
+  ];
+  return rows.map((row) => row.map(_csv).join(';')).join('\r\n');
+}
+
+/// Mission log as semicolon-separated CSV, oldest first.
+String buildEventsCsv(List<MissionEvent> events) {
+  final rows = <List<String>>[
+    ['cas_utc', 'druh', 'udalost'],
+    for (final event in events.reversed)
+      [event.at.toUtc().toIso8601String(), event.kind.label, event.text],
   ];
   return rows.map((row) => row.map(_csv).join(';')).join('\r\n');
 }

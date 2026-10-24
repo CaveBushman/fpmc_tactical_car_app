@@ -37,6 +37,9 @@ class SosCoordinator {
 
   bool get active => _active;
 
+  /// A call from [callSign] is known (shown or already acknowledged).
+  bool hasCall(String callSign) => _alerts.containsKey(callSign);
+
   /// Unacknowledged calls repeated within [alertLifetime], newest first.
   List<SosAlert> get alerts {
     final cutoff = DateTime.now().subtract(alertLifetime);

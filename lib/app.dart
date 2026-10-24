@@ -345,6 +345,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         sharePositionToMesh: controller.sharePositionToMesh,
         onSharePositionToMeshChanged: controller.setSharePositionToMesh,
         trackPoints: controller.track.length,
+        missionEvents: controller.missionEvents,
         trackLengthKm: trackLengthKm(controller.track),
         onExportMission: controller.exportMission,
         onClearTrack: controller.clearTrack,

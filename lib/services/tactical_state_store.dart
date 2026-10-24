@@ -12,8 +12,12 @@ class PersistedTacticalState {
     required this.savedAt,
     this.waypoints,
     this.track,
+    this.events,
     this.owner,
   });
+
+  /// Mission log; null for snapshots written before it existed.
+  final List<Map<String, dynamic>>? events;
 
   final List<Map<String, dynamic>> nodes;
   final List<Map<String, dynamic>> messages;
@@ -128,6 +132,7 @@ class TacticalStateStore {
     required List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>> waypoints = const [],
     List<Map<String, dynamic>> track = const [],
+    List<Map<String, dynamic>> events = const [],
     String? owner,
   }) async {
     final prefs = await SharedPreferences.getInstance();
@@ -139,6 +144,7 @@ class TacticalStateStore {
       'messages': messages,
       'waypoints': waypoints,
       'track': track,
+      'events': events,
     };
     await prefs.setString(key, await _encrypt(jsonEncode(payload)));
   }
@@ -206,6 +212,9 @@ class TacticalStateStore {
           ? _mapList(decoded['waypoints'])
           : null,
       track: decoded.containsKey('track') ? _mapList(decoded['track']) : null,
+      events: decoded.containsKey('events')
+          ? _mapList(decoded['events'])
+          : null,
       savedAt:
           DateTime.tryParse(decoded['savedAt']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),

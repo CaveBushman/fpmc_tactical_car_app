@@ -1,5 +1,6 @@
 import '../models/geo.dart' as geo;
 import '../models/messaging.dart';
+import '../models/mission_event.dart';
 import '../models/navigation.dart';
 import '../models/track.dart';
 import '../services/location_service.dart';
@@ -57,6 +58,7 @@ class MissionRecorder {
     required List<TacticalWaypoint> waypoints,
     required List<MeshMessage> messages,
     required List<CommunicationGroup> groups,
+    List<MissionEvent> events = const [],
     DateTime? now,
   }) async {
     final at = now ?? DateTime.now();
@@ -79,6 +81,11 @@ class MissionRecorder {
         name: 'zpravy-$stamp.csv',
         mimeType: 'text/csv',
         content: buildMessagesCsv(messages: messages, groups: groups),
+      ),
+      ExportFile(
+        name: 'udalosti-$stamp.csv',
+        mimeType: 'text/csv',
+        content: buildEventsCsv(events),
       ),
     ], subject: name);
   }

@@ -6,6 +6,8 @@
 - Message search (case and diacritics ignored) and a priority filter.
 - Car mode: own status, quick messages and navigation target picked from
   large buttons.
+- Mission log for the after-action review, shown in System and exported
+  as CSV.
 - Layout fixes for the team phone found by screen-by-screen audits
   (Messages in landscape, map cards and buttons, forms with the keyboard,
   navigation rail).
