@@ -123,6 +123,53 @@ jobs:
       - name: Test
         run: python manage.py test
 
+  backend-e2e:
+    name: App client against the Django backend (PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: tactical
+          POSTGRES_USER: tactical
+          POSTGRES_PASSWORD: tactical
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tactical" --health-interval 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install app dependencies
+        run: flutter pub get
+
+      - name: End-to-end
+        env:
+          PYTHON: python
+          POSTGRES_DB: tactical
+          POSTGRES_USER: tactical
+          POSTGRES_PASSWORD: tactical
+          POSTGRES_HOST: localhost
+        run: tool/e2e_backend.sh
+
   meshtastic-schema:
     name: Meshtastic schema conformance
     runs-on: ubuntu-latest

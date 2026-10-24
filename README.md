@@ -155,6 +155,8 @@ Device binding: the app sends a random per-installation id at login; an account 
 
 API (unchanged from the Dart server): `POST /auth/login`, `POST /auth/refresh`, `POST /auth/password`, `POST /ptt/<group>/join`, admin endpoints under `/admin/…` (commander, Bearer token), `GET /health`. Configuration is documented in `backend/tactical/settings.py`.
 
+End-to-end: `tool/e2e_backend.sh` starts the backend under gunicorn (throw-away SQLite, or the PostgreSQL given by `POSTGRES_*`), seeds test accounts and runs the app's real `BackendClient` against it over HTTP (`test/e2e/backend_e2e_test.dart`: login with device binding, refresh, PTT join with keys, Czech names, and the errors the app shows). CI runs it against PostgreSQL.
+
 Development and tests (SQLite, no PostgreSQL needed):
 
 ```sh
