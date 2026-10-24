@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:tactical_car_app/services/backend_client.dart';
 import 'package:tactical_car_app/services/location_service.dart';
 import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
+import 'package:tactical_car_app/services/ptt/voice_transport.dart';
 
 class FakeLocationService implements LocationService {
   final StreamController<LocationState> _stateController =
@@ -58,3 +61,66 @@ class FakeBleService extends MeshtasticBleService {
     written.add(protobufBytes);
   }
 }
+
+class FakeVoiceTransport implements VoiceTransport {
+  final StreamController<VoiceEvent> _events = StreamController.broadcast();
+  PttJoinInfo? connectedWith;
+  bool microphoneEnabled = false;
+  bool disposed = false;
+  Object? connectError;
+  final List<Map<String, dynamic>> sent = [];
+
+  @override
+  Stream<VoiceEvent> get events => _events.stream;
+
+  void emit(VoiceEvent event) => _events.add(event);
+
+  /// Floor message as another member would send it.
+  void remoteFloor(String from, String op, DateTime at) => emit(
+    VoiceDataReceived(
+      from: from,
+      data: utf8.encode(
+        jsonEncode({'op': op, 'at': at.toUtc().toIso8601String()}),
+      ),
+    ),
+  );
+
+  @override
+  Future<void> connect(PttJoinInfo info) async {
+    if (connectError != null) {
+      throw connectError!;
+    }
+    connectedWith = info;
+  }
+
+  @override
+  Future<void> setMicrophoneEnabled(bool enabled) async {
+    microphoneEnabled = enabled;
+  }
+
+  @override
+  Future<void> sendData(List<int> data) async {
+    sent.add(jsonDecode(utf8.decode(data)) as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> dispose() async {
+    disposed = true;
+    await _events.close();
+  }
+}
+
+PttJoinInfo fakeJoinInfo({String identity = 'operator', int keyId = 3}) =>
+    PttJoinInfo(
+      liveKitUrl: 'wss://ptt.example.test',
+      room: 'ptt-alpha',
+      identity: identity,
+      token: 'lk-token',
+      keys: [
+        GroupKeyMaterial(id: keyId - 1, bytes: List.filled(32, 1)),
+        GroupKeyMaterial(id: keyId, bytes: List.filled(32, 2)),
+      ],
+    );

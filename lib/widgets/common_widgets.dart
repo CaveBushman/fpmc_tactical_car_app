@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../controllers/ptt_controller.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 
@@ -205,7 +206,7 @@ class StatusIcons extends StatelessWidget {
         ),
         icon(
           voiceOnline ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-          voiceOnline ? 'PTT demo online' : 'PTT offline',
+          voiceOnline ? 'PTT připojeno' : 'PTT nepřipojeno',
           voiceOnline ? sand : dangerRed,
         ),
         icon(
@@ -279,26 +280,45 @@ class _TimeReadoutState extends State<TimeReadout> {
 
 class PttBar extends StatelessWidget {
   const PttBar({
-    required this.active,
-    required this.enabled,
+    required this.status,
     required this.onChanged,
     required this.channel,
     required this.userName,
-    required this.encrypted,
+    this.speaker,
+    this.demo = false,
     this.compact = false,
     super.key,
   });
 
-  final bool active;
-  final bool enabled;
+  final PttStatus status;
   final ValueChanged<bool> onChanged;
   final String channel;
   final String userName;
-  final bool encrypted;
+
+  /// Identity of the member holding the floor while [status] is receiving.
+  final String? speaker;
+
+  /// Demo mode: no voice server, the button only changes local state.
+  final bool demo;
   final bool compact;
+
+  bool get active => status == PttStatus.transmitting;
+  bool get enabled =>
+      status == PttStatus.ready || status == PttStatus.transmitting;
+
+  String get _statusLabel => switch (status) {
+    PttStatus.offline => 'PTT OFFLINE',
+    PttStatus.connecting => 'PTT $channel | PŘIPOJUJI',
+    PttStatus.ready =>
+      'PTT $channel | PŘIPRAVENO | ${demo ? 'DEMO BEZ ZVUKU' : 'E2EE'}',
+    PttStatus.transmitting => 'PTT $channel | VYSÍLÁM',
+    PttStatus.receiving => 'PTT $channel | MLUVÍ ${speaker ?? '?'}',
+    PttStatus.error => 'PTT $channel | CHYBA SPOJENÍ',
+  };
 
   @override
   Widget build(BuildContext context) {
+    final receiving = status == PttStatus.receiving;
     return Container(
       padding: EdgeInsets.fromLTRB(12, compact ? 6 : 8, 12, compact ? 8 : 10),
       color: const Color(0xFF10130D),
@@ -321,12 +341,14 @@ class PttBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  enabled
-                      ? 'PTT $channel | ${active ? 'VYSILANI' : 'PRIPRAVENO'} | ${encrypted ? 'AES-GCM' : 'NEŠIFROVÁNO'}'
-                      : 'PTT SERVER OFFLINE',
+                  _statusLabel,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: enabled ? Colors.white : dangerRed,
+                    color: switch (status) {
+                      PttStatus.error || PttStatus.offline => dangerRed,
+                      PttStatus.receiving => blueForce,
+                      _ => Colors.white,
+                    },
                     fontSize: compact ? 11 : 12,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0,
@@ -362,12 +384,14 @@ class PttBar extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    active ? Icons.mic : Icons.mic_none,
+                    active
+                        ? Icons.mic
+                        : (receiving ? Icons.hearing : Icons.mic_none),
                     color: active ? Colors.black : Colors.white,
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    active ? 'TALK' : 'PTT',
+                    active ? 'TALK' : (receiving ? 'OBSAZENO' : 'PTT'),
                     style: TextStyle(
                       color: active ? Colors.black : Colors.white,
                       fontWeight: FontWeight.w900,

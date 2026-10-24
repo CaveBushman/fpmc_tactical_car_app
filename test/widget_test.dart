@@ -485,4 +485,24 @@ void main() {
 
     expect(find.text('MINA | DANGER'), findsNothing);
   });
+
+  testWidgets('PTT bar shows demo mode and transmit state', (tester) async {
+    await login(tester);
+
+    expect(
+      find.textContaining('PTT ALPHA | PŘIPRAVENO | DEMO'),
+      findsOneWidget,
+    );
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('PTT').last),
+    );
+    await tester.pump();
+    expect(find.textContaining('VYSÍLÁM'), findsOneWidget);
+    expect(find.text('TALK'), findsOneWidget);
+
+    await gesture.up();
+    await tester.pump();
+    expect(find.textContaining('PŘIPRAVENO'), findsOneWidget);
+  });
 }

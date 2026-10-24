@@ -2,20 +2,26 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import 'backend_client.dart';
+
 class AuthSession {
   const AuthSession({
     required this.userName,
     required this.displayName,
     required this.role,
     required this.allowedGroupIds,
-    required this.pttToken,
+    this.sessionToken,
   });
 
   final String userName;
   final String displayName;
   final String role;
   final Set<String> allowedGroupIds;
-  final String pttToken;
+
+  /// Backend session token; null for local demo accounts.
+  final String? sessionToken;
+
+  bool get isDemo => sessionToken == null;
 }
 
 class AuthResult {
@@ -111,21 +117,56 @@ class AuthService {
       displayName: 'OPERATOR',
       role: 'operator',
       allowedGroupIds: {'alpha', 'bravo', 'med'},
-      pttToken: 'demo-operator-ptt-token',
     ),
     'commander': AuthSession(
       userName: 'commander',
       displayName: 'COMMANDER',
       role: 'commander',
       allowedGroupIds: {'alpha', 'bravo', 'med', 'command'},
-      pttToken: 'demo-commander-ptt-token',
     ),
     'medic': AuthSession(
       userName: 'medic',
       displayName: 'MEDIC',
       role: 'medic',
       allowedGroupIds: {'alpha', 'med'},
-      pttToken: 'demo-medic-ptt-token',
     ),
   };
+}
+
+/// Logs in against the tactical backend.
+class RemoteAuthService extends AuthService {
+  RemoteAuthService(this.backend);
+
+  final BackendClient backend;
+
+  @override
+  Future<AuthResult> login({
+    required String userName,
+    required String password,
+  }) async {
+    if (userName.trim().isEmpty) {
+      return const AuthResult.failure('Zadej uživatele.');
+    }
+    try {
+      final login = await backend.login(userName.trim(), password);
+      final user = login.user;
+      return AuthResult.success(
+        AuthSession(
+          userName: user.userName,
+          displayName: user.displayName,
+          role: user.role,
+          allowedGroupIds: user.groups,
+          sessionToken: login.sessionToken,
+        ),
+      );
+    } on BackendException catch (error) {
+      return AuthResult.failure(switch (error.statusCode) {
+        0 => 'Server je nedostupný. Zkontroluj připojení.',
+        401 => AuthService._invalidCredentials,
+        429 =>
+          'Příliš mnoho pokusů. Zkus to za ${error.retryAfter?.inSeconds ?? 60} s.',
+        _ => 'Přihlášení selhalo (${error.code}).',
+      });
+    }
+  }
 }

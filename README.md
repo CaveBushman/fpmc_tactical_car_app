@@ -15,17 +15,16 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Message delivery status (sent / delivered / failed) with resend for messages the T-Beam did not take.
 - Message view with Meshtastic group messages, direct messages, quick actions, and internet PTT system messages.
 - Quick `NA POZICI` message includes full MGRS, latitude, and longitude.
-- Hold-to-talk PTT control for the internet voice channel.
+- Hold-to-talk PTT over a self-hosted LiveKit server with end-to-end encrypted audio, half-duplex floor control (one speaker at a time, "MLUVÍ …" / "OBSAZENO") and per-group rooms. Without `BACKEND_URL` the app runs in demo mode with local accounts and silent PTT.
 - System screen with Meshtastic BLE, PTT server, and car mode status.
 - Adaptive portrait and landscape layouts.
 - Font size slider in system settings for all operational UI text except the main title.
 - Meshtastic BLE service using the official BLE service and ToRadio/FromRadio/FromNum characteristics.
 - Meshtastic packet diagnostics in system settings: packet count, decoded NodeInfo/Position/Text events, last RX time, packet size, and hex preview.
 - Focused Meshtastic protobuf reader/writer for MyNodeInfo, NodeInfo, Position, TextMessage, Routing (ACK/NAK) and want_config handshake.
-- Encrypted PTT frame service using AES-GCM 256.
 - Local auth service with demo roles (`operator`, `commander`, `medic`), password check (demo password `<user>-2026`, e.g. `operator-2026`), lockout after 5 failed attempts, session chip, and logout.
 - Communication groups with role-based access: ALPHA, BRAVO, MED, COMMAND.
-- PTT channel access is derived from the authenticated session and selected group; each group gets its own AES-GCM key material.
+- Backend (`server/`) issues sessions, LiveKit room tokens limited to the user's groups, and random per-group E2EE keys with commander-triggered rotation; security events go to an audit log.
 - Node/message state persisted locally, AES-GCM encrypted with a key in the platform keystore, wiped on logout.
 - GitHub Actions CI for dependency install, static analysis, tests, web build, and Android debug APK build.
 
@@ -80,19 +79,39 @@ Optional: `TILE_MAX_ZOOM` (default 18), `TILE_ALLOW_BULK=false` to disable packs
 ## Security Notes
 
 - PTT frame encryption uses AES-GCM 256 in the prototype.
-- Demo auth is local and must be replaced with server-backed authentication before real deployment.
-- Group keys are derived locally for prototype flow validation; production should use authenticated key distribution and rotation.
+- With `BACKEND_URL` set, login, PTT room access and group keys come from the backend; the local demo accounts are only used when it is not set.
+- PTT audio and floor-control messages are E2EE (LiveKit shared-key AES-GCM) with keys from the backend, so the SFU relays ciphertext only. The backend itself knows the group keys; run it on infrastructure you control.
+- Transport replay protection comes from DTLS-SRTP; floor-control messages outside ±30 s of local time are ignored.
 - Meshtastic LoRa payload security should be aligned with the operation channel configuration on the devices.
 
 ## Next Implementation Steps
 
 1. Replace the focused manual Meshtastic protobuf layer with generated classes when `protoc` is available in CI.
 2. Add offline map package management by operation area.
-3. Add LiveKit/WebRTC PTT transport and backend token/key endpoint.
-4. Add Android foreground audio service and iOS audio session handling.
-5. Add native Android Auto and CarPlay modules with restricted car-safe UI.
-6. Add server-backed users, teams, operation groups, device binding, and audit logs.
-7. Add end-to-end integration tests with recorded Meshtastic BLE packets.
+3. Add Android foreground audio service and iOS audio session / CallKit so PTT works with the screen off.
+4. Add native Android Auto and CarPlay modules with restricted car-safe UI.
+5. Add server-side teams management UI, operation groups, device binding, and audit logs.
+6. Add end-to-end integration tests with recorded Meshtastic BLE packets.
+
+## PTT Backend and LiveKit
+
+`server/` is a small Dart (shelf) service, `deploy/` a docker-compose stack with LiveKit:
+
+```sh
+cd deploy
+cp .env.example .env                                 # fill in secrets
+cp ../server/config/users.example.json users.json    # demo users: <user>-2026
+(cd ../server && dart run bin/hash_password.dart)    # hash for real users
+docker compose up -d
+```
+
+Put a TLS reverse proxy in front (the app needs `https://` for the backend and `wss://` for LiveKit; open UDP 50000–50200 and TCP 7881 for media). Then build the app against it:
+
+```sh
+flutter run --dart-define=BACKEND_URL=https://ptt.example.cz/api
+```
+
+API: `POST /auth/login`, `POST /ptt/<group>/join`, `POST /admin/groups/<group>/rotate-key` (commander), `GET /health`. Backend tests: `cd server && dart test`.
 
 ## Code Layout
 
@@ -102,7 +121,9 @@ Optional: `TILE_MAX_ZOOM` (default 18), `TILE_ALLOW_BULK=false` to disable packs
 - `lib/models/` – mesh node, messaging, navigation/waypoint models and `geo.dart` (distance, bearing, MGRS).
 - `lib/screens/` – login, map, team, messages, systems pages.
 - `lib/widgets/` – shared, node, position and navigation widgets.
-- `lib/services/` – BLE, protobuf, auth, crypto, location and storage services.
+- `lib/controllers/ptt_controller.dart` – PTT state and floor control over a `VoiceTransport` (LiveKit in `lib/services/ptt/`).
+- `lib/services/` – BLE, protobuf, auth/backend client, location, storage and offline tile services.
+- `server/` – backend; `deploy/` – docker-compose with LiveKit.
 
 ## Run
 

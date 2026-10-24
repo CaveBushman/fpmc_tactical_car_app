@@ -8,13 +8,15 @@ import '../models/messaging.dart';
 import '../models/navigation.dart';
 import '../models/reports.dart';
 import '../services/auth_service.dart';
-import '../services/encrypted_ptt_service.dart';
+import '../services/backend_client.dart';
+import '../services/ptt/livekit_voice_transport.dart';
+import '../services/ptt/voice_transport.dart';
+import 'ptt_controller.dart';
 import '../services/location_service.dart';
 import '../services/mesh_packet_repository.dart';
 import '../services/meshtastic_ble_service.dart';
 import '../services/meshtastic_message_encoder.dart';
 import '../services/meshtastic_packet_decoder.dart';
-import '../services/ptt_access_service.dart';
 import '../services/tactical_state_store.dart';
 
 /// Owns the operational state (session, nodes, messages, radio, GPS, PTT)
@@ -27,8 +29,13 @@ class TacticalController extends ChangeNotifier {
     MeshPacketRepository? meshPacketRepository,
     MeshtasticBleService? meshtasticBleService,
     TacticalStateStore? stateStore,
+    BackendClient? backend,
+    VoiceTransport Function()? voiceTransportFactory,
     Duration agingTick = const Duration(seconds: 15),
-  }) : _authService = authService ?? AuthService(),
+  }) : _backend = backend,
+       _authService =
+           authService ??
+           (backend == null ? AuthService() : RemoteAuthService(backend)),
        _locationService = locationService ?? GeolocatorLocationService(),
        _meshPacketRepository = meshPacketRepository ?? MeshPacketRepository(),
        _meshtasticBleService = meshtasticBleService ?? MeshtasticBleService(),
@@ -42,10 +49,10 @@ class TacticalController extends ChangeNotifier {
       _bleState = state;
       _notify();
     });
-    _pttStateSubscription = _pttService.stateStream.listen((state) {
-      _pttState = state;
-      _notify();
-    });
+    _ptt = PttController(
+      joiner: backend == null ? null : _joinPtt,
+      transportFactory: voiceTransportFactory ?? LiveKitVoiceTransport.new,
+    )..addListener(_notify);
     _blePacketSubscription = _meshtasticBleService.packets.listen(
       _meshPacketRepository.ingest,
     );
@@ -66,15 +73,15 @@ class TacticalController extends ChangeNotifier {
     });
   }
 
+  final BackendClient? _backend;
   final AuthService _authService;
+  late final PttController _ptt;
   final LocationService _locationService;
   final MeshPacketRepository _meshPacketRepository;
   final MeshtasticBleService _meshtasticBleService;
   final TacticalStateStore _stateStore;
-  final PttAccessService _pttAccessService = const PttAccessService();
   final MeshtasticMessageEncoder _messageEncoder =
       const MeshtasticMessageEncoder();
-  final EncryptedPttService _pttService = EncryptedPttService(channel: 'ALPHA');
   final math.Random _packetIdRandom = math.Random.secure();
   final StreamController<String> _noticeController =
       StreamController.broadcast();
@@ -86,24 +93,16 @@ class TacticalController extends ChangeNotifier {
   late final StreamSubscription<MeshPacketDiagnostics>
   _packetDiagnosticsSubscription;
   late final StreamSubscription<List<DecodedMeshEvent>> _meshEventsSubscription;
-  late final StreamSubscription<EncryptedPttState> _pttStateSubscription;
   late final Timer _agingTimer;
 
   bool _disposed = false;
   AuthSession? _session;
   int _selectedGroupIndex = 0;
-  bool _pttActive = false;
-  bool _internetVoiceOnline = true;
   double _fontScale = 1.0;
   DateTime? _lastLocationPersistAt;
   LocationState _locationState = LocationState.idle;
   MeshtasticBleState _bleState = MeshtasticBleState.idle;
   MeshPacketDiagnostics _packetDiagnostics = MeshPacketDiagnostics.empty;
-  EncryptedPttState _pttState = const EncryptedPttState(
-    status: EncryptedPttStatus.ready,
-    channel: 'ALPHA',
-    encrypted: true,
-  );
 
   final List<MeshNode> _nodes = MeshNode.demoNodes(DateTime.now());
   final List<MeshMessage> _messages = MeshMessage.demoMessages(DateTime.now());
@@ -119,14 +118,19 @@ class TacticalController extends ChangeNotifier {
   MeshNode get selfNode => _nodes.firstWhere((node) => node.isSelf);
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   List<TacticalWaypoint> get waypoints => List.unmodifiable(_waypoints);
-  bool get pttActive => _pttActive;
-  bool get internetVoiceOnline => _internetVoiceOnline;
+  PttController get ptt => _ptt;
+  bool get pttActive => _ptt.status == PttStatus.transmitting;
+
+  /// PTT joined (or demo) and usable.
+  bool get voiceOnline => switch (_ptt.status) {
+    PttStatus.ready || PttStatus.transmitting || PttStatus.receiving => true,
+    _ => false,
+  };
   bool get meshConnected => _bleState.status == MeshtasticBleStatus.connected;
   double get fontScale => _fontScale;
   LocationState get locationState => _locationState;
   MeshtasticBleState get bleState => _bleState;
   MeshPacketDiagnostics get packetDiagnostics => _packetDiagnostics;
-  EncryptedPttState get pttState => _pttState;
 
   List<CommunicationGroup> get allowedGroups {
     final session = _session;
@@ -153,13 +157,15 @@ class TacticalController extends ChangeNotifier {
     unawaited(_blePacketSubscription.cancel());
     unawaited(_packetDiagnosticsSubscription.cancel());
     unawaited(_meshEventsSubscription.cancel());
-    unawaited(_pttStateSubscription.cancel());
     unawaited(_locationStateSubscription.cancel());
     unawaited(_locationFixSubscription.cancel());
     unawaited(_locationService.dispose());
     unawaited(_meshtasticBleService.dispose());
     unawaited(_meshPacketRepository.dispose());
-    unawaited(_pttService.dispose());
+    _ptt
+      ..removeListener(_notify)
+      ..dispose();
+    _backend?.close();
     unawaited(_noticeController.close());
     super.dispose();
   }
@@ -181,7 +187,7 @@ class TacticalController extends ChangeNotifier {
     _notify();
     unawaited(_locationService.start());
     unawaited(_restorePersistedState(session.userName));
-    _syncPttChannel(session, selectedGroup);
+    unawaited(_joinSelectedGroupPtt());
     return null;
   }
 
@@ -192,6 +198,7 @@ class TacticalController extends ChangeNotifier {
     _selectedGroupIndex = 0;
     _notify();
     await _authService.logout();
+    await _ptt.leave();
     await _locationService.stop();
     try {
       await _meshtasticBleService.disconnect();
@@ -220,11 +227,6 @@ class TacticalController extends ChangeNotifier {
     _notify();
   }
 
-  void setInternetVoiceOnline(bool value) {
-    _internetVoiceOnline = value;
-    _notify();
-  }
-
   Future<void> connectRadio() => _meshtasticBleService.startAutoConnect();
 
   Future<void> startLocation() => _locationService.start();
@@ -235,13 +237,13 @@ class TacticalController extends ChangeNotifier {
 
   void setPttActive(bool value) {
     if (value) {
-      _pttService.beginTransmit();
+      unawaited(_ptt.press());
     } else {
-      _pttService.endTransmit();
+      unawaited(_ptt.release());
     }
-    _pttActive = value;
-    _notify();
   }
+
+  Future<void> reconnectPtt() => _joinSelectedGroupPtt();
 
   void selectGroup(int index) {
     final session = _session;
@@ -250,18 +252,23 @@ class TacticalController extends ChangeNotifier {
     }
     _selectedGroupIndex = index;
     _notify();
-    _syncPttChannel(session, selectedGroup);
+    unawaited(_joinSelectedGroupPtt());
   }
 
-  void _syncPttChannel(AuthSession session, CommunicationGroup group) {
-    final access = _pttAccessService.authorize(
-      session: session,
-      groupId: group.id,
-    );
-    _pttService.switchChannel(
-      channel: access.channel,
-      keyBytes: access.keyBytes,
-    );
+  Future<void> _joinSelectedGroupPtt() async {
+    if (_session == null) {
+      return;
+    }
+    final group = selectedGroup;
+    await _ptt.joinGroup(group.id, group.name);
+  }
+
+  Future<PttJoinInfo> _joinPtt(String groupId) {
+    final token = _session?.sessionToken;
+    if (token == null) {
+      throw const BackendException(401, 'no_session');
+    }
+    return _backend!.joinPtt(token, groupId);
   }
 
   // --- Own position ----------------------------------------------------------

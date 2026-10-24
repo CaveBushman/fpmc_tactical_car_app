@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../controllers/offline_maps_controller.dart';
+import '../controllers/ptt_controller.dart';
 import '../widgets/offline_maps_section.dart';
 
-import '../services/encrypted_ptt_service.dart';
 import '../services/location_service.dart';
 import '../services/mesh_packet_repository.dart';
 import '../services/meshtastic_ble_service.dart';
@@ -15,12 +15,11 @@ import '../widgets/position_widgets.dart';
 class SystemsPage extends StatelessWidget {
   const SystemsPage({
     required this.meshConnected,
-    required this.internetVoiceOnline,
-    required this.onVoiceChanged,
+    required this.ptt,
+    this.onPttReconnect,
     required this.onBleConnect,
     required this.bleState,
     required this.packetDiagnostics,
-    required this.pttState,
     required this.fontScale,
     required this.onFontScaleChanged,
     this.locationState = LocationState.idle,
@@ -32,12 +31,11 @@ class SystemsPage extends StatelessWidget {
   });
 
   final bool meshConnected;
-  final bool internetVoiceOnline;
-  final ValueChanged<bool> onVoiceChanged;
+  final PttController ptt;
+  final VoidCallback? onPttReconnect;
   final VoidCallback onBleConnect;
   final MeshtasticBleState bleState;
   final MeshPacketDiagnostics packetDiagnostics;
-  final EncryptedPttState pttState;
   final double fontScale;
   final ValueChanged<double> onFontScaleChanged;
   final LocationState locationState;
@@ -199,20 +197,33 @@ class SystemsPage extends StatelessWidget {
           title: 'Internet PTT',
           icon: Icons.record_voice_over,
           children: [
-            SwitchListTile(
-              value: internetVoiceOnline,
-              onChanged: onVoiceChanged,
-              title: const Text('Simulace PTT'),
-              subtitle: const Text(
-                'Hlasový server (WebRTC/LiveKit) zatím není napojen',
-              ),
+            MonoLine(
+              label: 'Režim',
+              value: ptt.isDemo
+                  ? 'demo bez zvuku (BACKEND_URL nenastaven)'
+                  : 'LiveKit, push-to-talk floor control',
             ),
-            MonoLine(label: 'Kanál', value: pttState.channel),
+            MonoLine(label: 'Kanál', value: ptt.channel),
+            MonoLine(label: 'Stav', value: ptt.status.name),
             MonoLine(
               label: 'Šifrování',
-              value: pttState.encrypted ? 'AES-GCM 256 aktivní' : 'vypnuto',
+              value: ptt.isDemo
+                  ? '-'
+                  : ptt.keyId == null
+                  ? 'čeká na klíč'
+                  : 'E2EE AES-GCM, klíč #${ptt.keyId}',
             ),
-            const MonoLine(label: 'Režim', value: 'Push-to-talk floor control'),
+            if (ptt.error != null) MonoLine(label: 'Chyba', value: ptt.error!),
+            if (!ptt.isDemo) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: ptt.status == PttStatus.connecting
+                    ? null
+                    : onPttReconnect,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Znovu připojit PTT'),
+              ),
+            ],
           ],
         ),
         const SizedBox(height: 10),

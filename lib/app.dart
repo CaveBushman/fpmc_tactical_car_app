@@ -9,7 +9,9 @@ import 'screens/map_page.dart';
 import 'screens/messages_page.dart';
 import 'screens/systems_page.dart';
 import 'screens/team_page.dart';
+import 'services/backend_client.dart';
 import 'services/location_service.dart';
+import 'services/ptt/voice_transport.dart';
 import 'services/mesh_packet_repository.dart';
 import 'services/meshtastic_ble_service.dart';
 import 'theme.dart';
@@ -21,6 +23,8 @@ class TacticalCarApp extends StatelessWidget {
     this.meshPacketRepository,
     this.meshtasticBleService,
     this.offlineMaps,
+    this.backend,
+    this.voiceTransportFactory,
     super.key,
   });
 
@@ -28,6 +32,10 @@ class TacticalCarApp extends StatelessWidget {
   final MeshPacketRepository? meshPacketRepository;
   final MeshtasticBleService? meshtasticBleService;
   final OfflineMapsController? offlineMaps;
+
+  /// Defaults to BACKEND_URL; null there means demo accounts and PTT.
+  final BackendClient? backend;
+  final VoiceTransport Function()? voiceTransportFactory;
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +72,8 @@ class TacticalCarApp extends StatelessWidget {
         meshPacketRepository: meshPacketRepository,
         meshtasticBleService: meshtasticBleService,
         offlineMaps: offlineMaps,
+        backend: backend,
+        voiceTransportFactory: voiceTransportFactory,
       ),
     );
   }
@@ -75,6 +85,8 @@ class TacticalHomeScreen extends StatefulWidget {
     this.meshPacketRepository,
     this.meshtasticBleService,
     this.offlineMaps,
+    this.backend,
+    this.voiceTransportFactory,
     super.key,
   });
 
@@ -82,6 +94,10 @@ class TacticalHomeScreen extends StatefulWidget {
   final MeshPacketRepository? meshPacketRepository;
   final MeshtasticBleService? meshtasticBleService;
   final OfflineMapsController? offlineMaps;
+
+  /// Defaults to BACKEND_URL; null there means demo accounts and PTT.
+  final BackendClient? backend;
+  final VoiceTransport Function()? voiceTransportFactory;
 
   @override
   State<TacticalHomeScreen> createState() => _TacticalHomeScreenState();
@@ -100,6 +116,12 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       locationService: widget.locationService,
       meshPacketRepository: widget.meshPacketRepository,
       meshtasticBleService: widget.meshtasticBleService,
+      backend:
+          widget.backend ??
+          (backendUrlFromEnvironment.isEmpty
+              ? null
+              : BackendClient(baseUrl: backendUrlFromEnvironment)),
+      voiceTransportFactory: widget.voiceTransportFactory,
     );
     _offlineMaps = widget.offlineMaps ?? OfflineMapsController();
     unawaited(_offlineMaps.init());
@@ -138,7 +160,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
 
     final nodes = controller.nodes;
     final selfNode = controller.selfNode;
-    final pttState = controller.pttState;
+    final ptt = controller.ptt;
 
     MapPage mapPage({bool showDetailsSheet = true}) => MapPage(
       nodes: nodes,
@@ -180,12 +202,11 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
       ),
       SystemsPage(
         meshConnected: controller.meshConnected,
-        internetVoiceOnline: controller.internetVoiceOnline,
-        onVoiceChanged: controller.setInternetVoiceOnline,
+        ptt: ptt,
+        onPttReconnect: controller.reconnectPtt,
         onBleConnect: controller.connectRadio,
         bleState: controller.bleState,
         packetDiagnostics: controller.packetDiagnostics,
-        pttState: pttState,
         locationState: controller.locationState,
         onLocationStart: controller.startLocation,
         onLocationSettings: controller.openLocationSettings,
@@ -202,12 +223,12 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
     final short = screen.height < 800;
 
     PttBar pttBar({bool compact = false}) => PttBar(
-      active: controller.pttActive,
-      enabled: controller.internetVoiceOnline,
+      status: ptt.status,
+      speaker: ptt.speaker,
+      demo: ptt.isDemo,
       compact: compact,
-      channel: pttState.channel,
+      channel: ptt.channel,
       userName: selfNode.callSign,
-      encrypted: pttState.encrypted,
       onChanged: controller.setPttActive,
     );
 
@@ -219,7 +240,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen> {
         actions: [
           StatusIcons(
             meshConnected: controller.meshConnected,
-            voiceOnline: controller.internetVoiceOnline,
+            voiceOnline: controller.voiceOnline,
             pttActive: controller.pttActive,
           ),
           SizedBox(width: narrow ? 2 : 8),
