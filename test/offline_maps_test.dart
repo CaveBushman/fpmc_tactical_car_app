@@ -1,18 +1,20 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:tactical_car_app/controllers/offline_maps_controller.dart';
+import 'package:tactical_car_app/services/offline_tiles/offline_area.dart';
 import 'package:tactical_car_app/services/offline_tiles/offline_first_tile_provider.dart';
 import 'package:tactical_car_app/services/offline_tiles/offline_tile_store.dart';
 import 'package:tactical_car_app/services/offline_tiles/offline_tile_store_io.dart';
 import 'package:tactical_car_app/services/offline_tiles/tile_math.dart';
 import 'package:tactical_car_app/services/offline_tiles/tile_source.dart';
+import 'package:tactical_car_app/widgets/offline_maps_section.dart';
 
 const _custom = TileSource(
   id: 'test',
@@ -94,6 +96,21 @@ void main() {
       final again = FileOfflineTileStore(source: _custom, root: dir);
       await again.init();
       expect(again.tileCount, 0);
+    });
+
+    test('removes single tiles from disk and index', () async {
+      final store = FileOfflineTileStore(source: _custom, root: dir);
+      await store.init();
+      await store.put(const TileKey(12, 1, 1), Uint8List(4));
+      await store.put(const TileKey(12, 1, 2), Uint8List(6));
+
+      await store.remove(const TileKey(12, 1, 1));
+
+      expect(store.has(const TileKey(12, 1, 1)), isFalse);
+      expect(store.sizeBytes, 6);
+      final reopened = FileOfflineTileStore(source: _custom, root: dir);
+      await reopened.init();
+      expect(reopened.tileCount, 1);
     });
   });
 
@@ -210,6 +227,139 @@ void main() {
 
       expect(store.tileCount, lessThan(controller.tilesFor(_prague, 3).length));
       expect(controller.lastError, contains('zrušeno'));
+    });
+  });
+
+  group('named areas', () {
+    late MemoryOfflineTileStore store;
+    late MemoryOfflineAreaRegistry registry;
+    late int requests;
+
+    OfflineMapsController build() => OfflineMapsController(
+      source: _custom,
+      store: store,
+      areaRegistry: registry,
+      httpClient: MockClient((request) async {
+        requests++;
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+    );
+
+    setUp(() {
+      store = MemoryOfflineTileStore();
+      registry = MemoryOfflineAreaRegistry();
+      requests = 0;
+    });
+
+    const west = TileBounds(
+      north: 50.10,
+      south: 50.08,
+      west: 14.40,
+      east: 14.42,
+    );
+    const east = TileBounds(
+      north: 50.10,
+      south: 50.08,
+      west: 14.41,
+      east: 14.43,
+    );
+
+    test('downloads a named area and remembers it', () async {
+      final controller = build();
+      await controller.init();
+
+      await controller.downloadArea('Most', west);
+
+      final area = controller.areas.single;
+      expect(area.name, 'Most');
+      expect(area.complete, isTrue);
+      expect(area.tileCount, controller.tilesForBounds(west).length);
+      expect(store.tileCount, area.tileCount);
+
+      final reloaded = build();
+      await reloaded.init();
+      expect(reloaded.areas.single.name, 'Most');
+    });
+
+    test('deleting an area keeps tiles shared with another area', () async {
+      final controller = build();
+      await controller.init();
+      await controller.downloadArea('Západ', west);
+      final requestsBefore = requests;
+      await controller.downloadArea('Východ', east);
+      expect(
+        requests - requestsBefore,
+        lessThan(controller.tilesForBounds(east).length),
+        reason: 'overlapping tiles are not downloaded twice',
+      );
+
+      final westArea = controller.areas.firstWhere((a) => a.name == 'Západ');
+      await controller.deleteArea(westArea);
+
+      expect(controller.areas.map((a) => a.name), ['Východ']);
+      expect(controller.tilesForBounds(east).every(store.has), isTrue);
+      final westOnly = controller
+          .tilesForBounds(west)
+          .where((tile) => !controller.tilesForBounds(east).contains(tile));
+      expect(westOnly, isNotEmpty);
+      expect(westOnly.any(store.has), isFalse);
+    });
+
+    test('cancelled download is recorded as incomplete', () async {
+      final controller = build();
+      await controller.init();
+      controller.addListener(() {
+        if ((controller.progress?.done ?? 0) >= 2) {
+          controller.cancelDownload();
+        }
+      });
+
+      await controller.downloadArea('Velka', TileBounds.around(_prague, 3));
+
+      expect(controller.areas.single.complete, isFalse);
+    });
+
+    testWidgets('System section lists areas and downloads the visible one', (
+      tester,
+    ) async {
+      final controller = build();
+      await controller.init();
+      await controller.downloadArea('Most', west);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: OfflineMapsSection(
+                controller: controller,
+                center: _prague,
+                visibleBounds: east,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Most'), findsOneWidget);
+      expect(find.textContaining('Stáhnout zobrazenou oblast'), findsOneWidget);
+
+      await tester.tap(find.textContaining('Stáhnout zobrazenou oblast'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Kopec');
+      await tester.tap(find.text('Stáhnout'));
+      // The download runs on the test's fake clock; pump until it is done.
+      for (var i = 0; i < 100 && controller.areas.length < 2; i++) {
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kopec'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Smazat oblast Most'));
+      for (var i = 0; i < 20; i++) {
+        await tester.pump();
+      }
+      expect(find.text('Most'), findsNothing);
     });
   });
 }

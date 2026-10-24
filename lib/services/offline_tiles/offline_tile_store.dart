@@ -26,6 +26,7 @@ abstract class OfflineTileStore {
   /// Image for a stored tile, or null when it is not stored.
   ImageProvider? image(TileKey key);
   Future<void> put(TileKey key, Uint8List bytes);
+  Future<void> remove(TileKey key);
   Future<void> clear();
 }
 
@@ -57,6 +58,9 @@ class MemoryOfflineTileStore implements OfflineTileStore {
 
   @override
   Future<void> put(TileKey key, Uint8List bytes) async => _tiles[key] = bytes;
+
+  @override
+  Future<void> remove(TileKey key) async => _tiles.remove(key);
 
   @override
   Future<void> clear() async => _tiles.clear();

@@ -31,28 +31,63 @@ int _latToTileY(double lat, int z) {
   return (n * (1 << z)).floor().clamp(0, (1 << z) - 1);
 }
 
-/// Tiles covering a square of ±[radiusKm] around [center] for every zoom in
-/// [minZoom]..[maxZoom], coarse zooms first.
-List<TileKey> tilesAround(
-  LatLng center, {
-  required double radiusKm,
+/// Geographic rectangle for tile ranges.
+class TileBounds {
+  const TileBounds({
+    required this.north,
+    required this.south,
+    required this.west,
+    required this.east,
+  });
+
+  /// Square of ±[radiusKm] around [center].
+  factory TileBounds.around(LatLng center, double radiusKm) {
+    final latDelta = radiusKm / 111.32;
+    final lonDelta =
+        radiusKm / (111.32 * math.cos(center.latitude * math.pi / 180)).abs();
+    return TileBounds(
+      north: center.latitude + latDelta,
+      south: center.latitude - latDelta,
+      west: center.longitude - lonDelta,
+      east: center.longitude + lonDelta,
+    );
+  }
+
+  final double north;
+  final double south;
+  final double west;
+  final double east;
+
+  LatLng get center => LatLng((north + south) / 2, (west + east) / 2);
+
+  Map<String, double> toJson() => {
+    'north': north,
+    'south': south,
+    'west': west,
+    'east': east,
+  };
+
+  static TileBounds fromJson(Map<String, dynamic> json) => TileBounds(
+    north: (json['north'] as num).toDouble(),
+    south: (json['south'] as num).toDouble(),
+    west: (json['west'] as num).toDouble(),
+    east: (json['east'] as num).toDouble(),
+  );
+}
+
+/// Tiles covering [bounds] for every zoom in [minZoom]..[maxZoom], coarse
+/// zooms first.
+List<TileKey> tilesInBounds(
+  TileBounds bounds, {
   required int minZoom,
   required int maxZoom,
 }) {
-  final latDelta = radiusKm / 111.32;
-  final lonDelta =
-      radiusKm / (111.32 * math.cos(center.latitude * math.pi / 180)).abs();
-  final north = center.latitude + latDelta;
-  final south = center.latitude - latDelta;
-  final west = center.longitude - lonDelta;
-  final east = center.longitude + lonDelta;
-
   final tiles = <TileKey>[];
   for (var z = minZoom; z <= maxZoom; z++) {
-    final x0 = _lonToTileX(west, z);
-    final x1 = _lonToTileX(east, z);
-    final y0 = _latToTileY(north, z);
-    final y1 = _latToTileY(south, z);
+    final x0 = _lonToTileX(bounds.west, z);
+    final x1 = _lonToTileX(bounds.east, z);
+    final y0 = _latToTileY(bounds.north, z);
+    final y1 = _latToTileY(bounds.south, z);
     for (var x = x0; x <= x1; x++) {
       for (var y = y0; y <= y1; y++) {
         tiles.add(TileKey(z, x, y));
@@ -61,3 +96,15 @@ List<TileKey> tilesAround(
   }
   return tiles;
 }
+
+/// Tiles covering a square of ±[radiusKm] around [center].
+List<TileKey> tilesAround(
+  LatLng center, {
+  required double radiusKm,
+  required int minZoom,
+  required int maxZoom,
+}) => tilesInBounds(
+  TileBounds.around(center, radiusKm),
+  minZoom: minZoom,
+  maxZoom: maxZoom,
+);

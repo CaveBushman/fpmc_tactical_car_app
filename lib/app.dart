@@ -15,6 +15,7 @@ import 'services/location_service.dart';
 import 'services/ptt/voice_transport.dart';
 import 'services/mesh_packet_repository.dart';
 import 'services/mesh_radio.dart';
+import 'services/offline_tiles/tile_math.dart';
 import 'theme.dart';
 import 'widgets/common_widgets.dart';
 
@@ -108,6 +109,9 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     with WidgetsBindingObserver {
   late final TacticalController _controller;
   late final OfflineMapsController _offlineMaps;
+
+  /// Last area shown on the map; offered for offline download.
+  TileBounds? _visibleMapBounds;
   late final StreamSubscription<String> _noticeSubscription;
   int _selectedIndex = 0;
 
@@ -179,6 +183,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       channelLabel: controller.selectedGroup.name,
       tileSource: _offlineMaps.source,
       offlineStore: _offlineMaps.store,
+      onVisibleBoundsChanged: (bounds) => _visibleMapBounds = bounds,
       showDetailsSheet: showDetailsSheet,
       onShareWaypoint: controller.shareWaypoint,
       onDeleteWaypoint: controller.removeWaypoint,
@@ -226,6 +231,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         onFontScaleChanged: controller.setFontScale,
         offlineMaps: _offlineMaps,
         mapCenter: selfNode.latLng,
+        visibleMapBounds: _visibleMapBounds,
       ),
     ];
 

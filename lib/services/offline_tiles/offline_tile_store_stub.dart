@@ -34,5 +34,8 @@ class _UnsupportedTileStore implements OfflineTileStore {
   );
 
   @override
+  Future<void> remove(TileKey key) async {}
+
+  @override
   Future<void> clear() async {}
 }

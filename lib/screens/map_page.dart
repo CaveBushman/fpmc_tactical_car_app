@@ -7,6 +7,7 @@ import '../models/navigation.dart';
 import '../services/location_service.dart';
 import '../services/offline_tiles/offline_first_tile_provider.dart';
 import '../services/offline_tiles/offline_tile_store.dart';
+import '../services/offline_tiles/tile_math.dart';
 import '../services/offline_tiles/tile_source.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
@@ -28,6 +29,7 @@ class MapPage extends StatefulWidget {
     this.onDeleteWaypoint,
     this.tileSource = TileSource.openStreetMap,
     this.offlineStore,
+    this.onVisibleBoundsChanged,
     this.locationState = LocationState.idle,
     this.channelLabel = 'ALPHA',
     this.showDetailsSheet = true,
@@ -42,6 +44,7 @@ class MapPage extends StatefulWidget {
   final ValueChanged<TacticalWaypoint>? onDeleteWaypoint;
   final TileSource tileSource;
   final OfflineTileStore? offlineStore;
+  final ValueChanged<TileBounds>? onVisibleBoundsChanged;
   final LocationState locationState;
   final String channelLabel;
 
@@ -108,6 +111,7 @@ class _MapPageState extends State<MapPage> {
                     : _createWaypointAt,
                 tileSource: widget.tileSource,
                 offlineStore: widget.offlineStore,
+                onVisibleBoundsChanged: widget.onVisibleBoundsChanged,
               ),
             ),
             Positioned(
@@ -338,12 +342,16 @@ class MeshMap extends StatefulWidget {
     this.onLongPress,
     this.tileSource = TileSource.openStreetMap,
     this.offlineStore,
+    this.onVisibleBoundsChanged,
     super.key,
   });
 
   final List<MeshNode> nodes;
   final List<TacticalWaypoint> waypoints;
   final ValueChanged<LatLng>? onLongPress;
+
+  /// Reports the area on screen (used to download it for offline use).
+  final ValueChanged<TileBounds>? onVisibleBoundsChanged;
   final TileSource tileSource;
 
   /// Offline packs to prefer over the network; null = network only.
@@ -410,6 +418,15 @@ class _MeshMapState extends State<MeshMap> {
                 ? null
                 : (_, point) => widget.onLongPress!(point),
             onPositionChanged: (camera, hasGesture) {
+              final bounds = camera.visibleBounds;
+              widget.onVisibleBoundsChanged?.call(
+                TileBounds(
+                  north: bounds.north,
+                  south: bounds.south,
+                  west: bounds.west,
+                  east: bounds.east,
+                ),
+              );
               if (hasGesture && _followSelf) {
                 setState(() => _followSelf = false);
               }

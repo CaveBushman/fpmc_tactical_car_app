@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../controllers/offline_maps_controller.dart';
 import '../controllers/ptt_controller.dart';
 import '../services/backend_client.dart';
+import '../services/offline_tiles/tile_math.dart';
 import '../widgets/offline_maps_section.dart';
 
 import '../services/location_service.dart';
@@ -34,6 +35,7 @@ class SystemsPage extends StatelessWidget {
     this.onLocationSettings,
     this.offlineMaps,
     this.mapCenter,
+    this.visibleMapBounds,
     super.key,
   });
 
@@ -55,6 +57,7 @@ class SystemsPage extends StatelessWidget {
 
   /// Centre for offline area downloads (own position).
   final LatLng? mapCenter;
+  final TileBounds? visibleMapBounds;
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +293,11 @@ class SystemsPage extends StatelessWidget {
         const SizedBox(height: 10),
         const AboutSection(),
         if (offlineMaps != null && mapCenter != null)
-          OfflineMapsSection(controller: offlineMaps!, center: mapCenter!),
+          OfflineMapsSection(
+            controller: offlineMaps!,
+            center: mapCenter!,
+            visibleBounds: visibleMapBounds,
+          ),
       ],
     );
   }

@@ -101,6 +101,18 @@ class FileOfflineTileStore implements OfflineTileStore {
   }
 
   @override
+  Future<void> remove(TileKey key) async {
+    if (!_index.remove(key)) {
+      return;
+    }
+    final file = _file(key);
+    if (await file.exists()) {
+      _sizeBytes -= await file.length();
+      await file.delete();
+    }
+  }
+
+  @override
   Future<void> clear() async {
     if (root != null && await _sourceDir.exists()) {
       await _sourceDir.delete(recursive: true);

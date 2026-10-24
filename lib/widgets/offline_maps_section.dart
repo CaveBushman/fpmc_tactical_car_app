@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../controllers/offline_maps_controller.dart';
+import '../services/offline_tiles/tile_math.dart';
 import '../theme.dart';
 import 'common_widgets.dart';
 
@@ -11,11 +12,15 @@ class OfflineMapsSection extends StatefulWidget {
   const OfflineMapsSection({
     required this.controller,
     required this.center,
+    this.visibleBounds,
     super.key,
   });
 
   final OfflineMapsController controller;
   final LatLng center;
+
+  /// Area currently shown on the map, offered as a named download.
+  final TileBounds? visibleBounds;
 
   @override
   State<OfflineMapsSection> createState() => _OfflineMapsSectionState();
@@ -134,7 +139,7 @@ class _OfflineMapsSectionState extends State<OfflineMapsSection> {
                         backgroundColor: rangerGreen,
                       ),
                       icon: const Icon(Icons.download_for_offline_outlined),
-                      label: const Text('Stáhnout oblast'),
+                      label: const Text('Stáhnout okolí'),
                     ),
                   ),
                 const SizedBox(width: 8),
@@ -147,10 +152,69 @@ class _OfflineMapsSectionState extends State<OfflineMapsSection> {
                 ),
               ],
             ),
+            if (controller.canDownload && widget.visibleBounds != null) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: progress != null
+                    ? null
+                    : () => _downloadVisible(controller, widget.visibleBounds!),
+                icon: const Icon(Icons.crop_free),
+                label: Text(
+                  'Stáhnout zobrazenou oblast '
+                  '(${controller.initialized ? controller.estimateMissingIn(widget.visibleBounds!) : '-'} dlaždic)',
+                ),
+              ),
+            ],
+            if (controller.areas.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Offline oblasti',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.86),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              for (final area in controller.areas)
+                ListTile(
+                  key: ValueKey('offline-area-${area.id}'),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Icon(
+                    area.complete ? Icons.map_outlined : Icons.warning_amber,
+                    color: area.complete ? sand : dangerRed,
+                  ),
+                  title: Text(area.name),
+                  subtitle: Text(
+                    '${area.tileCount} dlaždic · zoom ${area.minZoom}–${area.maxZoom} · '
+                    '${area.createdAt.day}.${area.createdAt.month}.${area.createdAt.year}'
+                    '${area.complete ? '' : ' · neúplná'}',
+                  ),
+                  trailing: IconButton(
+                    tooltip: 'Smazat oblast ${area.name}',
+                    onPressed: progress != null
+                        ? null
+                        : () => controller.deleteArea(area),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ),
+            ],
           ],
         );
       },
     );
+  }
+
+  Future<void> _downloadVisible(
+    OfflineMapsController controller,
+    TileBounds bounds,
+  ) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => const _AreaNameDialog(),
+    );
+    if (name != null) {
+      await controller.downloadArea(name, bounds);
+    }
   }
 
   String _formatBytes(int bytes) {
@@ -158,5 +222,49 @@ class _OfflineMapsSectionState extends State<OfflineMapsSection> {
       return '${(bytes / 1024).toStringAsFixed(0)} kB';
     }
     return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
+}
+
+/// Owns its text controller so it is disposed only after the dialog's exit
+/// animation, not while the field is still on screen.
+class _AreaNameDialog extends StatefulWidget {
+  const _AreaNameDialog();
+
+  @override
+  State<_AreaNameDialog> createState() => _AreaNameDialogState();
+}
+
+class _AreaNameDialogState extends State<_AreaNameDialog> {
+  final TextEditingController _name = TextEditingController(
+    text: 'Oblast operace',
+  );
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: panelGreen,
+      title: const Text('Název offline oblasti'),
+      content: TextField(
+        controller: _name,
+        autofocus: true,
+        decoration: const InputDecoration(border: OutlineInputBorder()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Zrušit'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_name.text),
+          child: const Text('Stáhnout'),
+        ),
+      ],
+    );
   }
 }
