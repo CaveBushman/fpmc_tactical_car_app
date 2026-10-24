@@ -103,11 +103,13 @@ class TacticalNavigationRail extends StatelessWidget {
   const TacticalNavigationRail({
     required this.selectedIndex,
     required this.onDestinationSelected,
+    this.unreadMessages = 0,
     super.key,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
+  final int unreadMessages;
 
   @override
   Widget build(BuildContext context) {
@@ -118,28 +120,53 @@ class TacticalNavigationRail extends StatelessWidget {
       onDestinationSelected: onDestinationSelected,
       labelType: NavigationRailLabelType.none,
       minWidth: 64,
-      destinations: const [
-        NavigationRailDestination(
+      destinations: [
+        const NavigationRailDestination(
           icon: Icon(Icons.map_outlined),
           selectedIcon: Icon(Icons.map),
           label: Text('Mapa'),
         ),
-        NavigationRailDestination(
+        const NavigationRailDestination(
           icon: Icon(Icons.groups_2_outlined),
           selectedIcon: Icon(Icons.groups_2),
           label: Text('Tým'),
         ),
         NavigationRailDestination(
-          icon: Icon(Icons.chat_bubble_outline),
-          selectedIcon: Icon(Icons.chat_bubble),
-          label: Text('Zprávy'),
+          icon: UnreadBadge(
+            count: unreadMessages,
+            child: const Icon(Icons.chat_bubble_outline),
+          ),
+          selectedIcon: UnreadBadge(
+            count: unreadMessages,
+            child: const Icon(Icons.chat_bubble),
+          ),
+          label: const Text('Zprávy'),
         ),
-        NavigationRailDestination(
+        const NavigationRailDestination(
           icon: Icon(Icons.settings_outlined),
           selectedIcon: Icon(Icons.settings),
           label: Text('Systém'),
         ),
       ],
+    );
+  }
+}
+
+/// Red count over an icon; hidden at zero, "99+" above 99.
+class UnreadBadge extends StatelessWidget {
+  const UnreadBadge({required this.count, required this.child, super.key});
+
+  final int count;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Badge(
+      isLabelVisible: count > 0,
+      backgroundColor: dangerRed,
+      textColor: Colors.white,
+      label: Text(count > 99 ? '99+' : '$count'),
+      child: child,
     );
   }
 }

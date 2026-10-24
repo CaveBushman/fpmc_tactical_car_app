@@ -262,6 +262,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         selfNode: selfNode,
         waypoints: controller.waypoints,
         selectedGroupIndex: controller.selectedGroupIndex,
+        unreadIn: controller.unreadIn,
         onGroupSelected: controller.selectGroup,
         onSend: controller.sendMeshText,
         onRetry: controller.retryMessage,
@@ -378,6 +379,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 TacticalNavigationRail(
+                                  unreadMessages: controller.unreadTotal,
                                   selectedIndex: _selectedIndex,
                                   onDestinationSelected: _selectTab,
                                 ),
@@ -436,7 +438,9 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
               indicatorColor: rangerGreen.withValues(alpha: 0.85),
               selectedIndex: _selectedIndex,
               onDestinationSelected: _selectTab,
-              destinations: tacticalDestinations,
+              destinations: tacticalDestinations(
+                unreadMessages: controller.unreadTotal,
+              ),
             ),
           );
         },
@@ -444,7 +448,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     );
   }
 
-  void _selectTab(int index) => setState(() => _selectedIndex = index);
+  void _selectTab(int index) {
+    setState(() => _selectedIndex = index);
+    _controller.setMessagesVisible(index == messagesTabIndex);
+  }
 
   /// Panic wipe behind a 3 s hold: no backend call, no further questions.
   Future<void> _emergencyWipe() async {
@@ -480,7 +487,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     if (confirmed != true || !mounted) {
       return;
     }
-    setState(() => _selectedIndex = 0);
+    _selectTab(0);
     await _controller.emergencyWipe();
     try {
       await _offlineMaps.clear();
@@ -550,7 +557,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       ),
     );
     if (confirmed == true && mounted) {
-      setState(() => _selectedIndex = 0);
+      _selectTab(0);
       await _controller.logout();
     }
   }
@@ -573,23 +580,31 @@ class _ScaledTextContent extends StatelessWidget {
   }
 }
 
-const tacticalDestinations = [
-  NavigationDestination(
+const messagesTabIndex = 2;
+
+List<NavigationDestination> tacticalDestinations({int unreadMessages = 0}) => [
+  const NavigationDestination(
     icon: Icon(Icons.map_outlined),
     selectedIcon: Icon(Icons.map),
     label: 'Mapa',
   ),
-  NavigationDestination(
+  const NavigationDestination(
     icon: Icon(Icons.groups_2_outlined),
     selectedIcon: Icon(Icons.groups_2),
     label: 'Tým',
   ),
   NavigationDestination(
-    icon: Icon(Icons.chat_bubble_outline),
-    selectedIcon: Icon(Icons.chat_bubble),
+    icon: UnreadBadge(
+      count: unreadMessages,
+      child: const Icon(Icons.chat_bubble_outline),
+    ),
+    selectedIcon: UnreadBadge(
+      count: unreadMessages,
+      child: const Icon(Icons.chat_bubble),
+    ),
     label: 'Zprávy',
   ),
-  NavigationDestination(
+  const NavigationDestination(
     icon: Icon(Icons.settings_outlined),
     selectedIcon: Icon(Icons.settings),
     label: 'Systém',

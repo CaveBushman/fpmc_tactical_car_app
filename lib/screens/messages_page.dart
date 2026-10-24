@@ -20,6 +20,7 @@ class MessagesPage extends StatefulWidget {
     required this.onSend,
     this.onRetry,
     this.onSos,
+    this.unreadIn,
     super.key,
   });
 
@@ -35,6 +36,9 @@ class MessagesPage extends StatefulWidget {
 
   /// Starts (or, while active, cancels) the repeated distress call.
   final VoidCallback? onSos;
+
+  /// Unread incoming messages per group id.
+  final int Function(String groupId)? unreadIn;
 
   @override
   State<MessagesPage> createState() => _MessagesPageState();
@@ -100,10 +104,14 @@ class _MessagesPageState extends State<MessagesPage> {
               return ChoiceChip(
                 selected: selected,
                 onSelected: (_) => widget.onGroupSelected(index),
-                avatar: Icon(
-                  group.icon,
-                  size: 18,
-                  color: selected ? sand : sand.withValues(alpha: 0.82),
+                avatar: UnreadBadge(
+                  key: ValueKey('unread-${group.id}'),
+                  count: widget.unreadIn?.call(group.id) ?? 0,
+                  child: Icon(
+                    group.icon,
+                    size: 18,
+                    color: selected ? sand : sand.withValues(alpha: 0.82),
+                  ),
                 ),
                 label: Column(
                   mainAxisAlignment: MainAxisAlignment.center,

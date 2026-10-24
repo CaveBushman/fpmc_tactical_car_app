@@ -293,6 +293,56 @@ void main() {
     expect(saved!.nodes.map((json) => json['callSign']), ['SELF', 'FRESH']);
   });
 
+  test('counts unread messages per group until the group is shown', () async {
+    await controller.login('medic', 'medic-2026'); // alpha (ch 0) + med (ch 2)
+    var notified = 0;
+    controller.addListener(() => notified++);
+
+    ingest(fromRadioText(from: 0xA1100002, text: 'Jedna', packetId: 11));
+    ingest(fromRadioText(from: 0xA1100002, text: 'Dva', packetId: 12));
+    ingest(
+      fromRadioText(from: 0xA1100002, text: 'Med', channel: 2, packetId: 13),
+    );
+    await pumpEventQueue();
+    expect(controller.unreadIn('alpha'), 2);
+    expect(controller.unreadIn('med'), 1);
+    expect(controller.unreadTotal, 3);
+
+    // Messages tab with ALPHA selected: ALPHA is read, MED stays.
+    controller.setMessagesVisible(true);
+    expect(controller.unreadIn('alpha'), 0);
+    expect(controller.unreadTotal, 1);
+    expect(notified, greaterThan(0));
+
+    // While ALPHA is on screen its new messages are read at once.
+    ingest(fromRadioText(from: 0xA1100002, text: 'Tři', packetId: 14));
+    await pumpEventQueue();
+    expect(controller.unreadIn('alpha'), 0);
+
+    // In the background they count again.
+    controller.setAppInForeground(false);
+    ingest(fromRadioText(from: 0xA1100002, text: 'Čtyři', packetId: 15));
+    await pumpEventQueue();
+    expect(controller.unreadIn('alpha'), 1);
+    controller.setAppInForeground(true);
+    expect(controller.unreadIn('alpha'), 0);
+
+    // Switching to MED on the Messages tab reads it.
+    controller.selectGroup(
+      controller.allowedGroups.indexWhere((group) => group.id == 'med'),
+    );
+    expect(controller.unreadTotal, 0);
+
+    controller.setMessagesVisible(false);
+    ingest(
+      fromRadioText(from: 0xA1100002, text: 'Pět', channel: 2, packetId: 16),
+    );
+    await pumpEventQueue();
+    expect(controller.unreadIn('med'), 1);
+    await controller.logout();
+    expect(controller.unreadTotal, 0);
+  });
+
   test('CONTACT reports become DANGER points for sender and receivers', () async {
     await controller.login('operator', 'operator-2026');
     final self = controller.selfNode;

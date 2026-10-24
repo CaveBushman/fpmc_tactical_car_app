@@ -360,6 +360,7 @@ class TacticalController extends ChangeNotifier {
   }
 
   void _resetOperationalData() {
+    _unread.clear();
     _sos.reset();
     _mission.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
@@ -595,7 +596,47 @@ class TacticalController extends ChangeNotifier {
   }
 
   /// Set by the app shell; message notifications only when in background.
-  void setAppInForeground(bool value) => _appInForeground = value;
+  void setAppInForeground(bool value) {
+    _appInForeground = value;
+    if (value) {
+      _markSelectedGroupRead();
+    }
+  }
+
+  // --- Unread messages ---------------------------------------------------------
+
+  final Map<String, int> _unread = {};
+  bool _messagesVisible = false;
+
+  /// Incoming messages in [groupId] not yet seen on the Messages tab.
+  int unreadIn(String groupId) => _unread[groupId] ?? 0;
+
+  /// Unread messages over all groups this user is in.
+  int get unreadTotal =>
+      allowedGroups.fold(0, (sum, group) => sum + unreadIn(group.id));
+
+  /// Set by the app shell: the Messages tab is on screen, showing the
+  /// selected group.
+  void setMessagesVisible(bool visible) {
+    _messagesVisible = visible;
+    _markSelectedGroupRead();
+  }
+
+  void _markSelectedGroupRead() {
+    if (_messagesVisible &&
+        _appInForeground &&
+        _session != null &&
+        _unread.remove(selectedGroup.id) != null) {
+      _notify();
+    }
+  }
+
+  void _countIncoming(String groupId) {
+    if (_messagesVisible && _appInForeground && groupId == selectedGroup.id) {
+      return;
+    }
+    _unread[groupId] = unreadIn(groupId) + 1;
+  }
 
   void _onPttChanged() {
     _syncNativePtt();
@@ -775,6 +816,7 @@ class TacticalController extends ChangeNotifier {
       viaInternet: true,
     );
     _messages.insert(0, incoming);
+    _countIncoming(group.id);
     if (!_appInForeground) {
       unawaited(
         _carBridge.notifyMessage(
@@ -920,6 +962,7 @@ class TacticalController extends ChangeNotifier {
     }
     _selectedGroupIndex = index;
     unawaited(settings.setGroupFor(session.userName, selectedGroup.id));
+    _markSelectedGroupRead();
     _notify();
     unawaited(_joinSelectedGroupPtt());
   }
@@ -1183,6 +1226,7 @@ class TacticalController extends ChangeNotifier {
       fromNode: event.from,
     );
     _messages.insert(0, message);
+    _countIncoming(group.id);
     if (!_appInForeground &&
         allowedGroups.any((allowed) => allowed.id == group.id)) {
       unawaited(
