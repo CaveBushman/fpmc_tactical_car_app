@@ -17,6 +17,7 @@ import '../services/ptt/voice_transport.dart';
 import 'ptt_controller.dart';
 import '../services/location_service.dart';
 import '../services/mesh_packet_repository.dart';
+import '../services/mesh_radio.dart';
 import '../services/meshtastic_ble_service.dart';
 import '../services/meshtastic_message_encoder.dart';
 import '../services/meshtastic_packet_decoder.dart';
@@ -30,7 +31,7 @@ class TacticalController extends ChangeNotifier {
     AuthService? authService,
     LocationService? locationService,
     MeshPacketRepository? meshPacketRepository,
-    MeshtasticBleService? meshtasticBleService,
+    MeshRadio? meshtasticBleService,
     TacticalStateStore? stateStore,
     BackendClient? backend,
     VoiceTransport Function()? voiceTransportFactory,
@@ -102,7 +103,7 @@ class TacticalController extends ChangeNotifier {
   late final PttController _ptt;
   final LocationService _locationService;
   final MeshPacketRepository _meshPacketRepository;
-  final MeshtasticBleService _meshtasticBleService;
+  final MeshRadio _meshtasticBleService;
   final TacticalStateStore _stateStore;
   final MeshtasticMessageEncoder _messageEncoder =
       const MeshtasticMessageEncoder();
@@ -284,6 +285,12 @@ class TacticalController extends ChangeNotifier {
   }
 
   Future<void> connectRadio() => _meshtasticBleService.startAutoConnect();
+
+  /// Received frames as a text recording (see PacketRecording).
+  String exportPacketRecording() => _meshPacketRepository.recording.serialize(
+    comment:
+        'Tactical Mesh FromRadio recording ${DateTime.now().toUtc().toIso8601String()}',
+  );
 
   Future<void> startLocation() => _locationService.start();
 

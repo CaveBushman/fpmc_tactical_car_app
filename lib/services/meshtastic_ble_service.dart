@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'from_radio_drainer.dart';
+import 'mesh_radio.dart';
 import 'meshtastic_message_encoder.dart';
 
 const meshtasticServiceUuid = '6ba1b218-15a8-461f-9fa8-5dcae273eafd';
@@ -61,7 +62,7 @@ enum MeshtasticBleStatus {
   error,
 }
 
-class MeshtasticBleService {
+class MeshtasticBleService implements MeshRadio {
   MeshtasticBleService({
     this.encoder = const MeshtasticMessageEncoder(),
     math.Random? random,
@@ -87,10 +88,14 @@ class MeshtasticBleService {
   int _reconnectAttempt = 0;
   MeshtasticBleState _state = MeshtasticBleState.idle;
 
+  @override
   Stream<MeshtasticBleState> get stateStream => _stateController.stream;
+  @override
   Stream<MeshtasticBlePacket> get packets => _packetController.stream;
+  @override
   MeshtasticBleState get state => _state;
 
+  @override
   Future<void> startAutoConnect({
     Duration timeout = const Duration(seconds: 12),
   }) async {
@@ -214,6 +219,7 @@ class MeshtasticBleService {
     }
   }
 
+  @override
   Future<void> disconnect() async {
     _userDisconnected = true;
     _cancelReconnect();
@@ -228,6 +234,7 @@ class MeshtasticBleService {
 
   Future<void> readQueuedPackets() => _drainSafely();
 
+  @override
   Future<void> writeToRadio(List<int> protobufBytes) async {
     final toRadio = _toRadio;
     if (toRadio == null) {
@@ -236,6 +243,7 @@ class MeshtasticBleService {
     await toRadio.write(protobufBytes, withoutResponse: false);
   }
 
+  @override
   Future<void> dispose() async {
     await stopScan();
     await disconnect();

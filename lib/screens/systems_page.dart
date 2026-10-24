@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -20,6 +21,7 @@ class SystemsPage extends StatelessWidget {
     required this.meshConnected,
     required this.ptt,
     this.onPttReconnect,
+    this.onCopyPacketRecording,
     this.volumeKeyPtt = false,
     this.onVolumeKeyPttChanged,
     required this.onBleConnect,
@@ -38,6 +40,7 @@ class SystemsPage extends StatelessWidget {
   final bool meshConnected;
   final PttController ptt;
   final VoidCallback? onPttReconnect;
+  final String Function()? onCopyPacketRecording;
   final bool volumeKeyPtt;
   final ValueChanged<bool>? onVolumeKeyPttChanged;
   final VoidCallback onBleConnect;
@@ -192,6 +195,26 @@ class SystemsPage extends StatelessWidget {
                   ? '-'
                   : packetDiagnostics.lastPacketHex,
             ),
+            if (onCopyPacketRecording != null &&
+                packetDiagnostics.packetCount > 0)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    await Clipboard.setData(
+                      ClipboardData(text: onCopyPacketRecording!()),
+                    );
+                    messenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Záznam paketů zkopírován do schránky.'),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.content_copy, size: 18),
+                  label: const Text('Kopírovat záznam paketů'),
+                ),
+              ),
             const MonoLine(
               label: 'Transport',
               value: 'BLE / ToRadio / FromRadio protobuf',

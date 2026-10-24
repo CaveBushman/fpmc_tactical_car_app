@@ -14,7 +14,7 @@ import 'services/backend_client.dart';
 import 'services/location_service.dart';
 import 'services/ptt/voice_transport.dart';
 import 'services/mesh_packet_repository.dart';
-import 'services/meshtastic_ble_service.dart';
+import 'services/mesh_radio.dart';
 import 'theme.dart';
 import 'widgets/common_widgets.dart';
 
@@ -31,7 +31,7 @@ class TacticalCarApp extends StatelessWidget {
 
   final LocationService? locationService;
   final MeshPacketRepository? meshPacketRepository;
-  final MeshtasticBleService? meshtasticBleService;
+  final MeshRadio? meshtasticBleService;
   final OfflineMapsController? offlineMaps;
 
   /// Defaults to BACKEND_URL; null there means demo accounts and PTT.
@@ -93,7 +93,7 @@ class TacticalHomeScreen extends StatefulWidget {
 
   final LocationService? locationService;
   final MeshPacketRepository? meshPacketRepository;
-  final MeshtasticBleService? meshtasticBleService;
+  final MeshRadio? meshtasticBleService;
   final OfflineMapsController? offlineMaps;
 
   /// Defaults to BACKEND_URL; null there means demo accounts and PTT.
@@ -213,6 +213,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         meshConnected: controller.meshConnected,
         ptt: ptt,
         onPttReconnect: controller.reconnectPtt,
+        onCopyPacketRecording: controller.exportPacketRecording,
         volumeKeyPtt: controller.volumeKeyPtt,
         onVolumeKeyPttChanged: controller.setVolumeKeyPtt,
         onBleConnect: controller.connectRadio,
