@@ -15,7 +15,7 @@ void main() {
   late TacticalController controller;
 
   setUp(() async {
-    ble = FakeBleService()..connected = false;
+    ble = FakeBleService(connected: false);
     repository = MeshPacketRepository();
     controller = TacticalController(
       locationService: FakeLocationService(),

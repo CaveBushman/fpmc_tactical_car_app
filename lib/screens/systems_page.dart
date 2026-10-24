@@ -25,6 +25,8 @@ class SystemsPage extends StatelessWidget {
     this.onPttReconnect,
     this.nightMode = false,
     this.onNightModeChanged,
+    this.sharePositionToMesh = true,
+    this.onSharePositionToMeshChanged,
     this.trackPoints = 0,
     this.trackLengthKm = 0,
     this.onExportMission,
@@ -53,6 +55,8 @@ class SystemsPage extends StatelessWidget {
   final VoidCallback? onPttReconnect;
   final bool nightMode;
   final ValueChanged<bool>? onNightModeChanged;
+  final bool sharePositionToMesh;
+  final ValueChanged<bool>? onSharePositionToMeshChanged;
   final int trackPoints;
   final double trackLengthKm;
   final VoidCallback? onExportMission;
@@ -203,6 +207,15 @@ class SystemsPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             MonoLine(label: 'BLE stav', value: _bleStatusLabel(bleState)),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: sharePositionToMesh,
+              onChanged: onSharePositionToMeshChanged,
+              title: const Text('Posílat polohu telefonu do sítě'),
+              subtitle: const Text(
+                'Tým tě vidí i bez GPS fixu T-Beamu (max 1× za minutu / 50 m)',
+              ),
+            ),
             for (final channel in radioChannels)
               MonoLine(
                 label: 'Kanál ${channel.index}',

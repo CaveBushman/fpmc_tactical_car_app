@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tactical_car_app/services/meshtastic_message_encoder.dart';
+import 'package:tactical_car_app/services/protobuf_wire_writer.dart';
+import 'package:tactical_car_app/services/meshtastic_packet_decoder.dart';
 
 void main() {
   test('encodes group text as ToRadio broadcast packet', () {
@@ -87,5 +89,46 @@ void main() {
     // MeshPacket grows by key 0x35 + 4 bytes little-endian id.
     expect(withId.length, withoutId.length + 5);
     expect(withId.sublist(withId.length - 5), [0x35, 0x04, 0x03, 0x02, 0x01]);
+  });
+
+  test('encodes phone position that the decoder reads back', () {
+    const encoder = MeshtasticMessageEncoder();
+    final toRadio = encoder.encodePosition(
+      latitude: 50.0875123,
+      longitude: -14.4206711,
+      altitudeM: -12,
+      time: DateTime.utc(2026, 10, 24, 12),
+      packetId: 0x0A0B0C0D,
+    );
+
+    // Unwrap ToRadio.packet and decode it as a received FromRadio.packet.
+    final fromRadio = [0x12, ...toRadio.sublist(1)];
+    final event = const MeshtasticPacketDecoder()
+        .decodeFromRadio(fromRadio)
+        .single;
+    expect(event.type, DecodedMeshEventType.position);
+    expect(event.to, meshtasticBroadcastNode);
+    expect(event.channelIndex, 0);
+    expect(event.packetId, 0x0A0B0C0D);
+    expect(event.latitude, closeTo(50.0875123, 1e-7));
+    expect(event.longitude, closeTo(-14.4206711, 1e-7));
+    expect(event.altitude, -12);
+  });
+
+  test('negative varints use 10-byte two\'s complement', () {
+    final writer = ProtobufWireWriter()..writeVarint(3, -1);
+    expect(writer.bytes, [
+      0x18,
+      0xFF,
+      0xFF,
+      0xFF,
+      0xFF,
+      0xFF,
+      0xFF,
+      0xFF,
+      0xFF,
+      0xFF,
+      0x01,
+    ]);
   });
 }

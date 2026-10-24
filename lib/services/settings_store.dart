@@ -25,6 +25,14 @@ class SettingsStore {
   Future<void> setNightMode(bool value) =>
       _set((prefs) => prefs.setBool('${prefix}nightMode', value));
 
+  /// Send the phone GPS position into the mesh (default on).
+  Future<bool> sharePositionToMesh() async =>
+      await _get((prefs) => prefs.getBool('${prefix}sharePositionToMesh')) ??
+      true;
+
+  Future<void> setSharePositionToMesh(bool value) =>
+      _set((prefs) => prefs.setBool('${prefix}sharePositionToMesh', value));
+
   /// Last communication group chosen by [userName].
   Future<String?> groupFor(String userName) =>
       _get((prefs) => prefs.getString('${prefix}group.$userName'));

@@ -67,6 +67,7 @@ const _expected = <String, Map<String, (int, int)>>{
     'latitude_i': (1, _sfixed32),
     'longitude_i': (2, _sfixed32),
     'altitude': (3, _int32),
+    'time': (4, _fixed32),
   },
   'meshtastic.Routing': {'error_reason': (3, _enum)},
   'meshtastic.Waypoint': {

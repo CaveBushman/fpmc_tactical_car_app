@@ -37,10 +37,12 @@ class ProtobufWireWriter {
   }
 
   void _writeRawVarint(int value) {
+    // Negative int32/int64 values are encoded as their 64-bit two's
+    // complement (10 bytes), as protobuf requires; >>> keeps it unsigned.
     var remaining = value;
-    while (remaining >= 0x80) {
+    while (remaining < 0 || remaining >= 0x80) {
       _bytes.add((remaining & 0x7F) | 0x80);
-      remaining >>= 7;
+      remaining = remaining >>> 7;
     }
     _bytes.add(remaining);
   }

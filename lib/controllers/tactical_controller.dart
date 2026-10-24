@@ -457,6 +457,7 @@ class TacticalController extends ChangeNotifier {
     final fontScale = await settings.fontScale();
     final volumeKey = await settings.volumeKeyPtt();
     _nightMode = await settings.nightMode();
+    _sharePositionToMesh = await settings.sharePositionToMesh();
     if (_disposed) {
       return;
     }
@@ -503,6 +504,63 @@ class TacticalController extends ChangeNotifier {
   bool get volumeKeyPtt => _volumeKeyPtt;
 
   bool _nightMode = false;
+  bool _sharePositionToMesh = true;
+  DateTime? _lastMeshPositionAt;
+  LatLng? _lastMeshPosition;
+
+  /// Phone GPS is broadcast into the mesh (POSITION_APP), so teammates
+  /// see us even when the T-Beam has no GPS fix of its own.
+  bool get sharePositionToMesh => _sharePositionToMesh;
+
+  void setSharePositionToMesh(bool enabled) {
+    _sharePositionToMesh = enabled;
+    unawaited(settings.setSharePositionToMesh(enabled));
+    if (enabled) {
+      unawaited(_sharePositionToRadio(force: true));
+    }
+    _notify();
+  }
+
+  /// At most once a minute, or after 50 m of movement.
+  Future<void> _sharePositionToRadio({
+    LocationFix? latest,
+    bool force = false,
+  }) async {
+    if (!_sharePositionToMesh || !meshConnected || _session == null) {
+      return;
+    }
+    final fix = latest ?? _locationState.lastFix;
+    if (fix == null) {
+      return;
+    }
+    final position = LatLng(fix.latitude, fix.longitude);
+    final now = DateTime.now();
+    final last = _lastMeshPosition;
+    final lastAt = _lastMeshPositionAt;
+    if (!force &&
+        last != null &&
+        lastAt != null &&
+        now.difference(lastAt) < const Duration(minutes: 1) &&
+        geo.distanceKm(last, position) < 0.05) {
+      return;
+    }
+    _lastMeshPosition = position;
+    _lastMeshPositionAt = now;
+    try {
+      await _meshtasticBleService.writeToRadio(
+        _messageEncoder.encodePosition(
+          latitude: fix.latitude,
+          longitude: fix.longitude,
+          altitudeM: fix.altitudeM.round(),
+          time: fix.timestamp,
+          packetId: _newPacketId(),
+        ),
+      );
+    } catch (_) {
+      // Radio went away; the next fix after reconnecting will try again.
+      _lastMeshPositionAt = null;
+    }
+  }
 
   /// Red, dimmed display for preserving night vision.
   bool get nightMode => _nightMode;
@@ -897,6 +955,7 @@ class TacticalController extends ChangeNotifier {
     _recordTrack(fix);
     _notify();
     unawaited(_shareInternetPosition());
+    unawaited(_sharePositionToRadio(latest: fix));
 
     // GPS can fire every few metres; persist the last known position at most
     // every 30 s so a restart still opens on a recent fix.
@@ -930,6 +989,7 @@ class TacticalController extends ChangeNotifier {
         case DecodedMeshEventType.configComplete:
           // Handshake done: the radio accepts traffic again.
           unawaited(_resendPending());
+          unawaited(_sharePositionToRadio(force: true));
         case DecodedMeshEventType.nodeInfo:
         case DecodedMeshEventType.position:
           changed = _upsertMeshNode(event) || changed;

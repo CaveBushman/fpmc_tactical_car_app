@@ -51,12 +51,34 @@ class FakeLocationService implements LocationService {
 }
 
 class FakeBleService extends MeshtasticBleService {
-  bool connected = true;
+  FakeBleService({this._connected = true});
+
+  bool _connected;
   final List<List<int>> written = [];
+  late final StreamController<MeshtasticBleState> _states =
+      StreamController.broadcast(onListen: () => _states.add(state));
+
+  /// Simulated link: writes fail and the app sees "not connected" when off.
+  bool get connected => _connected;
+  set connected(bool value) {
+    _connected = value;
+    _states.add(state);
+  }
+
+  @override
+  MeshtasticBleState get state => MeshtasticBleState(
+    status: _connected
+        ? MeshtasticBleStatus.connected
+        : MeshtasticBleStatus.disconnected,
+    deviceName: 'Fake T-Beam',
+  );
+
+  @override
+  Stream<MeshtasticBleState> get stateStream => _states.stream;
 
   @override
   Future<void> writeToRadio(List<int> protobufBytes) async {
-    if (!connected) {
+    if (!_connected) {
       throw StateError('not connected');
     }
     written.add(protobufBytes);

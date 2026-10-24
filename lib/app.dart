@@ -266,6 +266,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         onPttReconnect: controller.reconnectPtt,
         nightMode: controller.nightMode,
         onNightModeChanged: controller.setNightMode,
+        sharePositionToMesh: controller.sharePositionToMesh,
+        onSharePositionToMeshChanged: controller.setSharePositionToMesh,
         trackPoints: controller.track.length,
         trackLengthKm: trackLengthKm(controller.track),
         onExportMission: controller.exportMission,

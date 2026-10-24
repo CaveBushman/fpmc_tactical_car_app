@@ -28,6 +28,34 @@ class MeshtasticMessageEncoder {
     );
   }
 
+  /// Own position from the phone GPS as a broadcast POSITION_APP packet on
+  /// the primary channel (what the official apps send when the radio has
+  /// no GPS fix of its own).
+  List<int> encodePosition({
+    required double latitude,
+    required double longitude,
+    required int altitudeM,
+    required DateTime time,
+    int? packetId,
+  }) {
+    final position = ProtobufWireWriter()
+      ..writeFixed32(1, (latitude * 1e7).round())
+      ..writeFixed32(2, (longitude * 1e7).round())
+      ..writeVarint(3, altitudeM)
+      ..writeFixed32(4, time.toUtc().millisecondsSinceEpoch ~/ 1000);
+    final data = ProtobufWireWriter()
+      ..writeVarint(1, MeshtasticPacketDecoder.positionApp)
+      ..writeMessage(2, position);
+    final packet = ProtobufWireWriter()
+      ..writeFixed32(2, meshtasticBroadcastNode)
+      ..writeVarint(3, 0)
+      ..writeMessage(4, data);
+    if (packetId != null) {
+      packet.writeFixed32(6, packetId);
+    }
+    return (ProtobufWireWriter()..writeMessage(1, packet)).bytes;
+  }
+
   List<int> encodeDirectText({
     required String text,
     required int destinationNode,
