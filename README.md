@@ -22,7 +22,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Car mode screen (car icon in the app bar): map, nearest target, last message, OK / NA POZICI / SOS and a large hold-to-talk button; keeps the display on.
 - Android Auto: POI screen with the nearest team members and mission points on the car map (tap to navigate), and incoming team messages as car-readable notifications with voice reply.
 - Adaptive portrait and landscape layouts.
-- Font size slider in system settings for all operational UI text except the main title.
+- Font size slider in system settings for all operational UI text except the main title; font size, last group per user and the volume-key PTT option are remembered.
 - Meshtastic BLE service using the official BLE service and ToRadio/FromRadio/FromNum characteristics.
 - Meshtastic packet diagnostics in system settings: packet count, decoded NodeInfo/Position/Text events, last RX time, packet size, and hex preview.
 - Focused Meshtastic protobuf reader/writer for MyNodeInfo, NodeInfo, Position, TextMessage, Routing (ACK/NAK) and want_config handshake.
@@ -139,6 +139,18 @@ For local web preview:
 ```sh
 flutter run -d web-server --web-hostname 127.0.0.1 --web-port 53621
 ```
+
+## Release Build (Android)
+
+Signed release builds read `android/key.properties` (git-ignored; template in `android/key.properties.example`). Without it the release build is signed with the debug key, which is fine for testing but cannot be published.
+
+```sh
+keytool -genkey -v -keystore ~/fpmc-release.jks -keyalg RSA -keysize 4096 -validity 10000 -alias fpmc
+cp android/key.properties.example android/key.properties   # fill in paths and passwords
+flutter build appbundle --release --dart-define=BACKEND_URL=https://ptt.example.cz/api
+```
+
+Keep the keystore and its passwords outside the repository; losing them means the app can no longer be updated on Google Play.
 
 ## Verify
 

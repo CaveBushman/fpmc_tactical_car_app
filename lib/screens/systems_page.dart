@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../controllers/offline_maps_controller.dart';
 import '../controllers/ptt_controller.dart';
+import '../services/backend_client.dart';
 import '../widgets/offline_maps_section.dart';
 
 import '../services/location_service.dart';
@@ -261,6 +264,8 @@ class SystemsPage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
+        const SizedBox(height: 10),
+        const AboutSection(),
         if (offlineMaps != null && mapCenter != null)
           OfflineMapsSection(controller: offlineMaps!, center: mapCenter!),
       ],
@@ -291,5 +296,57 @@ class SystemsPage extends StatelessWidget {
     }
     String two(int number) => number.toString().padLeft(2, '0');
     return '${two(lastPacketAt.hour)}:${two(lastPacketAt.minute)}:${two(lastPacketAt.second)} / ${diagnostics.lastPacketSize} B';
+  }
+}
+
+/// App version and build mode, so field reports can name the build.
+class AboutSection extends StatelessWidget {
+  const AboutSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SystemSection(
+      title: 'O aplikaci',
+      icon: Icons.info_outline,
+      children: [
+        FutureBuilder<PackageInfo>(
+          future: _packageInfo(),
+          builder: (context, snapshot) {
+            final info = snapshot.data;
+            return MonoLine(
+              label: 'Verze',
+              value: info == null
+                  ? '-'
+                  : '${info.version} (${info.buildNumber})',
+            );
+          },
+        ),
+        MonoLine(
+          label: 'Backend',
+          value: backendUrlFromEnvironment.isEmpty
+              ? 'demo (bez serveru)'
+              : backendUrlFromEnvironment,
+        ),
+        MonoLine(
+          label: 'Build',
+          value: kReleaseMode
+              ? 'release'
+              : (kProfileMode ? 'profile' : 'debug'),
+        ),
+      ],
+    );
+  }
+
+  static Future<PackageInfo> _packageInfo() async {
+    try {
+      return await PackageInfo.fromPlatform();
+    } catch (_) {
+      return PackageInfo(
+        appName: 'Tactical Mesh',
+        packageName: '',
+        version: '?',
+        buildNumber: '?',
+      );
+    }
   }
 }

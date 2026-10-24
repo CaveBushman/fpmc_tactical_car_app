@@ -1,0 +1,7 @@
+# Copy to android/key.properties (git-ignored) for signed release builds.
+# Create a key: keytool -genkey -v -keystore ~/fpmc-release.jks -keyalg RSA \
+#   -keysize 4096 -validity 10000 -alias fpmc
+storeFile=/home/USER/fpmc-release.jks
+storePassword=CHANGE_ME
+keyAlias=fpmc
+keyPassword=CHANGE_ME

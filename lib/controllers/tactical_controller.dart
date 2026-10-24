@@ -11,6 +11,7 @@ import '../models/reports.dart';
 import '../services/auth_service.dart';
 import '../services/backend_client.dart';
 import '../services/native_bridges.dart';
+import '../services/settings_store.dart';
 import '../services/ptt/livekit_voice_transport.dart';
 import '../services/ptt/voice_transport.dart';
 import 'ptt_controller.dart';
@@ -35,6 +36,7 @@ class TacticalController extends ChangeNotifier {
     VoiceTransport Function()? voiceTransportFactory,
     NativePttBridge? nativePtt,
     CarBridge? carBridge,
+    this.settings = const SettingsStore(),
     Duration agingTick = const Duration(seconds: 15),
   }) : _backend = backend,
        _nativePtt = nativePtt ?? NativePttBridge.platform(),
@@ -64,6 +66,7 @@ class TacticalController extends ChangeNotifier {
       (error) => _notice('PTT na pozadí nelze spustit ($error).'),
     );
     _carReplySubscription = _carBridge.replies.listen(_onCarReply);
+    unawaited(_loadSettings());
     _blePacketSubscription = _meshtasticBleService.packets.listen(
       _meshPacketRepository.ingest,
     );
@@ -87,6 +90,7 @@ class TacticalController extends ChangeNotifier {
   final BackendClient? _backend;
   final NativePttBridge _nativePtt;
   final CarBridge _carBridge;
+  final SettingsStore settings;
   late final StreamSubscription<NativePttButton> _nativeButtonSubscription;
   late final StreamSubscription<String> _nativeErrorSubscription;
   late final StreamSubscription<CarReply> _carReplySubscription;
@@ -209,7 +213,7 @@ class TacticalController extends ChangeNotifier {
     }
     final session = result.session!;
     _session = session;
-    _selectedGroupIndex = 0;
+    _selectedGroupIndex = await _preferredGroupIndex(session.userName);
     _notify();
     unawaited(_locationService.start());
     unawaited(_restorePersistedState(session.userName));
@@ -253,7 +257,30 @@ class TacticalController extends ChangeNotifier {
 
   void setFontScale(double value) {
     _fontScale = value;
+    unawaited(settings.setFontScale(value));
     _notify();
+  }
+
+  Future<void> _loadSettings() async {
+    final fontScale = await settings.fontScale();
+    final volumeKey = await settings.volumeKeyPtt();
+    if (_disposed) {
+      return;
+    }
+    if (fontScale != null) {
+      _fontScale = fontScale.clamp(0.85, 1.35);
+    }
+    if (volumeKey) {
+      _volumeKeyPtt = true;
+      unawaited(_nativePtt.setVolumeKeyPtt(true));
+    }
+    _notify();
+  }
+
+  Future<int> _preferredGroupIndex(String userName) async {
+    final groupId = await settings.groupFor(userName);
+    final index = allowedGroups.indexWhere((group) => group.id == groupId);
+    return index == -1 ? 0 : index;
   }
 
   Future<void> connectRadio() => _meshtasticBleService.startAutoConnect();
@@ -280,6 +307,7 @@ class TacticalController extends ChangeNotifier {
   void setVolumeKeyPtt(bool enabled) {
     _volumeKeyPtt = enabled;
     unawaited(_nativePtt.setVolumeKeyPtt(enabled));
+    unawaited(settings.setVolumeKeyPtt(enabled));
     _notify();
   }
 
@@ -394,6 +422,7 @@ class TacticalController extends ChangeNotifier {
       return;
     }
     _selectedGroupIndex = index;
+    unawaited(settings.setGroupFor(session.userName, selectedGroup.id));
     _notify();
     unawaited(_joinSelectedGroupPtt());
   }

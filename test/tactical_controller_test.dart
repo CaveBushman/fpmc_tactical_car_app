@@ -290,4 +290,36 @@ void main() {
     final received = contacts.firstWhere((w) => w.sharedBy == 'RAVEN-2');
     expect(received.latitude, greaterThan(self.latitude));
   });
+
+  test('settings persist across restarts', () async {
+    await controller.login('operator', 'operator-2026');
+    controller.setFontScale(1.25);
+    controller.selectGroup(1);
+    controller.setVolumeKeyPtt(true);
+    await pumpEventQueue();
+    expect(controller.selectedGroup.id, 'bravo');
+
+    final restarted = TacticalController(
+      locationService: FakeLocationService(),
+      meshtasticBleService: FakeBleService(),
+      meshPacketRepository: MeshPacketRepository(),
+    );
+    addTearDown(restarted.dispose);
+    await pumpEventQueue();
+    expect(restarted.fontScale, 1.25);
+    expect(restarted.volumeKeyPtt, isTrue);
+
+    await restarted.login('operator', 'operator-2026');
+    expect(restarted.selectedGroup.id, 'bravo');
+
+    // Another user starts on their own default group.
+    final other = TacticalController(
+      locationService: FakeLocationService(),
+      meshtasticBleService: FakeBleService(),
+      meshPacketRepository: MeshPacketRepository(),
+    );
+    addTearDown(other.dispose);
+    await other.login('medic', 'medic-2026');
+    expect(other.selectedGroup.id, 'alpha');
+  });
 }
