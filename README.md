@@ -42,6 +42,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Urgent status alerts: a teammate reporting ZRANĚN or POTŘEBUJI PODPORU raises a red bar (and a vibration) like an SOS call, with "Navigovat" to their position and "Beru" to dismiss it until they report again; it lapses after 30 minutes or when they report another status.
 - Lost contact alerts (System → Nastavení, default on): when a teammate heard during this session goes LOST (15 min silent), a bar with a vibration offers "Navigovat" to their last position and "Beru"; it clears when they are heard again.
 - Message search: the field above the message list finds text, sender or recipient, ignoring case and diacritics ("zranen" finds "ZRANĚN"); "Prioritní" shows priority messages only.
+- Car mode pickers: the status button in the car-mode header, "ZPRÁVA" (OK plus your quick messages) and a tap on the target row (choose what to navigate to) open sheets of large buttons that are easy to hit while driving.
 - Automatic night mode (System → Nastavení): night mode from the end of civil dusk to civil dawn at your position, computed offline. Switching night mode by hand turns the automatic mode off.
 - Car mode screen (car icon in the app bar): map, nearest target, last message, OK / NA POZICI / SOS and a large hold-to-talk button; keeps the display on.
 - Android Auto: POI screen with the nearest team members and mission points on the car map (tap to navigate), and incoming team messages as car-readable notifications with voice reply.

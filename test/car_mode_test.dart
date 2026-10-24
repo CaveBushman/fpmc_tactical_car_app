@@ -65,4 +65,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(CarModeScreen), findsNothing);
   });
+
+  testWidgets('status, quick message and target are picked in car mode', (
+    tester,
+  ) async {
+    final ble = await openCarMode(tester, const Size(856, 384));
+
+    // Own status.
+    await tester.tap(find.byKey(const ValueKey('car-own-status')));
+    await tester.pumpAndSettle();
+    expect(find.text('Můj stav'), findsOneWidget);
+    await tester.tap(find.text('V POHYBU'));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('car-own-status')),
+        matching: find.text('V POHYBU'),
+      ),
+      findsOneWidget,
+    );
+    expect(ble.written, hasLength(1));
+
+    // Quick message from the templates.
+    await tester.tap(find.text('ZPRÁVA'));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('big-choice-0')),
+        matching: find.text('OK'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('PŘESUN'));
+    await tester.pumpAndSettle();
+    expect(ble.written, hasLength(2));
+    expect(find.textContaining(': PŘESUN'), findsOneWidget);
+
+    // Navigation target from the list.
+    await tester.tap(find.byKey(const ValueKey('car-pick-target')));
+    await tester.pumpAndSettle();
+    expect(find.text('Navigovat k'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('big-choice-1')));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Ukončit navigaci'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

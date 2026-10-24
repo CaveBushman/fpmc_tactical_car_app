@@ -104,6 +104,15 @@ void main() {
         // Car mode.
         await tab(Icons.map_outlined);
         await step('car mode', () => tester.tap(find.byTooltip('Režim auta')));
+        for (final picker in const ['car-own-status', 'car-pick-target']) {
+          await step(picker, () => tester.tap(find.byKey(ValueKey(picker))));
+          await step('close $picker', () => tester.tapAt(const Offset(4, 4)));
+        }
+        await step('quick messages', () => tester.tap(find.text('ZPRÁVA')));
+        await step(
+          'close quick messages',
+          () => tester.tapAt(const Offset(4, 4)),
+        );
         await step(
           'leave car mode',
           () => tester.tap(find.byTooltip('Ukončit režim auta')),

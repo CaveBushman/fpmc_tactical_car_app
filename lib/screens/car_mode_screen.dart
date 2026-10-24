@@ -6,6 +6,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../controllers/offline_maps_controller.dart';
 import '../controllers/ptt_controller.dart';
 import '../controllers/tactical_controller.dart';
+import '../models/member_status.dart';
 import '../models/messaging.dart';
 import '../models/navigation.dart';
 import '../theme.dart';
@@ -176,6 +177,10 @@ class _CarPanel extends StatelessWidget {
                   ),
                 ),
               ),
+              _OwnStatusButton(
+                status: controller.ownStatus,
+                onPressed: () => _pickStatus(context),
+              ),
               IconButton(
                 tooltip: controller.nightMode
                     ? 'Vypnout noční režim'
@@ -198,38 +203,44 @@ class _CarPanel extends StatelessWidget {
             ],
           ),
           if (nearest != null)
-            Row(
-              children: [
-                if (chosen != null)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 6),
-                    child: Icon(Icons.navigation, color: signalAmber),
-                  ),
-                Expanded(
-                  child: Text(
-                    '${nearest.label}  AZ ${nearest.bearingDeg.toStringAsFixed(0)}°  '
-                    '${formatDistance(nearest.distanceKm)}',
-                    key: const ValueKey('car-nearest'),
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: chosen != null
-                          ? signalAmber
-                          : nearest.priority
-                          ? dangerRed
-                          : sand,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
+            InkWell(
+              key: const ValueKey('car-pick-target'),
+              onTap: () => _pickTarget(context, solutions),
+              child: Row(
+                children: [
+                  if (chosen != null)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 6),
+                      child: Icon(Icons.navigation, color: signalAmber),
+                    ),
+                  Expanded(
+                    child: Text(
+                      '${nearest.label}  AZ ${nearest.bearingDeg.toStringAsFixed(0)}°  '
+                      '${formatDistance(nearest.distanceKm)}',
+                      key: const ValueKey('car-nearest'),
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: chosen != null
+                            ? signalAmber
+                            : nearest.priority
+                            ? dangerRed
+                            : sand,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
-                ),
-                if (chosen != null)
-                  IconButton(
-                    tooltip: 'Ukončit navigaci',
-                    iconSize: 28,
-                    onPressed: controller.clearNavTarget,
-                    icon: const Icon(Icons.close, color: Colors.white70),
-                  ),
-              ],
+                  if (chosen != null)
+                    IconButton(
+                      tooltip: 'Ukončit navigaci',
+                      iconSize: 28,
+                      onPressed: controller.clearNavTarget,
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                    )
+                  else
+                    const Icon(Icons.expand_more, color: Colors.white54),
+                ],
+              ),
             ),
           const SizedBox(height: 6),
           if (lastMessage != null)
@@ -243,7 +254,10 @@ class _CarPanel extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              _QuickButton(label: 'OK', onPressed: () => _send(context, 'OK')),
+              _QuickButton(
+                label: 'ZPRÁVA',
+                onPressed: () => _pickQuickMessage(context),
+              ),
               const SizedBox(width: 8),
               _QuickButton(
                 label: 'NA POZICI',
@@ -271,6 +285,62 @@ class _CarPanel extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _pickStatus(BuildContext context) async {
+    final index = await showBigChoices(
+      context,
+      title: 'Můj stav',
+      choices: [
+        for (final status in MemberStatus.values)
+          BigChoice(
+            label: status.label,
+            icon: status.icon,
+            color: status.urgent ? dangerRed : panelGreen,
+            selected: status == controller.ownStatus,
+          ),
+      ],
+    );
+    if (index != null) {
+      await controller.setOwnStatus(MemberStatus.values[index]);
+    }
+  }
+
+  Future<void> _pickQuickMessage(BuildContext context) async {
+    final texts = ['OK', ...controller.quickMessages.where((t) => t != 'OK')];
+    final index = await showBigChoices(
+      context,
+      title: 'Poslat skupině ${controller.selectedGroup.name}',
+      choices: [for (final text in texts) BigChoice(label: text)],
+    );
+    if (index != null && context.mounted) {
+      _send(context, texts[index]);
+    }
+  }
+
+  Future<void> _pickTarget(
+    BuildContext context,
+    List<TacticalNavSolution> solutions,
+  ) async {
+    final options = solutions.take(12).toList();
+    final index = await showBigChoices(
+      context,
+      title: 'Navigovat k',
+      choices: [
+        for (final solution in options)
+          BigChoice(
+            label:
+                '${solution.label}  AZ ${solution.bearingDeg.toStringAsFixed(0)}°  '
+                '${formatDistance(solution.distanceKm)}',
+            icon: solution.icon,
+            color: solution.priority ? dangerRed : panelGreen,
+            selected: controller.navTarget?.label == solution.label,
+          ),
+      ],
+    );
+    if (index != null) {
+      controller.navigateTo(options[index].target);
+    }
   }
 
   void _send(BuildContext context, String text, {bool priority = false}) {
@@ -393,4 +463,120 @@ class _BigPttButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Own status in the car-mode header; opens the big status picker.
+class _OwnStatusButton extends StatelessWidget {
+  const _OwnStatusButton({required this.status, required this.onPressed});
+
+  final MemberStatus? status;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = status;
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: OutlinedButton.icon(
+        key: const ValueKey('car-own-status'),
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: current == null
+              ? Colors.white70
+              : current.urgent
+              ? dangerRed
+              : Colors.white,
+          side: BorderSide(
+            color: current?.urgent == true ? dangerRed : Colors.white38,
+          ),
+          visualDensity: VisualDensity.compact,
+        ),
+        icon: Icon(current?.icon ?? Icons.person_outline, size: 20),
+        label: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 96),
+          child: Text(
+            current?.label ?? 'STAV',
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One option of [showBigChoices].
+class BigChoice {
+  const BigChoice({
+    required this.label,
+    this.icon,
+    this.color = panelGreen,
+    this.selected = false,
+  });
+
+  final String label;
+  final IconData? icon;
+  final Color color;
+  final bool selected;
+}
+
+/// Bottom sheet of large buttons that are easy to hit while driving;
+/// returns the chosen index or null.
+Future<int?> showBigChoices(
+  BuildContext context, {
+  required String title,
+  required List<BigChoice> choices,
+}) {
+  return showModalBottomSheet<int>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.black,
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+    ),
+    builder: (context) => SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (final (index, choice) in choices.indexed) ...[
+            SizedBox(
+              height: 60,
+              child: FilledButton.icon(
+                key: ValueKey('big-choice-$index'),
+                onPressed: () => Navigator.of(context).pop(index),
+                style: FilledButton.styleFrom(
+                  backgroundColor: choice.color,
+                  foregroundColor: Colors.white,
+                  alignment: Alignment.centerLeft,
+                  side: choice.selected
+                      ? const BorderSide(color: signalAmber, width: 3)
+                      : null,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                icon: Icon(choice.icon ?? Icons.chevron_right),
+                label: Text(choice.label, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    ),
+  );
 }
