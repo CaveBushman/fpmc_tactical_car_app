@@ -93,3 +93,25 @@ jobs:
 
       - name: Test
         run: dart test
+
+  meshtastic-schema:
+    name: Meshtastic schema conformance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Fetches protoc and the GPL-3.0 Meshtastic .proto files into a temp
+      # directory; nothing derived from them is committed.
+      - name: Check decoder fields against the official schema
+        run: tool/check_meshtastic_schema.sh

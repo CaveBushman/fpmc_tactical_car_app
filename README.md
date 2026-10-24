@@ -90,11 +90,9 @@ Optional: `TILE_MAX_ZOOM` (default 18), `TILE_ALLOW_BULK=false` to disable packs
 
 ## Next Implementation Steps
 
-1. Replace the focused manual Meshtastic protobuf layer with generated classes when `protoc` is available in CI.
-2. Named offline map packs per operation area (today: radius around own position).
-3. CarPlay (needs Apple entitlements, see `docs/carplay.md`).
-4. Operation groups configurable on the server (today a fixed set: alpha, bravo, med, command).
-5. Add end-to-end integration tests with recorded Meshtastic BLE packets.
+1. CarPlay (needs Apple entitlements, see `docs/carplay.md`).
+2. Operation groups configurable on the server (today a fixed set: alpha, bravo, med, command).
+3. Replace the synthetic replay fixture with real T-Beam captures (System → Kopírovat záznam paketů).
 
 ## PTT Backend and LiveKit
 
@@ -155,6 +153,12 @@ flutter build appbundle --release --dart-define=BACKEND_URL=https://ptt.example.
 ```
 
 Keep the keystore and its passwords outside the repository; losing them means the app can no longer be updated on Google Play.
+
+## Meshtastic Protocol
+
+The app decodes/encodes Meshtastic frames with its own small protobuf reader/writer (only the fields it uses). The official Meshtastic `.proto` files are GPL-3.0, so no code generated from them is part of the app or this repository. Instead `tool/check_meshtastic_schema.sh [tag]` fetches protoc and the `.proto` files into a temporary directory and checks that every field number, wire type and port number we use matches the official schema (also a CI job). Run it when updating to a new Meshtastic firmware/protobuf release.
+
+To capture a real session for tests: System → Meshtastic → *Kopírovat záznam paketů*, save it under `test/fixtures/` and replay it with `ReplayRadio` (see `test/replay_integration_test.dart`).
 
 ## Verify
 
