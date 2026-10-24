@@ -6,6 +6,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'admin_page.dart';
 import 'audit_log.dart';
 import 'group_keys.dart';
+import 'groups.dart';
 import 'livekit_tokens.dart';
 import 'login_guard.dart';
 import 'passwords.dart';
@@ -21,6 +22,8 @@ import 'users.dart';
 ///   - `GET /admin/users`, `POST /admin/users`, `PATCH /admin/users/<u>`
 ///   - `POST /admin/users/<u>/password`, `POST /admin/users/<u>/revoke`
 ///   - `DELETE /admin/users/<u>/devices/<id>`
+///   - `GET /admin/groups`, `POST /admin/groups`,
+///     `PATCH /admin/groups/<id>`, `DELETE /admin/groups/<id>`
 ///   - `POST /admin/groups/<group>/rotate-key`
 ///   - `GET /admin/audit?limit=N`
 /// - `GET /admin` – web administration page
@@ -36,10 +39,11 @@ class TacticalApi {
     LoginGuard? loginGuard,
     this.hasher = const PasswordHasher(),
     this.maxDevicesPerUser = 2,
-    this.knownGroups = const {'alpha', 'bravo', 'med', 'command'},
+    GroupDirectory? groups,
     this.knownRoles = const {'operator', 'commander', 'medic'},
     DateTime Function()? clock,
-  }) : loginGuard = loginGuard ?? LoginGuard(),
+  }) : groups = groups ?? GroupDirectory(GroupRecord.defaults),
+       loginGuard = loginGuard ?? LoginGuard(),
        _clock = clock ?? DateTime.now;
 
   static const minPasswordLength = 10;
@@ -56,7 +60,7 @@ class TacticalApi {
   /// 0 = unlimited. A login from a further device is refused until an admin
   /// unbinds one.
   final int maxDevicesPerUser;
-  final Set<String> knownGroups;
+  final GroupDirectory groups;
   final Set<String> knownRoles;
   final DateTime Function() _clock;
 
@@ -77,6 +81,10 @@ class TacticalApi {
       ..post('/admin/users/<user>/password', _setPassword)
       ..post('/admin/users/<user>/revoke', _revokeSessions)
       ..delete('/admin/users/<user>/devices/<device>', _unbindDevice)
+      ..get('/admin/groups', _listGroups)
+      ..post('/admin/groups', _createGroup)
+      ..patch('/admin/groups/<group>', _updateGroup)
+      ..delete('/admin/groups/<group>', _deleteGroup)
       ..post('/admin/groups/<group>/rotate-key', _rotateKey)
       ..get('/admin/audit', _readAudit);
     return const Pipeline().addMiddleware(_noStore()).addHandler(router.call);
@@ -165,6 +173,7 @@ class TacticalApi {
       ),
       'expiresInSeconds': sessions.lifetime.inSeconds,
       'user': account.toPublicJson(),
+      'groups': _groupsFor(account),
     });
   }
 
@@ -206,13 +215,17 @@ class TacticalApi {
     if (user == null) {
       return _json(401, {'error': 'unauthenticated'});
     }
-    if (!user.groups.contains(group)) {
+    final definition = groups.find(group);
+    if (definition == null || !user.groups.contains(group)) {
       audit.record(
         'ptt_denied',
         user: user.userName,
         details: {'group': group},
       );
       return _json(403, {'error': 'forbidden_group'});
+    }
+    if (!definition.pttEnabled) {
+      return _json(403, {'error': 'ptt_disabled'});
     }
     final current = keys.current(group);
     final previous = keys.previous(group);
@@ -244,7 +257,8 @@ class TacticalApi {
     }
     return _json(200, {
       'users': [for (final user in users.all) user.toAdminJson()],
-      'groups': knownGroups.toList()..sort(),
+      'groups': groups.ids.toList()..sort(),
+      'groupDefinitions': [for (final group in groups.all) group.toJson()],
       'roles': knownRoles.toList()..sort(),
     });
   }
@@ -414,10 +428,140 @@ class TacticalApi {
     return _json(200, {'ok': true});
   }
 
+  Response _listGroups(Request request) {
+    final admin = _authenticateAdmin(request);
+    if (admin is Response) {
+      return admin;
+    }
+    return _json(200, {
+      'groups': [
+        for (final group in groups.all)
+          {
+            ...group.toJson(),
+            'members': [
+              for (final user in users.all)
+                if (user.groups.contains(group.id)) user.userName,
+            ],
+          },
+      ],
+    });
+  }
+
+  Future<Response> _createGroup(Request request) async {
+    final admin = _authenticateAdmin(request);
+    if (admin is Response) {
+      return admin;
+    }
+    final body = await _readJson(request) ?? const {};
+    final id = body['id']?.toString().trim().toLowerCase() ?? '';
+    if (!RegExp(r'^[a-z0-9_-]{2,20}$').hasMatch(id)) {
+      return _json(400, {'error': 'invalid_group_id'});
+    }
+    if (groups.find(id) != null) {
+      return _json(409, {'error': 'group_exists'});
+    }
+    final group = _groupFrom(
+      GroupRecord(id: id, name: id.toUpperCase(), channelIndex: 0),
+      body,
+    );
+    if (group is Response) {
+      return group;
+    }
+    groups.put(group as GroupRecord);
+    audit.record(
+      'group_created',
+      user: (admin as UserRecord).userName,
+      details: group.toJson(),
+    );
+    return _json(201, group.toJson());
+  }
+
+  Future<Response> _updateGroup(Request request, String id) async {
+    final admin = _authenticateAdmin(request);
+    if (admin is Response) {
+      return admin;
+    }
+    final existing = groups.find(id);
+    if (existing == null) {
+      return _json(404, {'error': 'not_found'});
+    }
+    final group = _groupFrom(existing, await _readJson(request) ?? const {});
+    if (group is Response) {
+      return group;
+    }
+    groups.put(group as GroupRecord);
+    audit.record(
+      'group_updated',
+      user: (admin as UserRecord).userName,
+      details: group.toJson(),
+    );
+    return _json(200, group.toJson());
+  }
+
+  Response _deleteGroup(Request request, String id) {
+    final admin = _authenticateAdmin(request);
+    if (admin is Response) {
+      return admin;
+    }
+    if (groups.find(id) == null) {
+      return _json(404, {'error': 'not_found'});
+    }
+    // Members must be moved first so nobody silently loses access.
+    final members = [
+      for (final user in users.all)
+        if (user.groups.contains(id)) user.userName,
+    ];
+    if (members.isNotEmpty) {
+      return _json(409, {'error': 'group_in_use', 'members': members});
+    }
+    groups.remove(id);
+    audit.record(
+      'group_deleted',
+      user: (admin as UserRecord).userName,
+      details: {'group': id},
+    );
+    return _json(200, {'ok': true});
+  }
+
+  /// [base] with the fields of [body] applied and validated, or an error.
+  Object _groupFrom(GroupRecord base, Map<String, dynamic> body) {
+    final name = body['name']?.toString().trim() ?? base.name;
+    if (name.isEmpty || name.length > 20) {
+      return _json(400, {'error': 'invalid_name'});
+    }
+    final channel = body.containsKey('channelIndex')
+        ? body['channelIndex']
+        : base.channelIndex;
+    if (channel is! int || channel < 0 || channel > 7) {
+      return _json(400, {'error': 'invalid_channel'});
+    }
+    final description =
+        body['description']?.toString().trim() ?? base.description;
+    if (description.length > 80) {
+      return _json(400, {'error': 'description_too_long'});
+    }
+    return base.copyWith(
+      name: name,
+      channelIndex: channel,
+      pttEnabled: body.containsKey('pttEnabled')
+          ? body['pttEnabled'] == true
+          : base.pttEnabled,
+      description: description,
+    );
+  }
+
+  List<Map<String, dynamic>> _groupsFor(UserRecord user) => [
+    for (final group in groups.all)
+      if (user.groups.contains(group.id)) group.toJson(),
+  ];
+
   Response _rotateKey(Request request, String group) {
     final admin = _authenticateAdmin(request);
     if (admin is Response) {
       return admin;
+    }
+    if (groups.find(group) == null) {
+      return _json(404, {'error': 'not_found'});
     }
     final key = keys.rotate(group);
     audit.record(
@@ -515,14 +659,14 @@ class TacticalApi {
     if (rawGroups is! List) {
       return _json(400, {'error': 'groups_required'});
     }
-    final groups = {for (final group in rawGroups) group.toString()};
-    if (!groups.every(knownGroups.contains)) {
+    final groupIds = {for (final group in rawGroups) group.toString()};
+    if (!groupIds.every(groups.ids.contains)) {
       return _json(400, {'error': 'unknown_group'});
     }
     if (displayName.length > 40) {
       return _json(400, {'error': 'display_name_too_long'});
     }
-    return (displayName, role, groups);
+    return (displayName, role, groupIds);
   }
 
   static bool _sameSet(Set<String> a, Set<String> b) =>

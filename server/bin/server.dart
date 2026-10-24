@@ -43,6 +43,7 @@ Future<void> main() async {
       apiSecret: require('LIVEKIT_API_SECRET'),
     ),
     liveKitUrl: require('LIVEKIT_URL'),
+    groups: GroupDirectory.load(File('$dataDir/groups.json')),
     keys: GroupKeyStore(file: File('$dataDir/group_keys.json')),
     audit: AuditLog(file: File('$dataDir/audit.jsonl')),
   );

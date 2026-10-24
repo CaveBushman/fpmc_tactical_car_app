@@ -65,10 +65,18 @@ const adminPageHtml = r'''<!doctype html>
     </section>
 
     <section>
-      <h2>Klíče skupin</h2>
-      <p class="muted">Rotace vytvoří nový E2EE klíč; připojení klienti ho dostanou při dalším připojení ke skupině (předchozí klíč zůstává platný pro přechod).</p>
-      <div id="keys" class="row"></div>
-      <div id="keys-error" class="error"></div>
+      <h2>Operační skupiny</h2>
+      <p class="muted">Kanál = slot kanálu Meshtastic (0–7) na T-Beamech skupiny. Rotace vytvoří nový E2EE klíč PTT; klienti ho dostanou při dalším připojení ke skupině (předchozí klíč zůstává platný pro přechod).</p>
+      <div id="groups-error" class="error"></div>
+      <table><thead><tr><th>Skupina</th><th>Název / popis</th><th>Kanál</th><th>PTT</th><th>Členové</th><th></th></tr></thead>
+      <tbody id="groups"></tbody></table>
+      <form id="create-group" class="row" style="margin-top:12px">
+        <input id="group-id" placeholder="id (a-z0-9_-)" required>
+        <input id="group-name" placeholder="název" required>
+        <select id="group-channel"></select>
+        <label><input id="group-ptt" type="checkbox" checked> PTT</label>
+        <button>Přidat skupinu</button>
+      </form>
     </section>
 
     <section>
@@ -162,7 +170,7 @@ const adminPageHtml = r'''<!doctype html>
       meta = { groups: data.groups, roles: data.roles };
       renderUsers(data.users);
       renderCreateForm();
-      renderKeys();
+      await refreshGroups();
       await refreshAudit();
     } catch (error) {
       $('users-error').textContent = error.message;
@@ -213,22 +221,66 @@ const adminPageHtml = r'''<!doctype html>
     $('new-groups').replaceChildren(...groupBoxes([], 'new').childNodes);
   }
 
-  function renderKeys() {
-    const keys = $('keys');
-    keys.replaceChildren();
-    for (const group of meta.groups) {
-      const button = el('button', { className: 'plain', textContent: 'Rotovat klíč ' + group });
-      button.onclick = async () => {
-        $('keys-error').textContent = '';
-        if (!confirm('Rotovat E2EE klíč skupiny ' + group + '?')) return;
-        try {
-          const data = await api('POST', 'admin/groups/' + encodeURIComponent(group) + '/rotate-key');
-          $('keys-error').textContent = 'Skupina ' + group + ': klíč #' + data.keyId;
-        } catch (error) { $('keys-error').textContent = error.message; }
-      };
-      keys.append(button);
-    }
+  function channelSelect(value) {
+    const select = el('select');
+    for (let i = 0; i < 8; i++) select.append(el('option', { value: i, textContent: String(i), selected: i === value }));
+    return select;
   }
+
+  async function refreshGroups() {
+    $('groups-error').textContent = '';
+    const data = await api('GET', 'admin/groups');
+    const body = $('groups');
+    body.replaceChildren();
+    for (const group of data.groups) {
+      const name = el('input', { value: group.name, size: 10 });
+      const description = el('input', { value: group.description, placeholder: 'popis' });
+      const channel = channelSelect(group.channelIndex);
+      const ptt = el('input', { type: 'checkbox', checked: group.pttEnabled });
+      const save = el('button', { textContent: 'Uložit' });
+      save.onclick = () => groupAct(() => api('PATCH', 'admin/groups/' + encodeURIComponent(group.id), {
+        name: name.value, description: description.value,
+        channelIndex: Number(channel.value), pttEnabled: ptt.checked,
+      }));
+      const rotate = el('button', { className: 'plain', textContent: 'Rotovat klíč' });
+      rotate.onclick = () => {
+        if (!confirm('Rotovat E2EE klíč skupiny ' + group.id + '?')) return;
+        groupAct(async () => {
+          const result = await api('POST', 'admin/groups/' + encodeURIComponent(group.id) + '/rotate-key');
+          $('groups-error').textContent = 'Skupina ' + group.id + ': klíč #' + result.keyId;
+        }, false);
+      };
+      const remove = el('button', { className: 'danger', textContent: 'Smazat' });
+      remove.onclick = () => {
+        if (!confirm('Smazat skupinu ' + group.id + '?')) return;
+        groupAct(() => api('DELETE', 'admin/groups/' + encodeURIComponent(group.id)));
+      };
+      body.append(el('tr', {},
+        el('td', {}, el('strong', { textContent: group.id })),
+        el('td', {}, el('div', { className: 'row' }, name, description)),
+        el('td', {}, channel),
+        el('td', {}, ptt),
+        el('td', { className: 'muted', textContent: group.members.join(', ') || '–' }),
+        el('td', {}, el('div', { className: 'row' }, save, rotate, remove)),
+      ));
+    }
+    $('group-channel').replaceChildren(...channelSelect(0).childNodes);
+  }
+
+  async function groupAct(action, reload = true) {
+    $('groups-error').textContent = '';
+    try { await action(); if (reload) await refresh(); }
+    catch (error) { $('groups-error').textContent = error.message; }
+  }
+
+  $('create-group').onsubmit = async (event) => {
+    event.preventDefault();
+    await groupAct(() => api('POST', 'admin/groups', {
+      id: $('group-id').value, name: $('group-name').value,
+      channelIndex: Number($('group-channel').value), pttEnabled: $('group-ptt').checked,
+    }));
+    $('create-group').reset();
+  };
 
   async function refreshAudit() {
     const data = await api('GET', 'admin/audit?limit=100');
