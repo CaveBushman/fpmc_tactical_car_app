@@ -21,11 +21,13 @@ import '../services/settings_store.dart';
 import '../services/ptt/livekit_voice_transport.dart';
 import '../services/ptt/voice_transport.dart';
 import 'danger_proximity.dart';
+import 'member_status_board.dart';
 import 'mission_recorder.dart';
 import 'peer_trails.dart';
 import 'ptt_controller.dart';
 import 'session_keeper.dart';
 import 'sos_coordinator.dart';
+import 'user_preferences.dart';
 import '../services/location_service.dart';
 import '../services/mesh_packet_repository.dart';
 import '../services/mission_export.dart';
@@ -140,6 +142,7 @@ class TacticalController extends ChangeNotifier {
   late final SessionKeeper _sessionKeeper;
   late final SosCoordinator _sos;
   final SettingsStore settings;
+  late final UserPreferences _prefs = UserPreferences(settings);
 
   /// Lower bound for scheduling a session refresh (tests use a short one).
   final Duration minSessionRefreshDelay;
@@ -154,7 +157,6 @@ class TacticalController extends ChangeNotifier {
   DateTime? _lastInternetPositionAt;
   LatLng? _lastInternetPosition;
   bool _appInForeground = true;
-  bool _volumeKeyPtt = false;
   String? _lastCarTargets;
   String? _lastNativePttStatus;
   final AuthService _authService;
@@ -181,7 +183,6 @@ class TacticalController extends ChangeNotifier {
   bool _disposed = false;
   AuthSession? _session;
   int _selectedGroupIndex = 0;
-  double _fontScale = 1.0;
   DateTime? _lastLocationPersistAt;
   LocationState _locationState = LocationState.idle;
   MeshtasticBleState _bleState = MeshtasticBleState.idle;
@@ -223,7 +224,7 @@ class TacticalController extends ChangeNotifier {
     _ => false,
   };
   bool get meshConnected => _bleState.status == MeshtasticBleStatus.connected;
-  double get fontScale => _fontScale;
+  double get fontScale => _prefs.fontScale;
   LocationState get locationState => _locationState;
   MeshtasticBleState get bleState => _bleState;
   MeshPacketDiagnostics get packetDiagnostics => _packetDiagnostics;
@@ -379,7 +380,6 @@ class TacticalController extends ChangeNotifier {
     _peerTrails.clear();
     _courseDeg = null;
     _statuses.clear();
-    _acknowledgedStatuses.clear();
     _sos.reset();
     _mission.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
@@ -398,17 +398,7 @@ class TacticalController extends ChangeNotifier {
     _sos.reset();
     await logout();
     await settings.clearAll();
-    _fontScale = 1.0;
-    _volumeKeyPtt = false;
-    _nightMode = false;
-    _nightModeAuto = false;
-    _sharePositionToMesh = true;
-    _mgrsGrid = true;
-    _batterySaver = false;
-    _dangerAlerts = true;
-    _hideSystemBars = true;
-    _mapHeadingUp = false;
-    _quickMessages = SettingsStore.defaultQuickMessages;
+    _prefs.reset();
     unawaited(_locationService.setPowerSaving(false));
     unawaited(_nativePtt.setVolumeKeyPtt(false));
     _notify();
@@ -445,35 +435,19 @@ class TacticalController extends ChangeNotifier {
   // --- Settings / devices --------------------------------------------------
 
   void setFontScale(double value) {
-    _fontScale = value;
-    unawaited(settings.setFontScale(value));
+    _prefs.fontScale = value;
     _notify();
   }
 
   Future<void> _loadSettings() async {
-    final fontScale = await settings.fontScale();
-    final volumeKey = await settings.volumeKeyPtt();
-    _nightMode = await settings.nightMode();
-    _nightModeAuto = await settings.nightModeAuto();
-    _sharePositionToMesh = await settings.sharePositionToMesh();
-    _mgrsGrid = await settings.mgrsGrid();
-    final batterySaver = await settings.batterySaver();
-    _dangerAlerts = await settings.dangerAlerts();
-    _hideSystemBars = await settings.hideSystemBars();
-    _mapHeadingUp = await settings.mapHeadingUp();
-    _quickMessages = await settings.quickMessages();
+    await _prefs.load();
     if (_disposed) {
       return;
     }
-    if (batterySaver) {
-      _batterySaver = true;
+    if (_prefs.batterySaver) {
       unawaited(_locationService.setPowerSaving(true));
     }
-    if (fontScale != null) {
-      _fontScale = fontScale.clamp(0.85, 1.35);
-    }
-    if (volumeKey) {
-      _volumeKeyPtt = true;
+    if (_prefs.volumeKeyPtt) {
       unawaited(_nativePtt.setVolumeKeyPtt(true));
     }
     _notify();
@@ -509,29 +483,18 @@ class TacticalController extends ChangeNotifier {
 
   Future<void> reconnectPtt() => _joinSelectedGroupPtt();
 
-  bool get volumeKeyPtt => _volumeKeyPtt;
-
-  bool _nightMode = false;
-  bool _nightModeAuto = false;
-  bool _sharePositionToMesh = true;
-  bool _mgrsGrid = true;
-  bool _batterySaver = false;
+  bool get volumeKeyPtt => _prefs.volumeKeyPtt;
 
   /// Coarser GPS and sparser position sharing (mesh every 5 min / 250 m,
   /// internet every 2 min / 100 m). SOS and forced updates are unaffected.
-  bool get batterySaver => _batterySaver;
+  bool get batterySaver => _prefs.batterySaver;
 
   void setBatterySaver(bool enabled) {
-    _batterySaver = enabled;
-    unawaited(settings.setBatterySaver(enabled));
+    _prefs.batterySaver = enabled;
     unawaited(_locationService.setPowerSaving(enabled));
     _notify();
   }
 
-  bool _dangerAlerts = true;
-  bool _hideSystemBars = true;
-  bool _mapHeadingUp = false;
-  List<String> _quickMessages = SettingsStore.defaultQuickMessages;
   double? _courseDeg;
 
   /// Direction of travel from GPS, kept while standing still so the map
@@ -539,16 +502,15 @@ class TacticalController extends ChangeNotifier {
   double? get courseDeg => _courseDeg;
 
   /// Turn the map so the direction of travel points up.
-  bool get mapHeadingUp => _mapHeadingUp;
+  bool get mapHeadingUp => _prefs.mapHeadingUp;
 
   void setMapHeadingUp(bool enabled) {
-    _mapHeadingUp = enabled;
-    unawaited(settings.setMapHeadingUp(enabled));
+    _prefs.mapHeadingUp = enabled;
     _notify();
   }
 
   /// One-tap message templates.
-  List<String> get quickMessages => List.unmodifiable(_quickMessages);
+  List<String> get quickMessages => List.unmodifiable(_prefs.quickMessages);
 
   /// Blank lines are dropped; an empty list restores the defaults.
   void setQuickMessages(List<String> messages) {
@@ -556,35 +518,32 @@ class TacticalController extends ChangeNotifier {
       for (final message in messages)
         if (message.trim().isNotEmpty) message.trim(),
     ];
-    _quickMessages = cleaned.isEmpty
+    _prefs.quickMessages = cleaned.isEmpty
         ? SettingsStore.defaultQuickMessages
         : cleaned;
-    unawaited(settings.setQuickMessages(_quickMessages));
     _notify();
   }
 
   /// Full screen: the Android status and navigation bars are hidden and
   /// appear for a moment after a swipe from the edge.
-  bool get hideSystemBars => _hideSystemBars;
+  bool get hideSystemBars => _prefs.hideSystemBars;
 
   void setHideSystemBars(bool enabled) {
-    _hideSystemBars = enabled;
-    unawaited(settings.setHideSystemBars(enabled));
+    _prefs.hideSystemBars = enabled;
     _notify();
   }
 
   /// Warn (banner + vibration) within 300 m of a DANGER point.
-  bool get dangerAlerts => _dangerAlerts;
+  bool get dangerAlerts => _prefs.dangerAlerts;
 
   void setDangerAlerts(bool enabled) {
-    _dangerAlerts = enabled;
-    unawaited(settings.setDangerAlerts(enabled));
+    _prefs.dangerAlerts = enabled;
     _notify();
   }
 
   /// DANGER points we are close to, nearest first.
   List<DangerWarning> get dangerWarnings =>
-      _dangerAlerts && _session != null ? _danger.warnings : const [];
+      _prefs.dangerAlerts && _session != null ? _danger.warnings : const [];
 
   /// "Beru": hides the warning until we leave the point and come back.
   void dismissDanger(DangerWarning warning) {
@@ -594,7 +553,7 @@ class TacticalController extends ChangeNotifier {
 
   /// Runs before every notify, so position and point changes both count.
   void _checkDangers() {
-    if (!_dangerAlerts || _session == null) {
+    if (!_prefs.dangerAlerts || _session == null) {
       _danger.reset();
       return;
     }
@@ -648,11 +607,10 @@ class TacticalController extends ChangeNotifier {
   }
 
   /// MGRS/UTM grid lines on the map.
-  bool get mgrsGrid => _mgrsGrid;
+  bool get mgrsGrid => _prefs.mgrsGrid;
 
   void setMgrsGrid(bool enabled) {
-    _mgrsGrid = enabled;
-    unawaited(settings.setMgrsGrid(enabled));
+    _prefs.mgrsGrid = enabled;
     _notify();
   }
 
@@ -671,11 +629,10 @@ class TacticalController extends ChangeNotifier {
 
   /// Phone GPS is broadcast into the mesh (POSITION_APP), so teammates
   /// see us even when the T-Beam has no GPS fix of its own.
-  bool get sharePositionToMesh => _sharePositionToMesh;
+  bool get sharePositionToMesh => _prefs.sharePositionToMesh;
 
   void setSharePositionToMesh(bool enabled) {
-    _sharePositionToMesh = enabled;
-    unawaited(settings.setSharePositionToMesh(enabled));
+    _prefs.sharePositionToMesh = enabled;
     if (enabled) {
       unawaited(_sharePositionToRadio(force: true));
     }
@@ -688,7 +645,7 @@ class TacticalController extends ChangeNotifier {
     LocationFix? latest,
     bool force = false,
   }) async {
-    if (!_sharePositionToMesh || !meshConnected || _session == null) {
+    if (!_prefs.sharePositionToMesh || !meshConnected || _session == null) {
       return;
     }
     final fix = latest ?? _locationState.lastFix;
@@ -703,10 +660,10 @@ class TacticalController extends ChangeNotifier {
         last != null &&
         lastAt != null &&
         now.difference(lastAt) <
-            (_batterySaver
+            (_prefs.batterySaver
                 ? const Duration(minutes: 5)
                 : const Duration(minutes: 1)) &&
-        geo.distanceKm(last, position) < (_batterySaver ? 0.25 : 0.05)) {
+        geo.distanceKm(last, position) < (_prefs.batterySaver ? 0.25 : 0.05)) {
       return;
     }
     _lastMeshPosition = position;
@@ -730,8 +687,8 @@ class TacticalController extends ChangeNotifier {
   /// Red, dimmed display for preserving night vision. In automatic mode
   /// it follows civil twilight at the own position.
   bool get nightMode {
-    if (!_nightModeAuto) {
-      return _nightMode;
+    if (!_prefs.nightModeAuto) {
+      return _prefs.nightMode;
     }
     final self = selfNode;
     return sun.isDark(_clock(), self.latitude, self.longitude);
@@ -739,50 +696,32 @@ class TacticalController extends ChangeNotifier {
 
   /// Switching by hand ends the automatic mode.
   void setNightMode(bool enabled) {
-    _nightMode = enabled;
-    unawaited(settings.setNightMode(enabled));
-    if (_nightModeAuto) {
-      _nightModeAuto = false;
-      unawaited(settings.setNightModeAuto(false));
+    _prefs.nightMode = enabled;
+    if (_prefs.nightModeAuto) {
+      _prefs.nightModeAuto = false;
     }
     _notify();
   }
 
-  bool get nightModeAuto => _nightModeAuto;
+  bool get nightModeAuto => _prefs.nightModeAuto;
 
   void setNightModeAuto(bool enabled) {
-    _nightModeAuto = enabled;
-    unawaited(settings.setNightModeAuto(enabled));
+    _prefs.nightModeAuto = enabled;
     _notify();
   }
 
   // --- Urgent member status -------------------------------------------------------
 
-  final Set<String> _acknowledgedStatuses = {};
-
-  static String _statusKey(String callSign, MemberStatusReport report) =>
-      '$callSign@${report.at.microsecondsSinceEpoch}';
+  final MemberStatusBoard _statuses = MemberStatusBoard();
 
   /// Teammates who reported being wounded or needing support within the
   /// last 30 minutes and have not been answered here, newest first.
-  List<({String callSign, MemberStatusReport report})> get urgentStatuses {
-    final cutoff = _clock().subtract(const Duration(minutes: 30));
-    final self = selfNode.callSign;
-    return [
-      for (final MapEntry(key: callSign, value: report) in _statuses.entries)
-        if (callSign != self &&
-            report.status.urgent &&
-            report.at.isAfter(cutoff) &&
-            !_acknowledgedStatuses.contains(_statusKey(callSign, report)))
-          (callSign: callSign, report: report),
-    ]..sort((a, b) => b.report.at.compareTo(a.report.at));
-  }
+  List<({String callSign, MemberStatusReport report})> get urgentStatuses =>
+      _statuses.urgent(self: selfNode.callSign, now: _clock());
 
   /// "Beru": hides the alert until the member reports again.
   void acknowledgeStatus(String callSign) {
-    final report = _statuses[callSign];
-    if (report != null) {
-      _acknowledgedStatuses.add(_statusKey(callSign, report));
+    if (_statuses.acknowledge(callSign)) {
       _notify();
     }
   }
@@ -801,9 +740,8 @@ class TacticalController extends ChangeNotifier {
 
   /// Volume-down as hold-to-talk while the app is in front (Android).
   void setVolumeKeyPtt(bool enabled) {
-    _volumeKeyPtt = enabled;
+    _prefs.volumeKeyPtt = enabled;
     unawaited(_nativePtt.setVolumeKeyPtt(enabled));
-    unawaited(settings.setVolumeKeyPtt(enabled));
     _notify();
   }
 
@@ -880,10 +818,11 @@ class TacticalController extends ChangeNotifier {
         last != null &&
         lastAt != null &&
         now.difference(lastAt) <
-            (_batterySaver
+            (_prefs.batterySaver
                 ? const Duration(minutes: 2)
                 : const Duration(seconds: 30)) &&
-        geo.distanceKm(last, self.latLng) < (_batterySaver ? 0.1 : 0.025)) {
+        geo.distanceKm(last, self.latLng) <
+            (_prefs.batterySaver ? 0.1 : 0.025)) {
       return;
     }
     _lastInternetPosition = self.latLng;
@@ -1207,13 +1146,11 @@ class TacticalController extends ChangeNotifier {
 
   // --- Member status -------------------------------------------------------------
 
-  final Map<String, MemberStatusReport> _statuses = {};
-
   /// Last status reported by [callSign] (own one included), or null.
-  MemberStatusReport? statusOf(String callSign) => _statuses[callSign];
+  MemberStatusReport? statusOf(String callSign) => _statuses.statusOf(callSign);
 
   /// Own status as last sent.
-  MemberStatus? get ownStatus => _statuses[selfNode.callSign]?.status;
+  MemberStatus? get ownStatus => _statuses.statusOf(selfNode.callSign)?.status;
 
   /// Tells the selected group how we are; urgent ones go as priority.
   Future<void> setOwnStatus(MemberStatus status) async {
@@ -1221,10 +1158,7 @@ class TacticalController extends ChangeNotifier {
       return;
     }
     final callSign = selfNode.callSign;
-    _statuses[callSign] = MemberStatusReport(
-      status: status,
-      at: DateTime.now(),
-    );
+    _statuses.report(callSign, status, DateTime.now());
     _notify();
     await sendMeshText(
       MeshMessageDraft(
@@ -1633,10 +1567,7 @@ class TacticalController extends ChangeNotifier {
     final status = MemberStatus.parse(text);
     if (status != null) {
       if (status.callSign != selfNode.callSign) {
-        _statuses[status.callSign] = MemberStatusReport(
-          status: status.status,
-          at: now,
-        );
+        _statuses.report(status.callSign, status.status, now);
       }
       return;
     }
