@@ -17,6 +17,7 @@ import 'users.dart';
 ///
 /// - `POST /auth/login` `{userName, password, deviceId?, deviceName?}`
 /// - `POST /auth/password` (Bearer) `{oldPassword, newPassword}`
+/// - `POST /auth/refresh` (Bearer) → fresh token for a still valid session
 /// - `POST /ptt/<group>/join` (Bearer) → LiveKit URL/token + group keys
 /// - commander only (Bearer):
 ///   - `GET /admin/users`, `POST /admin/users`, `PATCH /admin/users/<u>`
@@ -74,6 +75,7 @@ class TacticalApi {
       ..get('/admin', (_) => _adminPage())
       ..post('/auth/login', _login)
       ..post('/auth/password', _changeOwnPassword)
+      ..post('/auth/refresh', _refreshSession)
       ..post('/ptt/<group>/join', _joinPtt)
       ..get('/admin/users', _listUsers)
       ..post('/admin/users', _createUser)
@@ -174,6 +176,25 @@ class TacticalApi {
       'expiresInSeconds': sessions.lifetime.inSeconds,
       'user': account.toPublicJson(),
       'groups': _groupsFor(account),
+    });
+  }
+
+  /// Extends a session that is still valid (same version and device), so a
+  /// long operation does not hit the token lifetime. Revoked, blocked or
+  /// unbound sessions cannot be refreshed.
+  Response _refreshSession(Request request) {
+    final user = _authenticate(request);
+    if (user == null) {
+      return _json(401, {'error': 'unauthenticated'});
+    }
+    audit.record('session_refreshed', user: user.userName);
+    return _json(200, {
+      'sessionToken': sessions.issue(
+        user.userName,
+        version: user.sessionVersion,
+        deviceId: _claims(request)?.deviceId,
+      ),
+      'expiresInSeconds': sessions.lifetime.inSeconds,
     });
   }
 

@@ -320,4 +320,20 @@ void main() {
     expect(reloaded.find('medic'), isNotNull);
     expect(reloaded.find('commander'), isNotNull);
   });
+
+  test('a valid session can be refreshed, a revoked one cannot', () async {
+    final admin = await login('commander');
+    final session = await login('operator', device: 'd1');
+
+    final refreshed = await call('POST', '/auth/refresh', token: session);
+    expect(refreshed.statusCode, 200);
+    final body = await json(refreshed);
+    final fresh = body['sessionToken'] as String;
+    expect(body['expiresInSeconds'], greaterThan(0));
+    expect(await join(fresh), 200);
+
+    await call('POST', '/admin/users/operator/revoke', token: admin);
+    expect((await call('POST', '/auth/refresh', token: fresh)).statusCode, 401);
+    expect((await call('POST', '/auth/refresh')).statusCode, 401);
+  });
 }

@@ -13,6 +13,7 @@ class AuthSession {
     required this.allowedGroupIds,
     this.sessionToken,
     this.groupDefinitions = const [],
+    this.expiresIn,
   });
 
   final String userName;
@@ -25,6 +26,19 @@ class AuthSession {
 
   /// Group configuration from the backend; empty = built-in demo groups.
   final List<GroupDefinition> groupDefinitions;
+
+  /// Lifetime of [sessionToken] when it was issued.
+  final Duration? expiresIn;
+
+  AuthSession withToken(String token, Duration expiresIn) => AuthSession(
+    userName: userName,
+    displayName: displayName,
+    role: role,
+    allowedGroupIds: allowedGroupIds,
+    sessionToken: token,
+    groupDefinitions: groupDefinitions,
+    expiresIn: expiresIn,
+  );
 
   bool get isDemo => sessionToken == null;
 }
@@ -169,6 +183,7 @@ class RemoteAuthService extends AuthService {
           allowedGroupIds: user.groups,
           sessionToken: login.sessionToken,
           groupDefinitions: login.groups,
+          expiresIn: login.expiresIn,
         ),
       );
     } on BackendException catch (error) {

@@ -63,9 +63,11 @@ class BackendLogin {
     required this.sessionToken,
     required this.user,
     this.groups = const [],
+    this.expiresIn = const Duration(hours: 12),
   });
 
   final String sessionToken;
+  final Duration expiresIn;
   final BackendUser user;
 
   /// Definitions of the user's groups (empty from older backends).
@@ -136,6 +138,22 @@ class BackendClient {
         for (final group in body['groups'] as List? ?? const [])
           GroupDefinition.fromJson(group as Map<String, dynamic>),
       ],
+      expiresIn: Duration(
+        seconds: (body['expiresInSeconds'] as num?)?.toInt() ?? 12 * 3600,
+      ),
+    );
+  }
+
+  /// New token for a still valid session (throws 401 when it was revoked).
+  Future<({String token, Duration expiresIn})> refresh(
+    String sessionToken,
+  ) async {
+    final body = await _post('auth/refresh', sessionToken: sessionToken);
+    return (
+      token: body['sessionToken'] as String,
+      expiresIn: Duration(
+        seconds: (body['expiresInSeconds'] as num?)?.toInt() ?? 12 * 3600,
+      ),
     );
   }
 

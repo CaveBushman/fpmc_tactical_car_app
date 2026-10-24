@@ -40,6 +40,7 @@ class TacticalController extends ChangeNotifier {
     NativePttBridge? nativePtt,
     CarBridge? carBridge,
     this.settings = const SettingsStore(),
+    this.minSessionRefreshDelay = const Duration(seconds: 30),
     Duration agingTick = const Duration(seconds: 15),
   }) : _backend = backend,
        _nativePtt = nativePtt ?? NativePttBridge.platform(),
@@ -95,11 +96,15 @@ class TacticalController extends ChangeNotifier {
   final NativePttBridge _nativePtt;
   final CarBridge _carBridge;
   final SettingsStore settings;
+
+  /// Lower bound for scheduling a session refresh (tests use a short one).
+  final Duration minSessionRefreshDelay;
   late final StreamSubscription<NativePttButton> _nativeButtonSubscription;
   late final StreamSubscription<String> _nativeErrorSubscription;
   late final StreamSubscription<CarReply> _carReplySubscription;
   late final StreamSubscription<RoomData> _roomDataSubscription;
   bool _roomWasConnected = false;
+  Timer? _refreshTimer;
   DateTime? _lastInternetPositionAt;
   LatLng? _lastInternetPosition;
   bool _appInForeground = true;
@@ -221,6 +226,7 @@ class TacticalController extends ChangeNotifier {
     unawaited(_nativeErrorSubscription.cancel());
     unawaited(_carReplySubscription.cancel());
     unawaited(_roomDataSubscription.cancel());
+    _refreshTimer?.cancel();
     if (_lastNativePttStatus != null) {
       unawaited(_nativePtt.hide());
     }
@@ -256,15 +262,94 @@ class TacticalController extends ChangeNotifier {
           ];
     _selectedGroupIndex = await _preferredGroupIndex(session.userName);
     _notify();
+    _scheduleSessionRefresh(session);
     unawaited(_locationService.start());
     unawaited(_restorePersistedState(session.userName));
     unawaited(_joinSelectedGroupPtt());
     return null;
   }
 
+  // --- Session lifetime ------------------------------------------------------
+
+  /// Refreshes backend sessions at 75 % of their lifetime so a long
+  /// operation never runs into the token expiry.
+  void _scheduleSessionRefresh(AuthSession session, {Duration? after}) {
+    _refreshTimer?.cancel();
+    final lifetime = session.expiresIn;
+    if (session.isDemo || lifetime == null) {
+      return;
+    }
+    var delay = after ?? lifetime * 0.75;
+    if (delay < minSessionRefreshDelay) {
+      delay = minSessionRefreshDelay;
+    }
+    _refreshTimer = Timer(delay, () => unawaited(_refreshSession()));
+  }
+
+  Future<void> _refreshSession() async {
+    final session = _session;
+    final token = session?.sessionToken;
+    final backend = _backend;
+    if (session == null || token == null || backend == null) {
+      return;
+    }
+    try {
+      final refreshed = await backend.refresh(token);
+      if (!identical(_session, session)) {
+        return; // logged out or switched meanwhile
+      }
+      final updated = session.withToken(refreshed.token, refreshed.expiresIn);
+      _session = updated;
+      _scheduleSessionRefresh(updated);
+    } on BackendException catch (error) {
+      if (!identical(_session, session)) {
+        return;
+      }
+      if (error.statusCode == 401) {
+        await endSession(
+          'Relace vypršela nebo byla zrušena velitelem. Přihlas se znovu.',
+        );
+      } else {
+        // Offline for a moment: try again soon, the token is still valid.
+        _scheduleSessionRefresh(session, after: const Duration(minutes: 1));
+      }
+    }
+  }
+
+  /// Returns to the login screen without wiping the encrypted store: the
+  /// same user gets everything back after logging in again, anyone else
+  /// sees nothing of it. Used when the backend no longer accepts the
+  /// session.
+  Future<void> endSession(String reason) async {
+    if (_session == null) {
+      return;
+    }
+    _refreshTimer?.cancel();
+    await _persistState();
+    _session = null;
+    _selectedGroupIndex = 0;
+    _groups = CommunicationGroup.demoGroups;
+    await _ptt.leave();
+    await _locationService.stop();
+    _resetOperationalData();
+    _notice(reason);
+    _notify();
+  }
+
+  void _resetOperationalData() {
+    _replaceNodes(MeshNode.demoNodes(DateTime.now()));
+    _messages
+      ..clear()
+      ..addAll(MeshMessage.demoMessages(DateTime.now()));
+    _waypoints
+      ..clear()
+      ..addAll(TacticalWaypoint.demoWaypoints);
+  }
+
   /// Ends the session and wipes everything stored on the device.
   Future<void> logout() async {
     // Drop the session first so no in-flight persist can rewrite the store.
+    _refreshTimer?.cancel();
     _session = null;
     _selectedGroupIndex = 0;
     _groups = CommunicationGroup.demoGroups;
@@ -285,13 +370,7 @@ class TacticalController extends ChangeNotifier {
     } catch (_) {
       // Storage unavailable; in-memory state is still reset below.
     }
-    _replaceNodes(MeshNode.demoNodes(DateTime.now()));
-    _messages
-      ..clear()
-      ..addAll(MeshMessage.demoMessages(DateTime.now()));
-    _waypoints
-      ..clear()
-      ..addAll(TacticalWaypoint.demoWaypoints);
+    _resetOperationalData();
     _notify();
   }
 
@@ -706,12 +785,25 @@ class TacticalController extends ChangeNotifier {
     await _ptt.joinGroup(group.id, group.name);
   }
 
-  Future<PttJoinInfo> _joinPtt(String groupId) {
+  Future<PttJoinInfo> _joinPtt(String groupId) async {
     final token = _session?.sessionToken;
     if (token == null) {
       throw const BackendException(401, 'no_session');
     }
-    return _backend!.joinPtt(token, groupId);
+    try {
+      return await _backend!.joinPtt(token, groupId);
+    } on BackendException catch (error) {
+      if (error.statusCode == 401) {
+        // Revoked/blocked/unbound: the whole session is gone, not just PTT.
+        unawaited(
+          endSession(
+            'Relace byla ukončena (zrušena, zablokovaný účet nebo odpojené '
+            'zařízení). Přihlas se znovu.',
+          ),
+        );
+      }
+      rethrow;
+    }
   }
 
   // --- Own position ----------------------------------------------------------
