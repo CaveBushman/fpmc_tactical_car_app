@@ -11,6 +11,7 @@ class PersistedTacticalState {
     required this.messages,
     required this.savedAt,
     this.waypoints,
+    this.track,
     this.owner,
   });
 
@@ -19,6 +20,9 @@ class PersistedTacticalState {
 
   /// Null for snapshots written before waypoints were persisted.
   final List<Map<String, dynamic>>? waypoints;
+
+  /// Own trail; null for snapshots written before it was recorded.
+  final List<Map<String, dynamic>>? track;
   final DateTime savedAt;
 
   /// User name of the session that wrote the snapshot (null for legacy).
@@ -111,6 +115,7 @@ class TacticalStateStore {
         nodes: state.nodes,
         messages: state.messages,
         waypoints: state.waypoints ?? const [],
+        track: state.track ?? const [],
         owner: state.owner,
       );
     }
@@ -122,6 +127,7 @@ class TacticalStateStore {
     required List<Map<String, dynamic>> nodes,
     required List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>> waypoints = const [],
+    List<Map<String, dynamic>> track = const [],
     String? owner,
   }) async {
     final prefs = await SharedPreferences.getInstance();
@@ -132,6 +138,7 @@ class TacticalStateStore {
       'nodes': nodes,
       'messages': messages,
       'waypoints': waypoints,
+      'track': track,
     };
     await prefs.setString(key, await _encrypt(jsonEncode(payload)));
   }
@@ -198,6 +205,7 @@ class TacticalStateStore {
       waypoints: decoded.containsKey('waypoints')
           ? _mapList(decoded['waypoints'])
           : null,
+      track: decoded.containsKey('track') ? _mapList(decoded['track']) : null,
       savedAt:
           DateTime.tryParse(decoded['savedAt']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),

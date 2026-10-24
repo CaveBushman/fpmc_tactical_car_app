@@ -67,6 +67,7 @@ class _CarModeScreenState extends State<CarModeScreen> {
               waypoints: controller.waypoints,
               tileSource: widget.offlineMaps.source,
               offlineStore: widget.offlineMaps.store,
+              track: [for (final point in controller.track) point.latLng],
             );
             final panel = _CarPanel(controller: controller);
             return LayoutBuilder(

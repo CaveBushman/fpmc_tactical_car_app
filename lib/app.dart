@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'controllers/offline_maps_controller.dart';
 import 'controllers/tactical_controller.dart';
+import 'models/track.dart';
 import 'screens/car_mode_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/map_page.dart';
@@ -228,6 +229,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       tileSource: _offlineMaps.source,
       offlineStore: _offlineMaps.store,
       onVisibleBoundsChanged: (bounds) => _visibleMapBounds = bounds,
+      track: [for (final point in controller.track) point.latLng],
       showDetailsSheet: showDetailsSheet,
       onShareWaypoint: controller.shareWaypoint,
       onDeleteWaypoint: controller.removeWaypoint,
@@ -264,6 +266,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         onPttReconnect: controller.reconnectPtt,
         nightMode: controller.nightMode,
         onNightModeChanged: controller.setNightMode,
+        trackPoints: controller.track.length,
+        trackLengthKm: trackLengthKm(controller.track),
+        onExportMission: controller.exportMission,
+        onClearTrack: controller.clearTrack,
         onCopyPacketRecording: controller.exportPacketRecording,
         radioChannels: controller.radioChannels,
         channelWarnings: controller.channelWarnings,

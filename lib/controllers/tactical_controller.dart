@@ -9,6 +9,7 @@ import '../models/geo.dart' as geo;
 import '../models/mesh_node.dart';
 import '../models/messaging.dart';
 import '../models/navigation.dart';
+import '../models/track.dart';
 import '../models/reports.dart';
 import '../services/auth_service.dart';
 import '../services/backend_client.dart';
@@ -19,6 +20,7 @@ import '../services/ptt/voice_transport.dart';
 import 'ptt_controller.dart';
 import '../services/location_service.dart';
 import '../services/mesh_packet_repository.dart';
+import '../services/mission_export.dart';
 import '../services/mesh_radio.dart';
 import '../services/meshtastic_ble_service.dart';
 import '../services/meshtastic_message_encoder.dart';
@@ -41,10 +43,12 @@ class TacticalController extends ChangeNotifier {
     CarBridge? carBridge,
     this.settings = const SettingsStore(),
     this.minSessionRefreshDelay = const Duration(seconds: 30),
+    MissionSharer? missionSharer,
     Duration agingTick = const Duration(seconds: 15),
   }) : _backend = backend,
        _nativePtt = nativePtt ?? NativePttBridge.platform(),
        _carBridge = carBridge ?? CarBridge.platform(),
+       _missionSharer = missionSharer ?? MissionSharer.system(),
        _authService =
            authService ??
            (backend == null ? AuthService() : RemoteAuthService(backend)),
@@ -95,6 +99,10 @@ class TacticalController extends ChangeNotifier {
   final BackendClient? _backend;
   final NativePttBridge _nativePtt;
   final CarBridge _carBridge;
+  final MissionSharer _missionSharer;
+
+  static const _maxTrackPoints = 5000;
+  final List<TrackPoint> _track = [];
   final SettingsStore settings;
 
   /// Lower bound for scheduling a session refresh (tests use a short one).
@@ -156,6 +164,9 @@ class TacticalController extends ChangeNotifier {
   MeshNode get selfNode => _nodes.firstWhere((node) => node.isSelf);
   List<MeshMessage> get messages => List.unmodifiable(_messages);
   List<TacticalWaypoint> get waypoints => List.unmodifiable(_waypoints);
+
+  /// Own recorded trail, oldest first.
+  List<TrackPoint> get track => List.unmodifiable(_track);
   PttController get ptt => _ptt;
   bool get pttActive => _ptt.status == PttStatus.transmitting;
 
@@ -336,7 +347,67 @@ class TacticalController extends ChangeNotifier {
     _notify();
   }
 
+  /// Adds a trail point every 15 m or once a minute while moving slowly.
+  void _recordTrack(LocationFix fix) {
+    if (_session == null) {
+      return;
+    }
+    final point = TrackPoint(
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+      altitudeM: fix.altitudeM.round(),
+      at: fix.timestamp,
+    );
+    final last = _track.lastOrNull;
+    if (last != null &&
+        geo.distanceKm(last.latLng, point.latLng) < 0.015 &&
+        point.at.difference(last.at) < const Duration(minutes: 1)) {
+      return;
+    }
+    _track.add(point);
+    if (_track.length > _maxTrackPoints) {
+      _track.removeAt(0);
+    }
+  }
+
+  void clearTrack() {
+    _track.clear();
+    _notify();
+    unawaited(_persistState());
+  }
+
+  /// Shares the mission as GPX (waypoints + trail) and a CSV message log.
+  Future<void> exportMission() async {
+    final now = DateTime.now();
+    String two(int value) => value.toString().padLeft(2, '0');
+    final stamp =
+        '${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}';
+    final name = 'Mise ${selfNode.callSign} $stamp';
+    try {
+      await _missionSharer.share([
+        ExportFile(
+          name: 'mise-$stamp.gpx',
+          mimeType: 'application/gpx+xml',
+          content: buildMissionGpx(
+            missionName: name,
+            track: _track,
+            waypoints: _waypoints,
+            exportedAt: now,
+          ),
+        ),
+        ExportFile(
+          name: 'zpravy-$stamp.csv',
+          mimeType: 'text/csv',
+          content: buildMessagesCsv(messages: _messages, groups: _groups),
+        ),
+      ], subject: name);
+    } catch (error) {
+      _notice('Export se nepodařil: $error');
+    }
+  }
+
   void _resetOperationalData() {
+    _track.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
     _messages
       ..clear()
@@ -823,6 +894,7 @@ class TacticalController extends ChangeNotifier {
       lastSeenAt: fix.timestamp,
     );
     _replaceNodes(MeshNode.relativeToSelf(_nodes));
+    _recordTrack(fix);
     _notify();
     unawaited(_shareInternetPosition());
 
@@ -1419,6 +1491,7 @@ class TacticalController extends ChangeNotifier {
       final restoredWaypoints = snapshot.waypoints
           ?.map(TacticalWaypoint.fromJson)
           .toList();
+      final restoredTrack = snapshot.track?.map(TrackPoint.fromJson).toList();
       if (restoredNodes.isEmpty &&
           restoredMessages.isEmpty &&
           restoredWaypoints == null) {
@@ -1440,6 +1513,11 @@ class TacticalController extends ChangeNotifier {
           ..clear()
           ..addAll(restoredWaypoints);
       }
+      if (restoredTrack != null) {
+        _track
+          ..clear()
+          ..addAll(restoredTrack);
+      }
       _notify();
       final liveFix = _locationState.lastFix;
       if (liveFix != null) {
@@ -1460,6 +1538,7 @@ class TacticalController extends ChangeNotifier {
         nodes: [for (final node in _nodes) node.toJson()],
         messages: [for (final message in _messages.take(150)) message.toJson()],
         waypoints: [for (final waypoint in _waypoints) waypoint.toJson()],
+        track: [for (final point in _track) point.toJson()],
         owner: session.userName,
       );
     } catch (_) {

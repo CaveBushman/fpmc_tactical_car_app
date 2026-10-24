@@ -30,6 +30,7 @@ class MapPage extends StatefulWidget {
     this.tileSource = TileSource.openStreetMap,
     this.offlineStore,
     this.onVisibleBoundsChanged,
+    this.track = const [],
     this.locationState = LocationState.idle,
     this.channelLabel = 'ALPHA',
     this.showDetailsSheet = true,
@@ -45,6 +46,7 @@ class MapPage extends StatefulWidget {
   final TileSource tileSource;
   final OfflineTileStore? offlineStore;
   final ValueChanged<TileBounds>? onVisibleBoundsChanged;
+  final List<LatLng> track;
   final LocationState locationState;
   final String channelLabel;
 
@@ -112,6 +114,7 @@ class _MapPageState extends State<MapPage> {
                 tileSource: widget.tileSource,
                 offlineStore: widget.offlineStore,
                 onVisibleBoundsChanged: widget.onVisibleBoundsChanged,
+                track: widget.track,
               ),
             ),
             Positioned(
@@ -343,12 +346,16 @@ class MeshMap extends StatefulWidget {
     this.tileSource = TileSource.openStreetMap,
     this.offlineStore,
     this.onVisibleBoundsChanged,
+    this.track = const [],
     super.key,
   });
 
   final List<MeshNode> nodes;
   final List<TacticalWaypoint> waypoints;
   final ValueChanged<LatLng>? onLongPress;
+
+  /// Own recorded trail, drawn under the markers.
+  final List<LatLng> track;
 
   /// Reports the area on screen (used to download it for offline use).
   final ValueChanged<TileBounds>? onVisibleBoundsChanged;
@@ -454,6 +461,14 @@ class _MeshMapState extends State<MeshMap> {
             ),
             PolylineLayer(
               polylines: [
+                if (widget.track.length > 1)
+                  Polyline(
+                    points: [...widget.track, selfPoint],
+                    strokeWidth: 3,
+                    color: sand.withValues(alpha: 0.75),
+                    borderStrokeWidth: 1,
+                    borderColor: Colors.black.withValues(alpha: 0.5),
+                  ),
                 for (final node in nodes.where((node) => !node.isSelf))
                   Polyline(
                     points: [selfPoint, node.latLng],

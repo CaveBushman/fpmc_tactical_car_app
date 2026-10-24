@@ -25,6 +25,10 @@ class SystemsPage extends StatelessWidget {
     this.onPttReconnect,
     this.nightMode = false,
     this.onNightModeChanged,
+    this.trackPoints = 0,
+    this.trackLengthKm = 0,
+    this.onExportMission,
+    this.onClearTrack,
     this.onCopyPacketRecording,
     this.radioChannels = const [],
     this.channelWarnings = const [],
@@ -49,6 +53,10 @@ class SystemsPage extends StatelessWidget {
   final VoidCallback? onPttReconnect;
   final bool nightMode;
   final ValueChanged<bool>? onNightModeChanged;
+  final int trackPoints;
+  final double trackLengthKm;
+  final VoidCallback? onExportMission;
+  final VoidCallback? onClearTrack;
   final String Function()? onCopyPacketRecording;
   final List<RadioChannel> radioChannels;
   final List<String> channelWarnings;
@@ -331,6 +339,44 @@ class SystemsPage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
+        const SizedBox(height: 10),
+        SystemSection(
+          title: 'Mise',
+          icon: Icons.route_outlined,
+          children: [
+            MonoLine(
+              label: 'Stopa',
+              value:
+                  '$trackPoints bodů · ${trackLengthKm.toStringAsFixed(2)} km',
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onExportMission,
+                    style: FilledButton.styleFrom(backgroundColor: rangerGreen),
+                    icon: const Icon(Icons.ios_share, size: 18),
+                    label: const Text('Exportovat misi'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Smazat stopu',
+                  onPressed: trackPoints == 0 ? null : onClearTrack,
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ),
+            Text(
+              'GPX (body mise a stopa) + CSV log zpráv',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 10),
         const AboutSection(),
         if (offlineMaps != null && mapCenter != null)
