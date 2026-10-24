@@ -81,4 +81,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('BOD | MGRS 33U VR'), findsOneWidget);
   });
+
+  testWidgets('a tapped point can be navigated to and the line cleared', (
+    tester,
+  ) async {
+    await login(tester);
+
+    await tester.tapAt(
+      tester.getCenter(find.byType(MeshMap)) + const Offset(60, 80),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Navigovat sem'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('point-info')), findsNothing);
+    final clear = find.byKey(const ValueKey('clear-nav-target'));
+    expect(clear, findsOneWidget);
+    expect(find.textContaining('BOD '), findsWidgets);
+
+    await tester.tap(clear);
+    await tester.pumpAndSettle();
+    expect(clear, findsNothing);
+  });
 }

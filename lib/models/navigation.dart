@@ -5,7 +5,15 @@ import '../theme.dart';
 import 'geo.dart' as geo;
 import 'mesh_node.dart';
 
-enum TacticalNavTargetKind { team, rally, medevac, danger, observation, supply }
+enum TacticalNavTargetKind {
+  team,
+  rally,
+  medevac,
+  danger,
+  observation,
+  supply,
+  point,
+}
 
 extension TacticalNavTargetKindStyle on TacticalNavTargetKind {
   String get label {
@@ -16,6 +24,7 @@ extension TacticalNavTargetKindStyle on TacticalNavTargetKind {
       TacticalNavTargetKind.danger => 'DANGER',
       TacticalNavTargetKind.observation => 'OBS',
       TacticalNavTargetKind.supply => 'SUPPLY',
+      TacticalNavTargetKind.point => 'BOD',
     };
   }
 
@@ -27,6 +36,7 @@ extension TacticalNavTargetKindStyle on TacticalNavTargetKind {
       TacticalNavTargetKind.danger => dangerRed,
       TacticalNavTargetKind.observation => signalAmber,
       TacticalNavTargetKind.supply => tacticalKhaki,
+      TacticalNavTargetKind.point => Colors.white,
     };
   }
 }
@@ -39,7 +49,9 @@ class TacticalNavSolution {
     required this.mgrs,
     required this.distanceKm,
     required this.bearingDeg,
+    required this.position,
     this.waypoint,
+    this.nodeNum,
     this.priority = false,
   });
 
@@ -50,7 +62,24 @@ class TacticalNavSolution {
   final double distanceKm;
   final double bearingDeg;
   final TacticalWaypoint? waypoint;
+
+  /// Set for a teammate target.
+  final int? nodeNum;
+  final LatLng position;
   final bool priority;
+
+  /// The [NavTarget] that keeps pointing at this solution.
+  NavTarget get target {
+    final waypoint = this.waypoint;
+    if (waypoint != null) {
+      return NavTarget.waypoint(waypoint.code);
+    }
+    final nodeNum = this.nodeNum;
+    if (nodeNum != null) {
+      return NavTarget.node(nodeNum);
+    }
+    return NavTarget.point(position);
+  }
 
   String get etaLabel {
     final minutes = (distanceKm / 5.0 * 60).round().clamp(1, 999);
@@ -71,6 +100,8 @@ class TacticalNavSolution {
           mgrs: node.mgrs,
           distanceKm: geo.distanceKm(self.latLng, node.latLng),
           bearingDeg: geo.bearingDeg(self.latLng, node.latLng),
+          position: node.latLng,
+          nodeNum: node.nodeNum,
           priority: node.linkStatus != MeshNodeLinkStatus.ok,
         ),
       for (final waypoint in waypoints)
@@ -81,6 +112,7 @@ class TacticalNavSolution {
           mgrs: waypoint.mgrs,
           distanceKm: geo.distanceKm(self.latLng, waypoint.latLng),
           bearingDeg: geo.bearingDeg(self.latLng, waypoint.latLng),
+          position: waypoint.latLng,
           waypoint: waypoint,
           priority: waypoint.priority,
         ),
@@ -93,6 +125,62 @@ class TacticalNavSolution {
     });
     return solutions;
   }
+}
+
+/// What the user chose to navigate to: a teammate (follows them as they
+/// move), a map point by code, or a fixed position.
+class NavTarget {
+  const NavTarget.node(int this.nodeNum) : waypointCode = null, point = null;
+  const NavTarget.waypoint(String this.waypointCode)
+    : nodeNum = null,
+      point = null;
+  const NavTarget.point(LatLng this.point)
+    : nodeNum = null,
+      waypointCode = null;
+
+  final int? nodeNum;
+  final String? waypointCode;
+  final LatLng? point;
+
+  /// Live solution from [self], or null once the teammate or point is gone.
+  TacticalNavSolution? resolve({
+    required MeshNode self,
+    required List<MeshNode> nodes,
+    required List<TacticalWaypoint> waypoints,
+  }) {
+    final point = this.point;
+    if (point != null) {
+      final mgrs = geo.formatMgrs(point.latitude, point.longitude);
+      return TacticalNavSolution(
+        label: 'BOD ${mgrs.split(' ').skip(2).join(' ')}',
+        kind: TacticalNavTargetKind.point,
+        icon: Icons.place_outlined,
+        mgrs: mgrs,
+        distanceKm: geo.distanceKm(self.latLng, point),
+        bearingDeg: geo.bearingDeg(self.latLng, point),
+        position: point,
+      );
+    }
+    return TacticalNavSolution.fromMission(
+      self: self,
+      nodes: nodes,
+      waypoints: waypoints,
+    ).where(matches).firstOrNull;
+  }
+
+  bool matches(TacticalNavSolution solution) =>
+      (nodeNum != null && solution.nodeNum == nodeNum) ||
+      (waypointCode != null && solution.waypoint?.code == waypointCode);
+
+  @override
+  bool operator ==(Object other) =>
+      other is NavTarget &&
+      other.nodeNum == nodeNum &&
+      other.waypointCode == waypointCode &&
+      other.point == point;
+
+  @override
+  int get hashCode => Object.hash(nodeNum, waypointCode, point);
 }
 
 class TacticalWaypoint {

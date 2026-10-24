@@ -239,6 +239,9 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       showGrid: controller.mgrsGrid,
       onSharePoint: (point) => unawaited(controller.sharePoint(point)),
       showDetailsSheet: showDetailsSheet,
+      navTarget: controller.navTarget,
+      onNavigate: controller.navigateTo,
+      onClearNavTarget: controller.clearNavTarget,
       onShareWaypoint: controller.shareWaypoint,
       onDeleteWaypoint: controller.removeWaypoint,
       onCreateWaypoint: (draft) {

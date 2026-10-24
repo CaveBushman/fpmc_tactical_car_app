@@ -37,6 +37,9 @@ class MapPage extends StatefulWidget {
     this.locationState = LocationState.idle,
     this.channelLabel = 'ALPHA',
     this.showDetailsSheet = true,
+    this.navTarget,
+    this.onNavigate,
+    this.onClearNavTarget,
     super.key,
   });
 
@@ -59,6 +62,12 @@ class MapPage extends StatefulWidget {
 
   /// False when the map sits next to another panel (landscape detail tabs).
   final bool showDetailsSheet;
+
+  /// Chosen navigation target (live), drawn as a line and shown instead of
+  /// the nearest target.
+  final TacticalNavSolution? navTarget;
+  final ValueChanged<NavTarget>? onNavigate;
+  final VoidCallback? onClearNavTarget;
 
   /// Height of the collapsed sheet: handle + nearest-target row.
   static const sheetPeekHeight = 76.0;
@@ -126,6 +135,7 @@ class _MapPageState extends State<MapPage> {
                 onVisibleBoundsChanged: widget.onVisibleBoundsChanged,
                 track: widget.track,
                 showGrid: widget.showGrid,
+                navTarget: widget.navTarget?.position,
                 onTap: (point) => setState(() => _inspected = point),
               ),
             ),
@@ -149,6 +159,12 @@ class _MapPageState extends State<MapPage> {
                       ? null
                       : () {
                           widget.onSharePoint!(_inspected!);
+                          setState(() => _inspected = null);
+                        },
+                  onNavigate: widget.onNavigate == null
+                      ? null
+                      : () {
+                          widget.onNavigate!(NavTarget.point(_inspected!));
                           setState(() => _inspected = null);
                         },
                 ),
@@ -187,6 +203,9 @@ class _MapPageState extends State<MapPage> {
                 channelLabel: widget.channelLabel,
                 onShareWaypoint: widget.onShareWaypoint,
                 onDeleteWaypoint: widget.onDeleteWaypoint,
+                navTarget: widget.navTarget,
+                onNavigate: widget.onNavigate,
+                onClearNavTarget: widget.onClearNavTarget,
               ),
           ],
         );
@@ -205,8 +224,14 @@ class _MapDetailsSheet extends StatelessWidget {
     required this.channelLabel,
     required this.onShareWaypoint,
     this.onDeleteWaypoint,
+    this.navTarget,
+    this.onNavigate,
+    this.onClearNavTarget,
   });
 
+  final TacticalNavSolution? navTarget;
+  final ValueChanged<NavTarget>? onNavigate;
+  final VoidCallback? onClearNavTarget;
   final double peekFraction;
   final List<MeshNode> nodes;
   final List<TacticalNavSolution> navSolutions;
@@ -256,7 +281,12 @@ class _MapDetailsSheet extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: nearest == null
+                      child: navTarget != null
+                          ? NavigationCueBadge(
+                              solution: navTarget!,
+                              onClear: onClearNavTarget ?? () {},
+                            )
+                          : nearest == null
                           ? const SizedBox.shrink()
                           : NavigationCueBadge(solution: nearest),
                     ),
@@ -306,6 +336,7 @@ class _MapDetailsSheet extends StatelessWidget {
               NavigationTargetStrip(
                 solutions: navSolutions,
                 onShareWaypoint: onShareWaypoint,
+                onNavigate: onNavigate,
               ),
               const SizedBox(height: 10),
               WaypointStrip(
@@ -385,12 +416,16 @@ class MeshMap extends StatefulWidget {
     this.track = const [],
     this.showGrid = true,
     this.onTap,
+    this.navTarget,
     super.key,
   });
 
   final List<MeshNode> nodes;
   final List<TacticalWaypoint> waypoints;
   final ValueChanged<LatLng>? onLongPress;
+
+  /// Chosen navigation target: dashed line from self.
+  final LatLng? navTarget;
 
   /// MGRS/UTM grid overlay.
   final bool showGrid;
@@ -514,6 +549,15 @@ class _MeshMapState extends State<MeshMap> {
                     color: sand.withValues(alpha: 0.75),
                     borderStrokeWidth: 1,
                     borderColor: Colors.black.withValues(alpha: 0.5),
+                  ),
+                if (widget.navTarget case final target?)
+                  Polyline(
+                    points: [selfPoint, target],
+                    strokeWidth: 4,
+                    color: signalAmber,
+                    borderStrokeWidth: 1.5,
+                    borderColor: Colors.black.withValues(alpha: 0.6),
+                    pattern: StrokePattern.dashed(segments: const [14, 8]),
                   ),
                 for (final node in nodes.where((node) => !node.isSelf))
                   Polyline(

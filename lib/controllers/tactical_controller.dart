@@ -364,6 +364,7 @@ class TacticalController extends ChangeNotifier {
   void _resetOperationalData() {
     _unread.clear();
     _danger.reset();
+    _navTarget = null;
     _sos.reset();
     _mission.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
@@ -537,6 +538,45 @@ class TacticalController extends ChangeNotifier {
         '${warning.distanceM.round()} m, '
         'AZ ${warning.bearingDeg.round()}°',
       );
+    }
+  }
+
+  // --- Navigation target -------------------------------------------------------
+
+  /// Within this distance the target counts as reached.
+  static const arrivalRadiusM = 50.0;
+
+  NavTarget? _navTarget;
+
+  /// Live solution for the chosen target; null = none chosen (the UI then
+  /// points at the nearest target).
+  TacticalNavSolution? get navTarget =>
+      _navTarget?.resolve(self: selfNode, nodes: nodes, waypoints: _waypoints);
+
+  void navigateTo(NavTarget target) {
+    _navTarget = target;
+    _notify();
+  }
+
+  void clearNavTarget() {
+    _navTarget = null;
+    _notify();
+  }
+
+  /// Runs before every notify: ends navigation on arrival or when the
+  /// target disappeared (point deleted, teammate expired).
+  void _checkNavTarget() {
+    final target = _navTarget;
+    if (target == null || _session == null) {
+      return;
+    }
+    final solution = navTarget;
+    if (solution == null) {
+      _navTarget = null;
+      _notice('Cíl navigace už neexistuje.');
+    } else if (solution.distanceKm * 1000 <= arrivalRadiusM) {
+      _navTarget = null;
+      _notice('Cíl ${solution.label} dosažen.');
     }
   }
 
@@ -955,23 +995,27 @@ class TacticalController extends ChangeNotifier {
     if (_session == null) {
       return;
     }
-    final solutions = TacticalNavSolution.fromMission(
-      self: selfNode,
-      nodes: _nodes,
-      waypoints: _waypoints,
-    ).take(6);
+    // The chosen target first, then nearest/priority ones.
+    final chosen = navTarget;
+    final solutions = [
+      ?chosen,
+      ...TacticalNavSolution.fromMission(
+        self: selfNode,
+        nodes: nodes,
+        waypoints: _waypoints,
+      ).where((solution) => _navTarget?.matches(solution) != true),
+    ].take(6);
     final targets = [
       for (final solution in solutions)
-        if (_targetPosition(solution) case final position?)
-          CarTargetData(
-            title: solution.label,
-            kind: solution.kind.label,
-            latitude: position.latitude,
-            longitude: position.longitude,
-            distanceKm: solution.distanceKm,
-            bearingDeg: solution.bearingDeg,
-            priority: solution.priority,
-          ),
+        CarTargetData(
+          title: solution.label,
+          kind: solution.kind.label,
+          latitude: solution.position.latitude,
+          longitude: solution.position.longitude,
+          distanceKm: solution.distanceKm,
+          bearingDeg: solution.bearingDeg,
+          priority: solution.priority || identical(solution, chosen),
+        ),
     ];
     final signature = [
       for (final t in targets)
@@ -982,19 +1026,6 @@ class TacticalController extends ChangeNotifier {
     }
     _lastCarTargets = signature;
     unawaited(_carBridge.updateTargets(targets));
-  }
-
-  LatLng? _targetPosition(TacticalNavSolution solution) {
-    final waypoint = solution.waypoint;
-    if (waypoint != null) {
-      return waypoint.latLng;
-    }
-    for (final node in _nodes) {
-      if (!node.isSelf && node.callSign == solution.label) {
-        return node.latLng;
-      }
-    }
-    return null;
   }
 
   void selectGroup(int index) {
@@ -1776,6 +1807,7 @@ class TacticalController extends ChangeNotifier {
   void _notify() {
     if (!_disposed) {
       _checkDangers();
+      _checkNavTarget();
       _syncCarTargets();
       notifyListeners();
     }

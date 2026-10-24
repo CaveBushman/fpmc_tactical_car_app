@@ -30,6 +30,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Team hygiene: nodes not heard for 24 h disappear from the map, team list and car mode and are no longer saved; the team list is ordered self, OK, STALE, LOST, nearest first.
 - Unread messages: the Messages tab and each group chip show a red count of incoming messages not yet seen; a group counts as read while it is selected on the Messages tab with the app in front.
 - Danger warnings (System → Nastavení, default on): within 300 m of a DANGER point a red bar shows distance and azimuth and the phone vibrates once per approach; it clears beyond 450 m. "Beru" hides it until the next approach. SOS points are skipped.
+- Navigation target: the navigation button on a target card, or "Navigovat sem" on a tapped map point, locks navigation to that teammate, point or position. The map draws a dashed amber line to it, the peek row, car mode and Android Auto show it instead of the nearest target, and it ends on arrival (50 m), when the point is deleted or with the ✕ button.
 - Car mode screen (car icon in the app bar): map, nearest target, last message, OK / NA POZICI / SOS and a large hold-to-talk button; keeps the display on.
 - Android Auto: POI screen with the nearest team members and mission points on the car map (tap to navigate), and incoming team messages as car-readable notifications with voice reply.
 - Adaptive portrait and landscape layouts.

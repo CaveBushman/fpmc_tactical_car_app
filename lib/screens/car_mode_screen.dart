@@ -9,6 +9,7 @@ import '../controllers/tactical_controller.dart';
 import '../models/messaging.dart';
 import '../models/navigation.dart';
 import '../theme.dart';
+import '../widgets/navigation_widgets.dart';
 import '../widgets/sos_widgets.dart';
 import 'map_page.dart';
 
@@ -70,6 +71,7 @@ class _CarModeScreenState extends State<CarModeScreen> {
               offlineStore: widget.offlineMaps.store,
               track: [for (final point in controller.track) point.latLng],
               showGrid: controller.mgrsGrid,
+              navTarget: controller.navTarget?.position,
             );
             final panel = Column(
               children: [
@@ -131,7 +133,8 @@ class _CarPanel extends StatelessWidget {
       nodes: controller.nodes,
       waypoints: controller.waypoints,
     );
-    final nearest = solutions.isEmpty ? null : solutions.first;
+    final chosen = controller.navTarget;
+    final nearest = chosen ?? (solutions.isEmpty ? null : solutions.first);
     final groupId = controller.selectedGroup.id;
     final lastMessage = controller.messages
         .where((message) => message.groupId == groupId)
@@ -179,16 +182,38 @@ class _CarPanel extends StatelessWidget {
             ],
           ),
           if (nearest != null)
-            Text(
-              '${nearest.label}  AZ ${nearest.bearingDeg.toStringAsFixed(0)}°  '
-              '${nearest.distanceKm.toStringAsFixed(1)} km',
-              key: const ValueKey('car-nearest'),
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: nearest.priority ? dangerRed : sand,
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-              ),
+            Row(
+              children: [
+                if (chosen != null)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 6),
+                    child: Icon(Icons.navigation, color: signalAmber),
+                  ),
+                Expanded(
+                  child: Text(
+                    '${nearest.label}  AZ ${nearest.bearingDeg.toStringAsFixed(0)}°  '
+                    '${formatDistance(nearest.distanceKm)}',
+                    key: const ValueKey('car-nearest'),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: chosen != null
+                          ? signalAmber
+                          : nearest.priority
+                          ? dangerRed
+                          : sand,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                if (chosen != null)
+                  IconButton(
+                    tooltip: 'Ukončit navigaci',
+                    iconSize: 28,
+                    onPressed: controller.clearNavTarget,
+                    icon: const Icon(Icons.close, color: Colors.white70),
+                  ),
+              ],
             ),
           const SizedBox(height: 6),
           if (lastMessage != null)

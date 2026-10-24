@@ -9,12 +9,14 @@ class NavigationTargetStrip extends StatelessWidget {
   const NavigationTargetStrip({
     required this.solutions,
     this.onShareWaypoint,
+    this.onNavigate,
     this.compact = false,
     super.key,
   });
 
   final List<TacticalNavSolution> solutions;
   final ValueChanged<TacticalWaypoint>? onShareWaypoint;
+  final ValueChanged<NavTarget>? onNavigate;
   final bool compact;
 
   @override
@@ -30,6 +32,7 @@ class NavigationTargetStrip extends StatelessWidget {
           child: NavigationTargetCard(
             solution: visibleSolutions[index],
             onShareWaypoint: onShareWaypoint,
+            onNavigate: onNavigate,
             compact: true,
           ),
         ),
@@ -55,6 +58,7 @@ class NavigationTargetStrip extends StatelessWidget {
               child: NavigationTargetCard(
                 solution: visibleSolutions[index],
                 onShareWaypoint: onShareWaypoint,
+                onNavigate: onNavigate,
               ),
             ),
           ),
@@ -65,15 +69,19 @@ class NavigationTargetStrip extends StatelessWidget {
 }
 
 class NavigationCueBadge extends StatelessWidget {
-  const NavigationCueBadge({required this.solution, super.key});
+  const NavigationCueBadge({required this.solution, this.onClear, super.key});
 
   final TacticalNavSolution solution;
 
+  /// Set when [solution] is the chosen target: shows a close button.
+  final VoidCallback? onClear;
+
   @override
   Widget build(BuildContext context) {
+    final chosen = onClear != null;
     final color = solution.priority ? dangerRed : solution.kind.color;
-    return Container(
-      width: 160,
+    final badge = Container(
+      width: chosen ? null : 160,
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.76),
@@ -86,7 +94,11 @@ class NavigationCueBadge extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.near_me_outlined, size: 15, color: color),
+              Icon(
+                chosen ? Icons.navigation : Icons.near_me_outlined,
+                size: 15,
+                color: color,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -103,7 +115,7 @@ class NavigationCueBadge extends StatelessWidget {
           ),
           const SizedBox(height: 3),
           Text(
-            'AZ ${solution.bearingDeg.toStringAsFixed(0)}° | ${solution.distanceKm.toStringAsFixed(1)} km',
+            'AZ ${solution.bearingDeg.toStringAsFixed(0)}° | ${formatDistance(solution.distanceKm)}',
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
@@ -114,19 +126,39 @@ class NavigationCueBadge extends StatelessWidget {
         ],
       ),
     );
+    if (!chosen) {
+      return badge;
+    }
+    return Row(
+      children: [
+        Expanded(child: badge),
+        IconButton(
+          key: const ValueKey('clear-nav-target'),
+          tooltip: 'Ukončit navigaci',
+          onPressed: onClear,
+          icon: const Icon(Icons.close),
+        ),
+      ],
+    );
   }
 }
+
+/// Metres below 1 km, otherwise kilometres with one decimal.
+String formatDistance(double km) =>
+    km < 1 ? '${(km * 1000).round()} m' : '${km.toStringAsFixed(1)} km';
 
 class NavigationTargetCard extends StatelessWidget {
   const NavigationTargetCard({
     required this.solution,
     this.onShareWaypoint,
+    this.onNavigate,
     this.compact = false,
     super.key,
   });
 
   final TacticalNavSolution solution;
   final ValueChanged<TacticalWaypoint>? onShareWaypoint;
+  final ValueChanged<NavTarget>? onNavigate;
   final bool compact;
 
   @override
@@ -178,6 +210,23 @@ class NavigationTargetCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (onNavigate != null) ...[
+                  const SizedBox(width: 6),
+                  IconButton.filledTonal(
+                    key: ValueKey('navigate-${solution.label}'),
+                    tooltip: 'Navigovat k ${solution.label}',
+                    onPressed: () => onNavigate!(solution.target),
+                    style: IconButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: rangerGreen.withValues(alpha: 0.68),
+                      fixedSize: Size(compact ? 32 : 34, compact ? 32 : 34),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                    ),
+                    icon: const Icon(Icons.navigation_outlined, size: 16),
+                  ),
+                ],
                 if (waypoint != null && onShareWaypoint != null) ...[
                   const SizedBox(width: 6),
                   IconButton.filledTonal(

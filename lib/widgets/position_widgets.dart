@@ -271,6 +271,7 @@ class PointInfoCard extends StatelessWidget {
     required this.onClose,
     this.onSave,
     this.onShare,
+    this.onNavigate,
     super.key,
   });
 
@@ -279,6 +280,7 @@ class PointInfoCard extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback? onSave;
   final VoidCallback? onShare;
+  final VoidCallback? onNavigate;
 
   @override
   Widget build(BuildContext context) {
@@ -331,6 +333,12 @@ class PointInfoCard extends StatelessWidget {
             Wrap(
               spacing: 8,
               children: [
+                if (onNavigate != null)
+                  TextButton.icon(
+                    onPressed: onNavigate,
+                    icon: const Icon(Icons.navigation_outlined, size: 18),
+                    label: const Text('Navigovat sem'),
+                  ),
                 if (onSave != null)
                   TextButton.icon(
                     onPressed: onSave,
