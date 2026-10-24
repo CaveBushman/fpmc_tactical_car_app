@@ -18,7 +18,10 @@ import '../services/native_bridges.dart';
 import '../services/settings_store.dart';
 import '../services/ptt/livekit_voice_transport.dart';
 import '../services/ptt/voice_transport.dart';
+import 'mission_recorder.dart';
 import 'ptt_controller.dart';
+import 'session_keeper.dart';
+import 'sos_coordinator.dart';
 import '../services/location_service.dart';
 import '../services/mesh_packet_repository.dart';
 import '../services/mission_export.dart';
@@ -50,7 +53,7 @@ class TacticalController extends ChangeNotifier {
   }) : _backend = backend,
        _nativePtt = nativePtt ?? NativePttBridge.platform(),
        _carBridge = carBridge ?? CarBridge.platform(),
-       _missionSharer = missionSharer ?? MissionSharer.system(),
+       _mission = MissionRecorder(sharer: missionSharer),
        _authService =
            authService ??
            (backend == null ? AuthService() : RemoteAuthService(backend)),
@@ -58,6 +61,25 @@ class TacticalController extends ChangeNotifier {
        _meshPacketRepository = meshPacketRepository ?? MeshPacketRepository(),
        _meshtasticBleService = meshtasticBleService ?? MeshtasticBleService(),
        _stateStore = stateStore ?? const TacticalStateStore() {
+    _sessionKeeper = SessionKeeper(
+      refresh: (token) => _backend!.refresh(token),
+      currentSession: () => _session,
+      onRefreshed: (updated) => _session = updated,
+      onRejected: () => endSession(
+        'Relace vypršela nebo byla zrušena velitelem. Přihlas se znovu.',
+      ),
+      minDelay: minSessionRefreshDelay,
+    );
+    _sos = SosCoordinator(
+      repeat: sosRepeat,
+      sendCall: _sendSosCall,
+      sendCancel: () => _sendPriority(SosSignal.cancel(selfNode.callSign)),
+      sendAck: (callSign) =>
+          _sendPriority(SosSignal.ack(from: selfNode.callSign, to: callSign)),
+      upsertPoint: _upsertWaypoint,
+      removePoint: (code) => _waypoints.removeWhere((w) => w.code == code),
+      onChanged: _notify,
+    );
     _locationStateSubscription = _locationService.stateStream.listen((state) {
       _locationState = state;
       _notify();
@@ -101,10 +123,9 @@ class TacticalController extends ChangeNotifier {
   final BackendClient? _backend;
   final NativePttBridge _nativePtt;
   final CarBridge _carBridge;
-  final MissionSharer _missionSharer;
-
-  static const _maxTrackPoints = 5000;
-  final List<TrackPoint> _track = [];
+  final MissionRecorder _mission;
+  late final SessionKeeper _sessionKeeper;
+  late final SosCoordinator _sos;
   final SettingsStore settings;
 
   /// Lower bound for scheduling a session refresh (tests use a short one).
@@ -117,7 +138,6 @@ class TacticalController extends ChangeNotifier {
   late final StreamSubscription<CarReply> _carReplySubscription;
   late final StreamSubscription<RoomData> _roomDataSubscription;
   bool _roomWasConnected = false;
-  Timer? _refreshTimer;
   DateTime? _lastInternetPositionAt;
   LatLng? _lastInternetPosition;
   bool _appInForeground = true;
@@ -171,7 +191,7 @@ class TacticalController extends ChangeNotifier {
   List<TacticalWaypoint> get waypoints => List.unmodifiable(_waypoints);
 
   /// Own recorded trail, oldest first.
-  List<TrackPoint> get track => List.unmodifiable(_track);
+  List<TrackPoint> get track => _mission.track;
   PttController get ptt => _ptt;
   bool get pttActive => _ptt.status == PttStatus.transmitting;
 
@@ -242,8 +262,8 @@ class TacticalController extends ChangeNotifier {
     unawaited(_nativeErrorSubscription.cancel());
     unawaited(_carReplySubscription.cancel());
     unawaited(_roomDataSubscription.cancel());
-    _refreshTimer?.cancel();
-    _sosTimer?.cancel();
+    _sessionKeeper.cancel();
+    _sos.dispose();
     if (_lastNativePttStatus != null) {
       unawaited(_nativePtt.hide());
     }
@@ -279,7 +299,9 @@ class TacticalController extends ChangeNotifier {
           ];
     _selectedGroupIndex = await _preferredGroupIndex(session.userName);
     _notify();
-    _scheduleSessionRefresh(session);
+    if (_backend != null) {
+      _sessionKeeper.schedule(session);
+    }
     unawaited(_locationService.start());
     unawaited(_restorePersistedState(session.userName));
     unawaited(_joinSelectedGroupPtt());
@@ -287,51 +309,6 @@ class TacticalController extends ChangeNotifier {
   }
 
   // --- Session lifetime ------------------------------------------------------
-
-  /// Refreshes backend sessions at 75 % of their lifetime so a long
-  /// operation never runs into the token expiry.
-  void _scheduleSessionRefresh(AuthSession session, {Duration? after}) {
-    _refreshTimer?.cancel();
-    final lifetime = session.expiresIn;
-    if (session.isDemo || lifetime == null) {
-      return;
-    }
-    var delay = after ?? lifetime * 0.75;
-    if (delay < minSessionRefreshDelay) {
-      delay = minSessionRefreshDelay;
-    }
-    _refreshTimer = Timer(delay, () => unawaited(_refreshSession()));
-  }
-
-  Future<void> _refreshSession() async {
-    final session = _session;
-    final token = session?.sessionToken;
-    final backend = _backend;
-    if (session == null || token == null || backend == null) {
-      return;
-    }
-    try {
-      final refreshed = await backend.refresh(token);
-      if (!identical(_session, session)) {
-        return; // logged out or switched meanwhile
-      }
-      final updated = session.withToken(refreshed.token, refreshed.expiresIn);
-      _session = updated;
-      _scheduleSessionRefresh(updated);
-    } on BackendException catch (error) {
-      if (!identical(_session, session)) {
-        return;
-      }
-      if (error.statusCode == 401) {
-        await endSession(
-          'Relace vypršela nebo byla zrušena velitelem. Přihlas se znovu.',
-        );
-      } else {
-        // Offline for a moment: try again soon, the token is still valid.
-        _scheduleSessionRefresh(session, after: const Duration(minutes: 1));
-      }
-    }
-  }
 
   /// Returns to the login screen without wiping the encrypted store: the
   /// same user gets everything back after logging in again, anyone else
@@ -341,7 +318,7 @@ class TacticalController extends ChangeNotifier {
     if (_session == null) {
       return;
     }
-    _refreshTimer?.cancel();
+    _sessionKeeper.cancel();
     await _persistState();
     _session = null;
     _selectedGroupIndex = 0;
@@ -353,68 +330,29 @@ class TacticalController extends ChangeNotifier {
     _notify();
   }
 
-  /// Adds a trail point every 15 m or once a minute while moving slowly.
-  void _recordTrack(LocationFix fix) {
-    if (_session == null) {
-      return;
-    }
-    final point = TrackPoint(
-      latitude: fix.latitude,
-      longitude: fix.longitude,
-      altitudeM: fix.altitudeM.round(),
-      at: fix.timestamp,
-    );
-    final last = _track.lastOrNull;
-    if (last != null &&
-        geo.distanceKm(last.latLng, point.latLng) < 0.015 &&
-        point.at.difference(last.at) < const Duration(minutes: 1)) {
-      return;
-    }
-    _track.add(point);
-    if (_track.length > _maxTrackPoints) {
-      _track.removeAt(0);
-    }
-  }
-
   void clearTrack() {
-    _track.clear();
+    _mission.clear();
     _notify();
     unawaited(_persistState());
   }
 
   /// Shares the mission as GPX (waypoints + trail) and a CSV message log.
   Future<void> exportMission() async {
-    final now = DateTime.now();
-    String two(int value) => value.toString().padLeft(2, '0');
-    final stamp =
-        '${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}';
-    final name = 'Mise ${selfNode.callSign} $stamp';
     try {
-      await _missionSharer.share([
-        ExportFile(
-          name: 'mise-$stamp.gpx',
-          mimeType: 'application/gpx+xml',
-          content: buildMissionGpx(
-            missionName: name,
-            track: _track,
-            waypoints: _waypoints,
-            exportedAt: now,
-          ),
-        ),
-        ExportFile(
-          name: 'zpravy-$stamp.csv',
-          mimeType: 'text/csv',
-          content: buildMessagesCsv(messages: _messages, groups: _groups),
-        ),
-      ], subject: name);
+      await _mission.export(
+        callSign: selfNode.callSign,
+        waypoints: _waypoints,
+        messages: _messages,
+        groups: _groups,
+      );
     } catch (error) {
       _notice('Export se nepodařil: $error');
     }
   }
 
   void _resetOperationalData() {
-    _stopSosSilently();
-    _track.clear();
+    _sos.reset();
+    _mission.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
     _messages
       ..clear()
@@ -428,7 +366,7 @@ class TacticalController extends ChangeNotifier {
   /// anything and without contacting the backend. Offline map tiles are
   /// wiped by the caller (OfflineMapsController).
   Future<void> emergencyWipe() async {
-    _stopSosSilently();
+    _sos.reset();
     await logout();
     await settings.clearAll();
     _fontScale = 1.0;
@@ -443,7 +381,7 @@ class TacticalController extends ChangeNotifier {
   /// Ends the session and wipes everything stored on the device.
   Future<void> logout() async {
     // Drop the session first so no in-flight persist can rewrite the store.
-    _refreshTimer?.cancel();
+    _sessionKeeper.cancel();
     _session = null;
     _selectedGroupIndex = 0;
     _groups = CommunicationGroup.demoGroups;
@@ -997,7 +935,9 @@ class TacticalController extends ChangeNotifier {
       lastSeenAt: fix.timestamp,
     );
     _replaceNodes(MeshNode.relativeToSelf(_nodes));
-    _recordTrack(fix);
+    if (_session != null) {
+      _mission.record(fix);
+    }
     _notify();
     unawaited(_shareInternetPosition());
     unawaited(_sharePositionToRadio(latest: fix));
@@ -1344,7 +1284,7 @@ class TacticalController extends ChangeNotifier {
     if (sos != null) {
       // Our own outgoing calls are shown by the "SOS AKTIVNÍ" banner.
       if (sender != selfNode.callSign) {
-        _applySos(sos, sender: sender, at: now);
+        _sos.apply(sos, sender: sender, at: now);
       }
       return;
     }
@@ -1385,144 +1325,46 @@ class TacticalController extends ChangeNotifier {
 
   // --- SOS ----------------------------------------------------------------------
 
-  static const _sosAlertLifetime = Duration(minutes: 30);
-  bool _sosActive = false;
-  Timer? _sosTimer;
-  final Map<String, SosAlert> _sosAlerts = {};
-
   /// Our own distress call is being repeated.
-  bool get sosActive => _sosActive;
+  bool get sosActive => _sos.active;
 
   /// Teammates' calls not yet acknowledged here and repeated within the
   /// last 30 minutes, newest first.
-  List<SosAlert> get activeSosAlerts {
-    final cutoff = DateTime.now().subtract(_sosAlertLifetime);
-    return _sosAlerts.values
-        .where((alert) => !alert.acknowledged && alert.lastAt.isAfter(cutoff))
-        .toList()
-      ..sort((a, b) => b.lastAt.compareTo(a.lastAt));
-  }
+  List<SosAlert> get activeSosAlerts => _sos.alerts;
 
   /// Starts repeating a distress call with the current position every
-  /// minute until [stopSos].
+  /// [sosRepeat] until [stopSos].
   Future<void> startSos() async {
-    if (_sosActive || _session == null) {
+    if (_session == null) {
       return;
     }
-    _sosActive = true;
-    _notify();
-    _sosTimer = Timer.periodic(sosRepeat, (_) => unawaited(_sendSosCall()));
-    await _sendSosCall();
+    await _sos.start();
   }
 
-  Future<void> stopSos() async {
-    if (!_sosActive) {
-      return;
-    }
-    _sosTimer?.cancel();
-    _sosActive = false;
-    _notify();
-    await sendMeshText(
-      MeshMessageDraft(
-        text: SosSignal.cancel(selfNode.callSign),
-        groupId: selectedGroup.id,
-        priority: true,
-      ),
-    );
-  }
+  Future<void> stopSos() => _sos.stop();
+
+  /// "Beru": tells the caller help is on it and hides the banner here.
+  Future<void> acknowledgeSos(SosAlert alert) => _sos.acknowledge(alert);
 
   Future<void> _sendSosCall() async {
-    if (!_sosActive || _session == null) {
+    if (_session == null) {
       return;
     }
     final self = selfNode;
     unawaited(_shareInternetPosition(force: true));
-    await sendMeshText(
-      MeshMessageDraft(
-        text: SosSignal.call(
-          callSign: self.callSign,
-          mgrs: self.mgrs,
-          latitude: self.latitude,
-          longitude: self.longitude,
-        ),
-        groupId: selectedGroup.id,
-        priority: true,
+    await _sendPriority(
+      SosSignal.call(
+        callSign: self.callSign,
+        mgrs: self.mgrs,
+        latitude: self.latitude,
+        longitude: self.longitude,
       ),
     );
   }
 
-  /// "Beru": tells the caller help is on it and hides the banner here.
-  Future<void> acknowledgeSos(SosAlert alert) async {
-    final current = _sosAlerts[alert.callSign];
-    if (current == null) {
-      return;
-    }
-    _sosAlerts[alert.callSign] = current.copyWith(acknowledged: true);
-    _notify();
-    await sendMeshText(
-      MeshMessageDraft(
-        text: SosSignal.ack(from: selfNode.callSign, to: alert.callSign),
-        groupId: selectedGroup.id,
-        priority: true,
-      ),
-    );
-  }
-
-  void _applySos(
-    SosSignal signal, {
-    required String sender,
-    required DateTime at,
-  }) {
-    switch (signal) {
-      case SosCall(
-        :final callSign,
-        :final mgrs,
-        :final latitude,
-        :final longitude,
-      ):
-        final name = callSign ?? sender;
-        final previous = _sosAlerts[name];
-        _sosAlerts[name] = SosAlert(
-          callSign: name,
-          lastAt: at,
-          mgrs: mgrs ?? previous?.mgrs,
-          latitude: latitude ?? previous?.latitude,
-          longitude: longitude ?? previous?.longitude,
-          // A repeated call after "Beru" stays acknowledged.
-          acknowledged: previous?.acknowledged ?? false,
-        );
-        if (latitude != null && longitude != null) {
-          _upsertWaypoint(
-            TacticalWaypoint(
-              code: 'SOS-$name',
-              type: TacticalWaypointType.danger,
-              latitude: latitude,
-              longitude: longitude,
-              note: 'SOS ${_clock(at)}',
-              priority: true,
-              sharedBy: name,
-              createdAt: at,
-            ),
-          );
-        }
-      case SosCancel(:final callSign):
-        _sosAlerts.remove(callSign);
-        _waypoints.removeWhere((w) => w.code == 'SOS-$callSign');
-      case SosAck():
-        break; // shown as a normal message
-    }
-  }
-
-  static String _clock(DateTime at) {
-    String two(int value) => value.toString().padLeft(2, '0');
-    return '${two(at.hour)}:${two(at.minute)}';
-  }
-
-  void _stopSosSilently() {
-    _sosTimer?.cancel();
-    _sosActive = false;
-    _sosAlerts.clear();
-  }
+  Future<void> _sendPriority(String text) => sendMeshText(
+    MeshMessageDraft(text: text, groupId: selectedGroup.id, priority: true),
+  );
 
   /// Same code (text share) or same Meshtastic id replaces the old point.
   void _upsertWaypoint(TacticalWaypoint waypoint) {
@@ -1768,9 +1610,7 @@ class TacticalController extends ChangeNotifier {
           ..addAll(restoredWaypoints);
       }
       if (restoredTrack != null) {
-        _track
-          ..clear()
-          ..addAll(restoredTrack);
+        _mission.replace(restoredTrack);
       }
       _notify();
       final liveFix = _locationState.lastFix;
@@ -1792,7 +1632,7 @@ class TacticalController extends ChangeNotifier {
         nodes: [for (final node in _nodes) node.toJson()],
         messages: [for (final message in _messages.take(150)) message.toJson()],
         waypoints: [for (final waypoint in _waypoints) waypoint.toJson()],
-        track: [for (final point in _track) point.toJson()],
+        track: _mission.toJson(),
         owner: session.userName,
       );
     } catch (_) {
