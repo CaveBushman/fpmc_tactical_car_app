@@ -20,6 +20,7 @@ import '../services/ptt/livekit_voice_transport.dart';
 import '../services/ptt/voice_transport.dart';
 import 'danger_proximity.dart';
 import 'mission_recorder.dart';
+import 'peer_trails.dart';
 import 'ptt_controller.dart';
 import 'session_keeper.dart';
 import 'sos_coordinator.dart';
@@ -126,6 +127,10 @@ class TacticalController extends ChangeNotifier {
   final CarBridge _carBridge;
   final MissionRecorder _mission;
   final DangerProximity _danger = DangerProximity();
+  final PeerTrails _peerTrails = PeerTrails();
+
+  /// Teammates' positions over the last 30 minutes, by node number.
+  Map<int, List<LatLng>> get peerTrails => _peerTrails.trails;
   late final SessionKeeper _sessionKeeper;
   late final SosCoordinator _sos;
   final SettingsStore settings;
@@ -365,6 +370,7 @@ class TacticalController extends ChangeNotifier {
     _unread.clear();
     _danger.reset();
     _navTarget = null;
+    _peerTrails.clear();
     _sos.reset();
     _mission.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
@@ -1851,6 +1857,9 @@ class TacticalController extends ChangeNotifier {
     if (!_disposed) {
       _checkDangers();
       _checkNavTarget();
+      if (_session != null) {
+        _peerTrails.update(nodes);
+      }
       _syncCarTargets();
       notifyListeners();
     }

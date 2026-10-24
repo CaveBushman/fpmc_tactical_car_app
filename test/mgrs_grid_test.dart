@@ -104,4 +104,37 @@ void main() {
     await tester.pumpAndSettle();
     expect(clear, findsNothing);
   });
+
+  testWidgets('the ruler measures a path from own position', (tester) async {
+    await login(tester);
+    final center = tester.getCenter(find.byType(MeshMap));
+
+    await tester.tap(find.byKey(const ValueKey('measure')));
+    await tester.pumpAndSettle();
+    expect(find.text('Klepni na první bod'), findsOneWidget);
+
+    await tester.tap(find.text('Od mé pozice'));
+    await tester.pumpAndSettle();
+    for (final offset in const [Offset(60, 80), Offset(-40, 120)]) {
+      await tester.tapAt(center + offset);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+    }
+
+    // Taps add points instead of opening the point card.
+    expect(find.byKey(const ValueKey('point-info')), findsNothing);
+    final headline = tester
+        .widget<Text>(find.byKey(const ValueKey('measure-headline')))
+        .data!;
+    expect(headline, matches(RegExp(r'^Úsek \d+ m · AZ \d{3}°$')));
+    expect(find.textContaining('(2 úseků)'), findsOneWidget);
+
+    await tester.tap(find.text('Zpět'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('measure-total')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('measure')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('measure-panel')), findsNothing);
+  });
 }

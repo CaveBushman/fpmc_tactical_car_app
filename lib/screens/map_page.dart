@@ -40,8 +40,12 @@ class MapPage extends StatefulWidget {
     this.navTarget,
     this.onNavigate,
     this.onClearNavTarget,
+    this.peerTrails = const {},
     super.key,
   });
+
+  /// Teammates' recent positions by node number.
+  final Map<int, List<LatLng>> peerTrails;
 
   final List<MeshNode> nodes;
   final List<TacticalWaypoint> waypoints;
@@ -84,6 +88,20 @@ class _MapPageState extends State<MapPage> {
 
   /// Point entered by hand that the map should move to.
   LatLng? _focus;
+
+  /// Measuring mode: taps add points instead of opening the point card.
+  List<LatLng>? _measure;
+
+  void _onMapTap(LatLng point) {
+    final measure = _measure;
+    setState(() {
+      if (measure != null) {
+        _measure = [...measure, point];
+      } else {
+        _inspected = point;
+      }
+    });
+  }
 
   Future<void> _createWaypointAt(
     LatLng point, {
@@ -158,10 +176,32 @@ class _MapPageState extends State<MapPage> {
                 navTarget: widget.navTarget?.position,
                 focus: _focus,
                 onEnterCoordinates: () => _enterCoordinates(self.latLng),
-                onTap: (point) => setState(() => _inspected = point),
+                peerTrails: widget.peerTrails,
+                measure: _measure ?? const [],
+                measuring: _measure != null,
+                onToggleMeasure: () => setState(() {
+                  _measure = _measure == null ? [] : null;
+                  _inspected = null;
+                }),
+                onTap: _onMapTap,
               ),
             ),
-            if (_inspected != null)
+            if (_measure case final measure?)
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: (showSheet ? MapPage.sheetPeekHeight : 0) + 8,
+                child: MeasurePanel(
+                  points: measure,
+                  onFromSelf: () =>
+                      setState(() => _measure = [self.latLng, ...measure]),
+                  onUndo: () => setState(
+                    () => _measure = measure.sublist(0, measure.length - 1),
+                  ),
+                  onClose: () => setState(() => _measure = null),
+                ),
+              )
+            else if (_inspected != null)
               Positioned(
                 left: 8,
                 right: 8,
@@ -448,8 +488,22 @@ class MeshMap extends StatefulWidget {
     this.navTarget,
     this.focus,
     this.onEnterCoordinates,
+    this.peerTrails = const {},
+    this.measure = const [],
+    this.measuring = false,
+    this.onToggleMeasure,
     super.key,
   });
+
+  /// Teammates' recent positions, drawn as faint dotted lines.
+  final Map<int, List<LatLng>> peerTrails;
+
+  /// Measured path (drawn while [measuring]).
+  final List<LatLng> measure;
+  final bool measuring;
+
+  /// Shows the ruler button.
+  final VoidCallback? onToggleMeasure;
 
   /// Moves the map here whenever it changes (stops following self).
   final LatLng? focus;
@@ -598,6 +652,21 @@ class _MeshMapState extends State<MeshMap> {
                     borderStrokeWidth: 1,
                     borderColor: Colors.black.withValues(alpha: 0.5),
                   ),
+                for (final trail in widget.peerTrails.values)
+                  Polyline(
+                    points: trail,
+                    strokeWidth: 2,
+                    color: blueForce.withValues(alpha: 0.55),
+                    pattern: const StrokePattern.dotted(spacingFactor: 2),
+                  ),
+                if (widget.measure.length > 1)
+                  Polyline(
+                    points: widget.measure,
+                    strokeWidth: 3,
+                    color: Colors.white,
+                    borderStrokeWidth: 1.5,
+                    borderColor: Colors.black.withValues(alpha: 0.7),
+                  ),
                 if (widget.navTarget case final target?)
                   Polyline(
                     points: [selfPoint, target],
@@ -619,6 +688,14 @@ class _MeshMapState extends State<MeshMap> {
             ),
             CircleLayer(
               circles: [
+                for (final point in widget.measure)
+                  CircleMarker(
+                    point: point,
+                    radius: 5,
+                    color: Colors.white,
+                    borderColor: Colors.black,
+                    borderStrokeWidth: 1.5,
+                  ),
                 CircleMarker(
                   point: selfPoint,
                   radius: 1200,
@@ -663,6 +740,26 @@ class _MeshMapState extends State<MeshMap> {
             ),
           ],
         ),
+        if (widget.onToggleMeasure != null)
+          Positioned(
+            left: 12,
+            bottom: 148,
+            child: IconButton.filled(
+              key: const ValueKey('measure'),
+              tooltip: widget.measuring ? 'Ukončit měření' : 'Měřit',
+              onPressed: widget.onToggleMeasure,
+              style: IconButton.styleFrom(
+                backgroundColor: widget.measuring
+                    ? rangerGreen
+                    : Colors.black.withValues(alpha: 0.76),
+                foregroundColor: widget.measuring ? Colors.white : sand,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              icon: const Icon(Icons.straighten),
+            ),
+          ),
         if (widget.onEnterCoordinates != null)
           Positioned(
             left: 12,

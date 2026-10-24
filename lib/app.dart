@@ -265,6 +265,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       onSharePoint: (point) => unawaited(controller.sharePoint(point)),
       showDetailsSheet: showDetailsSheet,
       navTarget: controller.navTarget,
+      peerTrails: controller.peerTrails,
       onNavigate: controller.navigateTo,
       onClearNavTarget: controller.clearNavTarget,
       onShareWaypoint: controller.shareWaypoint,

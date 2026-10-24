@@ -447,3 +447,100 @@ class _CoordinateEntryDialogState extends State<CoordinateEntryDialog> {
     );
   }
 }
+
+/// Readout for the map ruler: last segment (distance + azimuth) and the
+/// whole path.
+class MeasurePanel extends StatelessWidget {
+  const MeasurePanel({
+    required this.points,
+    required this.onFromSelf,
+    required this.onUndo,
+    required this.onClose,
+    super.key,
+  });
+
+  final List<LatLng> points;
+  final VoidCallback onFromSelf;
+  final VoidCallback onUndo;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    var totalKm = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      totalKm += geo.distanceKm(points[i - 1], points[i]);
+    }
+    String distance(double km) =>
+        km < 1 ? '${(km * 1000).round()} m' : '${km.toStringAsFixed(2)} km';
+    final String headline;
+    if (points.isEmpty) {
+      headline = 'Klepni na první bod';
+    } else if (points.length == 1) {
+      headline = 'Klepni na další bod';
+    } else {
+      final from = points[points.length - 2];
+      final to = points.last;
+      headline =
+          'Úsek ${distance(geo.distanceKm(from, to))} · '
+          'AZ ${geo.bearingDeg(from, to).round().toString().padLeft(3, '0')}°';
+    }
+    return Card(
+      key: const ValueKey('measure-panel'),
+      color: Colors.black.withValues(alpha: 0.86),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.straighten, color: sand, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    headline,
+                    key: const ValueKey('measure-headline'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Ukončit měření',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close, size: 20),
+                ),
+              ],
+            ),
+            if (points.length > 2)
+              Text(
+                'Celkem ${distance(totalKm)} (${points.length - 1} úseků)',
+                key: const ValueKey('measure-total'),
+                style: const TextStyle(color: sand),
+              ),
+            Wrap(
+              spacing: 8,
+              children: [
+                if (points.isEmpty)
+                  TextButton.icon(
+                    onPressed: onFromSelf,
+                    icon: const Icon(Icons.my_location, size: 18),
+                    label: const Text('Od mé pozice'),
+                  ),
+                if (points.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: onUndo,
+                    icon: const Icon(Icons.undo, size: 18),
+                    label: const Text('Zpět'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

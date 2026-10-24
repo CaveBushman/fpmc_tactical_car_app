@@ -34,6 +34,8 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Navigation target: the navigation button on a target card, or "Navigovat sem" on a tapped map point, locks navigation to that teammate, point or position. The map draws a dashed amber line to it, the peek row, car mode and Android Auto show it instead of the nearest target, and it ends on arrival (50 m), when the point is deleted or with the ✕ button.
 - Coordinate entry: the pin button above the recenter button takes full MGRS, MGRS without the zone ("VR 58335 40478") or without zone and square ("58335 40478", taken from your own position), or decimal degrees. The map jumps there and opens the point card (save, send, navigate). Typed MGRS resolves to the centre of its square, so it reads back with the same digits.
 - Editing points: the pencil on a mission point changes its type and note; the code and position stay, so re-sending it replaces the point on teammates' maps.
+- Team trails: each teammate's positions over the last 30 minutes (a point per 10 m of movement, LoRa and internet alike) are drawn as faint dotted blue lines on the map and in car mode.
+- Ruler: the ruler button on the map switches taps to adding points; the panel shows the last segment (distance, azimuth) and the total. "Od mé pozice" starts at your position, "Zpět" removes the last point.
 - Car mode screen (car icon in the app bar): map, nearest target, last message, OK / NA POZICI / SOS and a large hold-to-talk button; keeps the display on.
 - Android Auto: POI screen with the nearest team members and mission points on the car map (tap to navigate), and incoming team messages as car-readable notifications with voice reply.
 - Adaptive portrait and landscape layouts.
