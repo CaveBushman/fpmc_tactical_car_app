@@ -26,6 +26,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Mission record: the own trail is drawn on the map (point every 15 m / minute, max 5000, stored encrypted); System → Mise exports GPX (mission waypoints + trail) and a CSV message log via the share sheet.
 - Long operations: backend sessions are refreshed automatically; a revoked or expired session returns to login without wiping data (the same user gets it back). Messages that could not be sent are resent automatically once the T-Beam or the group room is back.
 - Night mode (System → Nastavení, or the moon in car mode): the whole app, map included, is rendered in dimmed red to keep night vision; colours of status badges are then distinguished only by brightness and their labels.
+- Full screen (System → Nastavení, default on): the Android status and navigation bars are hidden (immersive sticky); a swipe from the screen edge shows them for a moment.
 - Battery saver (System → Nastavení): coarser GPS (50 m filter) and sparser position sharing — mesh every 5 min or 250 m, internet every 2 min or 100 m. SOS calls and forced updates (handshake, new room) are not throttled.
 - Team hygiene: nodes not heard for 24 h disappear from the map, team list and car mode and are no longer saved; the team list is ordered self, OK, STALE, LOST, nearest first.
 - Unread messages: the Messages tab and each group chip show a red count of incoming messages not yet seen; a group counts as read while it is selected on the Messages tab with the app in front.

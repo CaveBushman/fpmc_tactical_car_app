@@ -390,6 +390,7 @@ class TacticalController extends ChangeNotifier {
     _mgrsGrid = true;
     _batterySaver = false;
     _dangerAlerts = true;
+    _hideSystemBars = true;
     unawaited(_locationService.setPowerSaving(false));
     unawaited(_nativePtt.setVolumeKeyPtt(false));
     _notify();
@@ -439,6 +440,7 @@ class TacticalController extends ChangeNotifier {
     _mgrsGrid = await settings.mgrsGrid();
     final batterySaver = await settings.batterySaver();
     _dangerAlerts = await settings.dangerAlerts();
+    _hideSystemBars = await settings.hideSystemBars();
     if (_disposed) {
       return;
     }
@@ -505,6 +507,17 @@ class TacticalController extends ChangeNotifier {
   }
 
   bool _dangerAlerts = true;
+  bool _hideSystemBars = true;
+
+  /// Full screen: the Android status and navigation bars are hidden and
+  /// appear for a moment after a swipe from the edge.
+  bool get hideSystemBars => _hideSystemBars;
+
+  void setHideSystemBars(bool enabled) {
+    _hideSystemBars = enabled;
+    unawaited(settings.setHideSystemBars(enabled));
+    _notify();
+  }
 
   /// Warn (banner + vibration) within 300 m of a DANGER point.
   bool get dangerAlerts => _dangerAlerts;

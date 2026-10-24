@@ -31,6 +31,8 @@ class SystemsPage extends StatelessWidget {
     this.onBatterySaverChanged,
     this.dangerAlerts = true,
     this.onDangerAlertsChanged,
+    this.hideSystemBars = true,
+    this.onHideSystemBarsChanged,
     this.sharePositionToMesh = true,
     this.onSharePositionToMeshChanged,
     this.trackPoints = 0,
@@ -67,6 +69,8 @@ class SystemsPage extends StatelessWidget {
   final ValueChanged<bool>? onBatterySaverChanged;
   final bool dangerAlerts;
   final ValueChanged<bool>? onDangerAlertsChanged;
+  final bool hideSystemBars;
+  final ValueChanged<bool>? onHideSystemBarsChanged;
   final bool sharePositionToMesh;
   final ValueChanged<bool>? onSharePositionToMeshChanged;
   final int trackPoints;
@@ -173,6 +177,16 @@ class SystemsPage extends StatelessWidget {
             MonoLine(
               label: 'Aktuálně',
               value: '${(fontScale * 100).round()} %',
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: hideSystemBars,
+              onChanged: onHideSystemBarsChanged,
+              secondary: const Icon(Icons.fullscreen),
+              title: const Text('Skrýt systémové lišty'),
+              subtitle: const Text(
+                'Celá obrazovka; lišty Androidu ukáže tah od okraje',
+              ),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

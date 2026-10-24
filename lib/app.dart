@@ -172,6 +172,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       voiceTransportFactory: widget.voiceTransportFactory,
     );
     _controller.addListener(_syncNightMode);
+    _controller.addListener(_syncSystemBars);
+    _syncSystemBars();
     _controller.addListener(_alertOnSos);
     _controller.addListener(_alertOnDanger);
     _offlineMaps = widget.offlineMaps ?? OfflineMapsController();
@@ -190,15 +192,38 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     widget.nightMode?.value = _controller.nightMode;
   }
 
+  bool? _systemBarsHidden;
+
+  /// Immersive (sticky) mode while the setting is on: the bars slide in
+  /// after a swipe from the edge and hide again on their own.
+  void _syncSystemBars({bool force = false}) {
+    final hide = _controller.hideSystemBars;
+    if (!force && hide == _systemBarsHidden) {
+      return;
+    }
+    _systemBarsHidden = hide;
+    unawaited(
+      SystemChrome.setEnabledSystemUIMode(
+        hide ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      ),
+    );
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _controller.setAppInForeground(state == AppLifecycleState.resumed);
+    final resumed = state == AppLifecycleState.resumed;
+    _controller.setAppInForeground(resumed);
+    if (resumed) {
+      // Android may show the bars again after another app was in front.
+      _syncSystemBars(force: true);
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_syncNightMode);
+    _controller.removeListener(_syncSystemBars);
     _controller.removeListener(_alertOnSos);
     _controller.removeListener(_alertOnDanger);
     unawaited(_noticeSubscription.cancel());
@@ -285,6 +310,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         onBatterySaverChanged: controller.setBatterySaver,
         dangerAlerts: controller.dangerAlerts,
         onDangerAlertsChanged: controller.setDangerAlerts,
+        hideSystemBars: controller.hideSystemBars,
+        onHideSystemBarsChanged: controller.setHideSystemBars,
         sharePositionToMesh: controller.sharePositionToMesh,
         onSharePositionToMeshChanged: controller.setSharePositionToMesh,
         trackPoints: controller.track.length,

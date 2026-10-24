@@ -53,6 +53,13 @@ class SettingsStore {
   Future<void> setDangerAlerts(bool value) =>
       _set((prefs) => prefs.setBool('${prefix}dangerAlerts', value));
 
+  /// Full screen: Android status and navigation bars hidden (default on).
+  Future<bool> hideSystemBars() async =>
+      await _get((prefs) => prefs.getBool('${prefix}hideSystemBars')) ?? true;
+
+  Future<void> setHideSystemBars(bool value) =>
+      _set((prefs) => prefs.setBool('${prefix}hideSystemBars', value));
+
   /// Last communication group chosen by [userName].
   Future<String?> groupFor(String userName) =>
       _get((prefs) => prefs.getString('${prefix}group.$userName'));
