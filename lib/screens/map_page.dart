@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/member_status.dart';
 import '../models/mesh_node.dart';
+import '../models/rendezvous.dart';
 import '../models/navigation.dart';
 import '../services/location_service.dart';
 import '../services/offline_tiles/offline_first_tile_provider.dart';
@@ -47,6 +48,7 @@ class MapPage extends StatefulWidget {
     this.onClearOldWaypoints,
     this.focusRequest,
     this.onFocusConsumed,
+    this.onSetRendezvous,
     this.baseCode,
     this.speedKmh = TacticalNavSolution.walkingKmh,
     this.courseDeg,
@@ -75,6 +77,9 @@ class MapPage extends StatefulWidget {
   /// card; [onFocusConsumed] is called once applied.
   final LatLng? focusRequest;
   final VoidCallback? onFocusConsumed;
+
+  /// Shares a meeting at a point at the chosen time.
+  final void Function(TacticalWaypoint waypoint, DateTime at)? onSetRendezvous;
 
   /// Own direction of travel (GPS course), null before moving.
   final double? courseDeg;
@@ -190,6 +195,26 @@ class _MapPageState extends State<MapPage> {
     if (draft != null) {
       widget.onCreateWaypoint?.call(draft);
     }
+  }
+
+  /// Time picker for "Sraz zde"; suggests half an hour from now.
+  Future<void> _pickRendezvousTime(TacticalWaypoint waypoint) async {
+    final suggested = DateTime.now().add(const Duration(minutes: 30));
+    final time = await showTimePicker(
+      context: context,
+      helpText: 'Sraz na ${waypoint.code} v',
+      initialTime: TimeOfDay(
+        hour: suggested.hour,
+        minute: suggested.minute - suggested.minute % 5,
+      ),
+    );
+    if (time == null) {
+      return;
+    }
+    widget.onSetRendezvous?.call(
+      waypoint,
+      Rendezvous.nextOccurrence(time.hour, time.minute, now: DateTime.now()),
+    );
   }
 
   Future<void> _confirmClearOld() async {
@@ -379,6 +404,9 @@ class _MapPageState extends State<MapPage> {
                 onShareWaypoint: widget.onShareWaypoint,
                 onDeleteWaypoint: widget.onDeleteWaypoint,
                 speedKmh: widget.speedKmh,
+                onRendezvous: widget.onSetRendezvous == null
+                    ? null
+                    : _pickRendezvousTime,
                 onClearOld: widget.onClearOldWaypoints == null
                     ? null
                     : _confirmClearOld,
@@ -409,6 +437,7 @@ class _MapDetailsSheet extends StatelessWidget {
     this.onDeleteWaypoint,
     this.onEditWaypoint,
     this.onClearOld,
+    this.onRendezvous,
     this.navTarget,
     this.onNavigate,
     this.onClearNavTarget,
@@ -417,6 +446,7 @@ class _MapDetailsSheet extends StatelessWidget {
 
   final double speedKmh;
   final VoidCallback? onClearOld;
+  final ValueChanged<TacticalWaypoint>? onRendezvous;
   final ValueChanged<TacticalWaypoint>? onEditWaypoint;
   final TacticalNavSolution? navTarget;
   final ValueChanged<NavTarget>? onNavigate;
@@ -535,6 +565,7 @@ class _MapDetailsSheet extends StatelessWidget {
                 onDeleteWaypoint: onDeleteWaypoint,
                 onEditWaypoint: onEditWaypoint,
                 onClearOld: onClearOld,
+                onRendezvous: onRendezvous,
               ),
               const SizedBox(height: 10),
               Align(

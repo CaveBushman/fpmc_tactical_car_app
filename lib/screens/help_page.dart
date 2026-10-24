@@ -91,6 +91,15 @@ const helpTopics = [
   ),
   HelpTopic(
     'Navigace',
+    'Sraz',
+    'U bodu v seznamu bodů zvolte „Sraz zde“ a čas. Skupina dostane zprávu '
+        'a všichni vidí pruh se zbývajícím časem a délkou cesty podle své '
+        'rychlosti; zčervená, když to nestihnete. Kdo sraz vyhlásil, ho '
+        'křížkem zruší všem; ostatní si ho jen skryjí. Pruh zmizí půl '
+        'hodiny po čase srazu.',
+  ),
+  HelpTopic(
+    'Navigace',
     'Základna',
     'V úpravě bodu zapněte „Moje základna“. Základna má na mapě domeček a '
         'v režimu auta je v seznamu cílů vždy první. Je uložená jen ve '

@@ -22,6 +22,7 @@ import 'services/mesh_radio.dart';
 import 'services/offline_tiles/tile_math.dart';
 import 'theme.dart';
 import 'widgets/common_widgets.dart';
+import 'widgets/rendezvous_banner.dart';
 import 'widgets/sos_widgets.dart';
 
 /// Red, dimmed rendering that keeps night vision: luminance goes to the red
@@ -278,6 +279,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       peerTrails: controller.peerTrails,
       onClearOldWaypoints: controller.clearOldReceivedWaypoints,
       focusRequest: _mapFocusRequest,
+      onSetRendezvous: (waypoint, at) =>
+          unawaited(controller.setRendezvous(waypoint, at)),
       onFocusConsumed: () => setState(() => _mapFocusRequest = null),
       baseCode: controller.baseWaypoint?.code,
       speedKmh: controller.travelSpeedKmh,
@@ -467,6 +470,25 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
                 alerts: controller.urgentStatuses,
                 onAcknowledge: controller.acknowledgeStatus,
                 onNavigate: controller.navigateToMember,
+              ),
+              RendezvousBanner(
+                meeting: controller.rendezvous,
+                isOwn:
+                    controller.rendezvous?.setBy ==
+                    controller.selfNode.callSign,
+                solution: controller.rendezvousSolution,
+                speedKmh: controller.travelSpeedKmh,
+                onNavigate: () => controller.navigateTo(
+                  NavTarget.waypoint(controller.rendezvous!.code),
+                ),
+                onClose: () {
+                  if (controller.rendezvous?.setBy ==
+                      controller.selfNode.callSign) {
+                    unawaited(controller.cancelRendezvous());
+                  } else {
+                    controller.dismissRendezvous();
+                  }
+                },
               ),
               LostContactBanners(
                 contacts: controller.lostContacts,

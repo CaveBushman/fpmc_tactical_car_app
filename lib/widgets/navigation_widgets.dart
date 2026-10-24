@@ -332,12 +332,16 @@ class WaypointStrip extends StatelessWidget {
     this.onDeleteWaypoint,
     this.onEditWaypoint,
     this.onClearOld,
+    this.onRendezvous,
     this.compact = false,
     super.key,
   });
 
   /// Shows "Smazat staré přijaté body" when there are any.
   final VoidCallback? onClearOld;
+
+  /// "Sraz zde" on a point.
+  final ValueChanged<TacticalWaypoint>? onRendezvous;
 
   final List<TacticalWaypoint> waypoints;
   final ValueChanged<TacticalWaypoint> onShareWaypoint;
@@ -399,6 +403,9 @@ class WaypointStrip extends StatelessWidget {
             onEdit: onEditWaypoint == null
                 ? null
                 : () => onEditWaypoint!(waypoint),
+            onRendezvous: onRendezvous == null
+                ? null
+                : () => onRendezvous!(waypoint),
           ),
           const SizedBox(height: 8),
         ],
@@ -413,6 +420,7 @@ class WaypointCard extends StatelessWidget {
     required this.onShare,
     this.onDelete,
     this.onEdit,
+    this.onRendezvous,
     this.compact = false,
     super.key,
   });
@@ -421,6 +429,7 @@ class WaypointCard extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
+  final VoidCallback? onRendezvous;
   final bool compact;
 
   @override
@@ -499,6 +508,14 @@ class WaypointCard extends StatelessWidget {
               ),
               icon: const Icon(Icons.send, size: 18),
             ),
+            if (onRendezvous != null)
+              IconButton(
+                key: ValueKey('rendezvous-${waypoint.code}'),
+                tooltip: 'Sraz zde',
+                onPressed: onRendezvous,
+                icon: const Icon(Icons.groups_outlined, size: 20),
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
             if (onEdit != null)
               IconButton(
                 key: ValueKey('edit-waypoint-${waypoint.code}'),

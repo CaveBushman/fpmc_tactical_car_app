@@ -124,7 +124,14 @@ class MeshMessage {
       int.parse(match.group(2)!),
     );
     if (value.isAfter(now)) {
-      value = value.subtract(const Duration(days: 1));
+      // Previous calendar day (not -24 h, which DST changes would skew).
+      value = DateTime(
+        now.year,
+        now.month,
+        now.day - 1,
+        value.hour,
+        value.minute,
+      );
     }
     return value;
   }

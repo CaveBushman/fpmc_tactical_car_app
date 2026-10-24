@@ -11,6 +11,7 @@ import '../models/messaging.dart';
 import '../models/navigation.dart';
 import '../theme.dart';
 import '../widgets/navigation_widgets.dart';
+import '../widgets/rendezvous_banner.dart';
 import '../widgets/sos_widgets.dart';
 import 'map_page.dart';
 
@@ -93,6 +94,25 @@ class _CarModeScreenState extends State<CarModeScreen> {
                   alerts: controller.urgentStatuses,
                   onAcknowledge: controller.acknowledgeStatus,
                   onNavigate: controller.navigateToMember,
+                ),
+                RendezvousBanner(
+                  meeting: controller.rendezvous,
+                  isOwn:
+                      controller.rendezvous?.setBy ==
+                      controller.selfNode.callSign,
+                  solution: controller.rendezvousSolution,
+                  speedKmh: controller.travelSpeedKmh,
+                  onNavigate: () => controller.navigateTo(
+                    NavTarget.waypoint(controller.rendezvous!.code),
+                  ),
+                  onClose: () {
+                    if (controller.rendezvous?.setBy ==
+                        controller.selfNode.callSign) {
+                      unawaited(controller.cancelRendezvous());
+                    } else {
+                      controller.dismissRendezvous();
+                    }
+                  },
                 ),
                 LostContactBanners(
                   contacts: controller.lostContacts,

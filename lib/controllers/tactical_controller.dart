@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import '../models/geo.dart' as geo;
 import '../models/member_status.dart';
 import '../models/mission_event.dart';
+import '../models/rendezvous.dart';
 import '../models/sun.dart' as sun;
 import '../models/mesh_node.dart';
 import '../models/messaging.dart';
@@ -424,6 +425,7 @@ class TacticalController extends ChangeNotifier {
     _danger.reset();
     _navTarget = null;
     _peerTrails.clear();
+    _rendezvous = null;
     _contactWatch.clear();
     _batteryWatch.clear();
     _speedKmh = null;
@@ -1608,6 +1610,71 @@ class TacticalController extends ChangeNotifier {
     return updated;
   }
 
+  // --- Rendezvous ------------------------------------------------------------------
+
+  Rendezvous? _rendezvous;
+
+  /// The current meeting, until half an hour after its time.
+  Rendezvous? get rendezvous {
+    final meeting = _rendezvous;
+    return meeting == null || meeting.isOverAt(_clock()) ? null : meeting;
+  }
+
+  /// Live solution to the meeting point; null when the point is unknown
+  /// here.
+  TacticalNavSolution? get rendezvousSolution {
+    final meeting = rendezvous;
+    return meeting == null
+        ? null
+        : NavTarget.waypoint(
+            meeting.code,
+          ).resolve(self: selfNode, nodes: nodes, waypoints: _waypoints);
+  }
+
+  /// Tells the group to meet at [waypoint] at [at].
+  Future<void> setRendezvous(TacticalWaypoint waypoint, DateTime at) async {
+    if (_session == null) {
+      return;
+    }
+    final meeting = Rendezvous(
+      code: waypoint.code,
+      at: at,
+      setBy: selfNode.callSign,
+    );
+    _rendezvous = meeting;
+    _log(
+      MissionEventKind.navigation,
+      'Sraz ${meeting.code} v ${meeting.clock}',
+    );
+    _notify();
+    await sendMeshText(
+      MeshMessageDraft(text: meeting.shareText, groupId: selectedGroup.id),
+    );
+  }
+
+  /// Cancels the meeting for everyone.
+  Future<void> cancelRendezvous() async {
+    final meeting = _rendezvous;
+    if (meeting == null) {
+      return;
+    }
+    _rendezvous = null;
+    _log(MissionEventKind.navigation, 'Sraz ${meeting.code} zrušen');
+    _notify();
+    await sendMeshText(
+      MeshMessageDraft(
+        text: Rendezvous.cancelText(meeting.code),
+        groupId: selectedGroup.id,
+      ),
+    );
+  }
+
+  /// Hides a meeting someone else set, here only.
+  void dismissRendezvous() {
+    _rendezvous = null;
+    _notify();
+  }
+
   // --- Base ------------------------------------------------------------------------
 
   String? _baseCode;
@@ -1700,6 +1767,25 @@ class TacticalController extends ChangeNotifier {
   /// CONTACT reports (plotted as a DANGER point at the estimated position).
   void _applyStructuredText(String text, {required String sender}) {
     final now = DateTime.now();
+    final meeting = Rendezvous.parse(text, now: _clock());
+    if (meeting != null) {
+      if (meeting.setBy != selfNode.callSign) {
+        _rendezvous = meeting;
+        _log(
+          MissionEventKind.navigation,
+          'Sraz ${meeting.code} v ${meeting.clock} (${meeting.setBy})',
+        );
+      }
+      return;
+    }
+    final cancelled = Rendezvous.parseCancel(text);
+    if (cancelled != null) {
+      if (_rendezvous?.code == cancelled) {
+        _rendezvous = null;
+        _log(MissionEventKind.navigation, 'Sraz $cancelled zrušen ($sender)');
+      }
+      return;
+    }
     final status = MemberStatus.parse(text);
     if (status != null) {
       if (status.callSign != selfNode.callSign) {
