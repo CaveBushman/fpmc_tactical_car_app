@@ -459,6 +459,9 @@ class TacticalController extends ChangeNotifier {
     if (connected && !_roomWasConnected) {
       // New room (login, group change, reconnect): announce right away.
       unawaited(_shareInternetPosition(force: true));
+      if (!meshConnected) {
+        unawaited(_resendPending());
+      }
     }
     _roomWasConnected = connected;
     _notify();
@@ -853,7 +856,8 @@ class TacticalController extends ChangeNotifier {
           );
           changed = true;
         case DecodedMeshEventType.configComplete:
-          break;
+          // Handshake done: the radio accepts traffic again.
+          unawaited(_resendPending());
         case DecodedMeshEventType.nodeInfo:
         case DecodedMeshEventType.position:
           changed = _upsertMeshNode(event) || changed;
@@ -1305,7 +1309,9 @@ class TacticalController extends ChangeNotifier {
       viaInternet = await _sendViaInternet(message);
       if (!viaInternet) {
         delivery = MessageDelivery.notSent;
-        _notice('T-Beam není připojen: zprávu lze odeslat znovu ze seznamu.');
+        if (!_resending) {
+          _notice('T-Beam není připojen: zprávu lze odeslat znovu ze seznamu.');
+        }
       }
     }
 
@@ -1339,6 +1345,49 @@ class TacticalController extends ChangeNotifier {
     _notify();
     unawaited(_persistState());
     return true;
+  }
+
+  bool _resending = false;
+
+  /// Sends messages that could not be handed to any transport, oldest
+  /// first, once a radio or the group room is available again. Messages
+  /// the mesh explicitly refused (failed) stay for a manual retry.
+  Future<void> _resendPending() async {
+    if (_resending || _session == null) {
+      return;
+    }
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    final pending = _messages
+        .where(
+          (m) =>
+              m.delivery == MessageDelivery.notSent && m.sentAt.isAfter(cutoff),
+        )
+        .toList()
+        .reversed
+        .toList();
+    if (pending.isEmpty) {
+      return;
+    }
+    _resending = true;
+    var sent = 0;
+    try {
+      for (final message in pending) {
+        await retryMessage(message);
+        final delivery = _messages
+            .where((m) => m.body == message.body && m.sentAt == message.sentAt)
+            .map((m) => m.delivery)
+            .firstOrNull;
+        if (delivery == MessageDelivery.sent ||
+            delivery == MessageDelivery.delivered) {
+          sent++;
+        }
+      }
+    } finally {
+      _resending = false;
+    }
+    if (sent > 0) {
+      _notice('Odesláno $sent čekajících zpráv.');
+    }
   }
 
   int _newPacketId() => _packetIdRandom.nextInt(0x7FFFFFFF) + 1;
