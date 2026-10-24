@@ -21,6 +21,7 @@ class MessagesPage extends StatefulWidget {
     this.onRetry,
     this.onSos,
     this.unreadIn,
+    this.quickMessages = const [],
     super.key,
   });
 
@@ -39,6 +40,9 @@ class MessagesPage extends StatefulWidget {
 
   /// Unread incoming messages per group id.
   final int Function(String groupId)? unreadIn;
+
+  /// One-tap templates sent to the selected group.
+  final List<String> quickMessages;
 
   @override
   State<MessagesPage> createState() => _MessagesPageState();
@@ -151,6 +155,29 @@ class _MessagesPageState extends State<MessagesPage> {
           onNodeChanged: (index) => setState(() => _selectedNodeIndex = index),
           onSend: _send,
         ),
+        if (widget.quickMessages.isNotEmpty)
+          SizedBox(
+            height: 44,
+            child: ListView.separated(
+              key: const ValueKey('quick-messages'),
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              scrollDirection: Axis.horizontal,
+              itemCount: widget.quickMessages.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 6),
+              itemBuilder: (context, index) {
+                final text = widget.quickMessages[index];
+                return ActionChip(
+                  label: Text(
+                    text,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  backgroundColor: panelGreen,
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                  onPressed: () => _sendQuickMessage(text),
+                );
+              },
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           child: Row(

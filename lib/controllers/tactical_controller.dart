@@ -371,6 +371,7 @@ class TacticalController extends ChangeNotifier {
     _danger.reset();
     _navTarget = null;
     _peerTrails.clear();
+    _courseDeg = null;
     _sos.reset();
     _mission.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
@@ -397,6 +398,8 @@ class TacticalController extends ChangeNotifier {
     _batterySaver = false;
     _dangerAlerts = true;
     _hideSystemBars = true;
+    _mapHeadingUp = false;
+    _quickMessages = SettingsStore.defaultQuickMessages;
     unawaited(_locationService.setPowerSaving(false));
     unawaited(_nativePtt.setVolumeKeyPtt(false));
     _notify();
@@ -447,6 +450,8 @@ class TacticalController extends ChangeNotifier {
     final batterySaver = await settings.batterySaver();
     _dangerAlerts = await settings.dangerAlerts();
     _hideSystemBars = await settings.hideSystemBars();
+    _mapHeadingUp = await settings.mapHeadingUp();
+    _quickMessages = await settings.quickMessages();
     if (_disposed) {
       return;
     }
@@ -514,6 +519,38 @@ class TacticalController extends ChangeNotifier {
 
   bool _dangerAlerts = true;
   bool _hideSystemBars = true;
+  bool _mapHeadingUp = false;
+  List<String> _quickMessages = SettingsStore.defaultQuickMessages;
+  double? _courseDeg;
+
+  /// Direction of travel from GPS, kept while standing still so the map
+  /// does not snap back north at every stop; null until we first move.
+  double? get courseDeg => _courseDeg;
+
+  /// Turn the map so the direction of travel points up.
+  bool get mapHeadingUp => _mapHeadingUp;
+
+  void setMapHeadingUp(bool enabled) {
+    _mapHeadingUp = enabled;
+    unawaited(settings.setMapHeadingUp(enabled));
+    _notify();
+  }
+
+  /// One-tap message templates.
+  List<String> get quickMessages => List.unmodifiable(_quickMessages);
+
+  /// Blank lines are dropped; an empty list restores the defaults.
+  void setQuickMessages(List<String> messages) {
+    final cleaned = [
+      for (final message in messages)
+        if (message.trim().isNotEmpty) message.trim(),
+    ];
+    _quickMessages = cleaned.isEmpty
+        ? SettingsStore.defaultQuickMessages
+        : cleaned;
+    unawaited(settings.setQuickMessages(_quickMessages));
+    _notify();
+  }
 
   /// Full screen: the Android status and navigation bars are hidden and
   /// appear for a moment after a swipe from the edge.
@@ -1094,10 +1131,17 @@ class TacticalController extends ChangeNotifier {
 
   // --- Own position ----------------------------------------------------------
 
+  /// Below this speed the GPS course is noise.
+  static const _minCourseSpeedMps = 1.5;
+
   void _applySelfFix(LocationFix fix) {
     final selfIndex = _nodes.indexWhere((node) => node.isSelf);
     if (selfIndex == -1) {
       return;
+    }
+    final heading = fix.headingDeg;
+    if (heading != null && (fix.speedMps ?? 0) >= _minCourseSpeedMps) {
+      _courseDeg = heading % 360;
     }
     _nodes[selfIndex] = _nodes[selfIndex].copyWith(
       latitude: fix.latitude,

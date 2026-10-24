@@ -60,6 +60,29 @@ class SettingsStore {
   Future<void> setHideSystemBars(bool value) =>
       _set((prefs) => prefs.setBool('${prefix}hideSystemBars', value));
 
+  /// Map turned so the direction of travel points up (default off).
+  Future<bool> mapHeadingUp() async =>
+      await _get((prefs) => prefs.getBool('${prefix}mapHeadingUp')) ?? false;
+
+  Future<void> setMapHeadingUp(bool value) =>
+      _set((prefs) => prefs.setBool('${prefix}mapHeadingUp', value));
+
+  static const defaultQuickMessages = [
+    'PŘESUN',
+    'ZASTAVENÍ',
+    'BEZ ZMĚN',
+    'POTŘEBUJI PODPORU',
+    'NÁVRAT',
+  ];
+
+  /// One-tap message templates for the Messages tab.
+  Future<List<String>> quickMessages() async =>
+      await _get((prefs) => prefs.getStringList('${prefix}quickMessages')) ??
+      defaultQuickMessages;
+
+  Future<void> setQuickMessages(List<String> value) =>
+      _set((prefs) => prefs.setStringList('${prefix}quickMessages', value));
+
   /// Last communication group chosen by [userName].
   Future<String?> groupFor(String userName) =>
       _get((prefs) => prefs.getString('${prefix}group.$userName'));

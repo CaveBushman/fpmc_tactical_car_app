@@ -36,6 +36,8 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Editing points: the pencil on a mission point changes its type and note; the code and position stay, so re-sending it replaces the point on teammates' maps.
 - Team trails: each teammate's positions over the last 30 minutes (a point per 10 m of movement, LoRa and internet alike) are drawn as faint dotted blue lines on the map and in car mode.
 - Ruler: the ruler button on the map switches taps to adding points; the panel shows the last segment (distance, azimuth) and the total. "Od mé pozice" starts at your position, "Zpět" removes the last point.
+- Heading up: the compass button (top right of the map, also in car mode) turns the map so the direction of travel points up while it follows your position; the GPS course is used above 1.5 m/s and kept while stopped. The own arrow always shows the course. Panning the map returns it to north up until you recenter.
+- Quick messages: one-tap templates above the reports on the Messages tab, sent to the selected group. Edit them in System → Nastavení → Rychlé zprávy (one per line; empty restores the defaults).
 - Car mode screen (car icon in the app bar): map, nearest target, last message, OK / NA POZICI / SOS and a large hold-to-talk button; keeps the display on.
 - Android Auto: POI screen with the nearest team members and mission points on the car map (tap to navigate), and incoming team messages as car-readable notifications with voice reply.
 - Adaptive portrait and landscape layouts.

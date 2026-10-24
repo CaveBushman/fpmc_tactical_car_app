@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -41,11 +43,19 @@ class MapPage extends StatefulWidget {
     this.onNavigate,
     this.onClearNavTarget,
     this.peerTrails = const {},
+    this.courseDeg,
+    this.headingUp = false,
+    this.onHeadingUpChanged,
     super.key,
   });
 
   /// Teammates' recent positions by node number.
   final Map<int, List<LatLng>> peerTrails;
+
+  /// Own direction of travel (GPS course), null before moving.
+  final double? courseDeg;
+  final bool headingUp;
+  final ValueChanged<bool>? onHeadingUpChanged;
 
   final List<MeshNode> nodes;
   final List<TacticalWaypoint> waypoints;
@@ -177,6 +187,9 @@ class _MapPageState extends State<MapPage> {
                 focus: _focus,
                 onEnterCoordinates: () => _enterCoordinates(self.latLng),
                 peerTrails: widget.peerTrails,
+                courseDeg: widget.courseDeg,
+                headingUp: widget.headingUp,
+                onHeadingUpChanged: widget.onHeadingUpChanged,
                 measure: _measure ?? const [],
                 measuring: _measure != null,
                 onToggleMeasure: () => setState(() {
@@ -492,8 +505,21 @@ class MeshMap extends StatefulWidget {
     this.measure = const [],
     this.measuring = false,
     this.onToggleMeasure,
+    this.courseDeg,
+    this.headingUp = false,
+    this.onHeadingUpChanged,
     super.key,
   });
+
+  /// Own direction of travel; turns the self arrow (and the map when
+  /// [headingUp]).
+  final double? courseDeg;
+
+  /// Direction of travel up instead of north up, while following self.
+  final bool headingUp;
+
+  /// Shows the compass button that switches [headingUp].
+  final ValueChanged<bool>? onHeadingUpChanged;
 
   /// Teammates' recent positions, drawn as faint dotted lines.
   final Map<int, List<LatLng>> peerTrails;
@@ -549,6 +575,7 @@ class _MeshMapState extends State<MeshMap> {
   bool _followSelf = true;
   LatLng? _lastSelfPoint;
   LatLng? _lastFocus;
+  double _rotation = 0;
 
   @override
   void dispose() {
@@ -581,6 +608,20 @@ class _MeshMapState extends State<MeshMap> {
           }
         });
       }
+    }
+    // Heading up only while following our own position; looking around
+    // the map (or north-up mode) keeps north up.
+    final course = widget.courseDeg;
+    final rotation = widget.headingUp && _followSelf && course != null
+        ? -course
+        : 0.0;
+    if (rotation != _rotation) {
+      _rotation = rotation;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _mapReady) {
+          _mapController.rotate(rotation);
+        }
+      });
     }
     final focus = widget.focus;
     if (focus != null && focus != _lastFocus) {
@@ -715,6 +756,8 @@ class _MeshMapState extends State<MeshMap> {
               ],
             ),
             MarkerLayer(
+              // Labels stay upright when the map is turned.
+              rotate: true,
               markers: [
                 for (final waypoint in waypoints)
                   Marker(
@@ -728,7 +771,18 @@ class _MeshMapState extends State<MeshMap> {
                     point: node.latLng,
                     width: 92,
                     height: 58,
-                    child: MapNodeMarker(node: node),
+                    child: node.isSelf
+                        ? Builder(
+                            // Arrow relative to the screen: course plus the
+                            // map's own rotation.
+                            builder: (context) => MapNodeMarker(
+                              node: node,
+                              arrowDeg: course == null
+                                  ? null
+                                  : course + MapCamera.of(context).rotation,
+                            ),
+                          )
+                        : MapNodeMarker(node: node),
                   ),
               ],
             ),
@@ -740,6 +794,32 @@ class _MeshMapState extends State<MeshMap> {
             ),
           ],
         ),
+        if (widget.onHeadingUpChanged != null)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: IconButton.filled(
+              key: const ValueKey('heading-up'),
+              tooltip: widget.headingUp
+                  ? 'Směr jízdy nahoře (klepni pro sever)'
+                  : 'Sever nahoře (klepni pro směr jízdy)',
+              onPressed: () => widget.onHeadingUpChanged!(!widget.headingUp),
+              style: IconButton.styleFrom(
+                backgroundColor: widget.headingUp
+                    ? rangerGreen
+                    : Colors.black.withValues(alpha: 0.76),
+                foregroundColor: widget.headingUp ? Colors.white : sand,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              // The needle points to north on screen.
+              icon: Transform.rotate(
+                angle: rotation * math.pi / 180,
+                child: const Icon(Icons.navigation),
+              ),
+            ),
+          ),
         if (widget.onToggleMeasure != null)
           Positioned(
             left: 12,
@@ -838,9 +918,12 @@ Widget _tacticalTileBuilder(
 }
 
 class MapNodeMarker extends StatelessWidget {
-  const MapNodeMarker({required this.node, super.key});
+  const MapNodeMarker({required this.node, this.arrowDeg, super.key});
 
   final MeshNode node;
+
+  /// Self only: direction of travel on screen (0 = up); null = no course.
+  final double? arrowDeg;
 
   @override
   Widget build(BuildContext context) {
@@ -864,7 +947,14 @@ class MapNodeMarker extends StatelessWidget {
             ],
           ),
           child: node.isSelf
-              ? const Icon(Icons.navigation, size: 13, color: Colors.black)
+              ? Transform.rotate(
+                  angle: (arrowDeg ?? 0) * math.pi / 180,
+                  child: const Icon(
+                    Icons.navigation,
+                    size: 13,
+                    color: Colors.black,
+                  ),
+                )
               : null,
         ),
         const SizedBox(height: 3),

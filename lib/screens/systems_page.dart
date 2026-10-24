@@ -33,6 +33,8 @@ class SystemsPage extends StatelessWidget {
     this.onDangerAlertsChanged,
     this.hideSystemBars = true,
     this.onHideSystemBarsChanged,
+    this.quickMessages = const [],
+    this.onQuickMessagesChanged,
     this.sharePositionToMesh = true,
     this.onSharePositionToMeshChanged,
     this.trackPoints = 0,
@@ -71,6 +73,8 @@ class SystemsPage extends StatelessWidget {
   final ValueChanged<bool>? onDangerAlertsChanged;
   final bool hideSystemBars;
   final ValueChanged<bool>? onHideSystemBarsChanged;
+  final List<String> quickMessages;
+  final ValueChanged<List<String>>? onQuickMessagesChanged;
   final bool sharePositionToMesh;
   final ValueChanged<bool>? onSharePositionToMeshChanged;
   final int trackPoints;
@@ -178,6 +182,27 @@ class SystemsPage extends StatelessWidget {
               label: 'Aktuálně',
               value: '${(fontScale * 100).round()} %',
             ),
+            if (onQuickMessagesChanged != null)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.bolt),
+                title: const Text('Rychlé zprávy'),
+                subtitle: Text(
+                  quickMessages.join(' · '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: const Icon(Icons.edit_outlined),
+                onTap: () async {
+                  final edited = await showDialog<List<String>>(
+                    context: context,
+                    builder: (_) => QuickMessagesDialog(initial: quickMessages),
+                  );
+                  if (edited != null) {
+                    onQuickMessagesChanged!(edited);
+                  }
+                },
+              ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: hideSystemBars,
@@ -531,5 +556,57 @@ class AboutSection extends StatelessWidget {
         buildNumber: '?',
       );
     }
+  }
+}
+
+/// Edits the one-tap message templates, one per line.
+class QuickMessagesDialog extends StatefulWidget {
+  const QuickMessagesDialog({required this.initial, super.key});
+
+  final List<String> initial;
+
+  @override
+  State<QuickMessagesDialog> createState() => _QuickMessagesDialogState();
+}
+
+class _QuickMessagesDialogState extends State<QuickMessagesDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial.join('\n'),
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: panelGreen,
+      title: const Text('Rychlé zprávy'),
+      content: TextField(
+        key: const ValueKey('quick-messages-input'),
+        controller: _controller,
+        minLines: 4,
+        maxLines: 10,
+        textCapitalization: TextCapitalization.characters,
+        decoration: const InputDecoration(
+          helperText: 'Jedna zpráva na řádek; prázdné = výchozí',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Zrušit'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.of(context).pop(_controller.text.split('\n')),
+          child: const Text('Uložit'),
+        ),
+      ],
+    );
   }
 }

@@ -73,6 +73,9 @@ class _CarModeScreenState extends State<CarModeScreen> {
               showGrid: controller.mgrsGrid,
               navTarget: controller.navTarget?.position,
               peerTrails: controller.peerTrails,
+              courseDeg: controller.courseDeg,
+              headingUp: controller.mapHeadingUp,
+              onHeadingUpChanged: controller.setMapHeadingUp,
             );
             final panel = Column(
               children: [
