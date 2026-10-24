@@ -173,6 +173,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     );
     _controller.addListener(_syncNightMode);
     _controller.addListener(_alertOnSos);
+    _controller.addListener(_alertOnDanger);
     _offlineMaps = widget.offlineMaps ?? OfflineMapsController();
     unawaited(_offlineMaps.init());
     _noticeSubscription = _controller.notices.listen((message) {
@@ -199,6 +200,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_syncNightMode);
     _controller.removeListener(_alertOnSos);
+    _controller.removeListener(_alertOnDanger);
     unawaited(_noticeSubscription.cancel());
     _controller.dispose();
     _offlineMaps.dispose();
@@ -278,6 +280,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         onMgrsGridChanged: controller.setMgrsGrid,
         batterySaver: controller.batterySaver,
         onBatterySaverChanged: controller.setBatterySaver,
+        dangerAlerts: controller.dangerAlerts,
+        onDangerAlertsChanged: controller.setDangerAlerts,
         sharePositionToMesh: controller.sharePositionToMesh,
         onSharePositionToMeshChanged: controller.setSharePositionToMesh,
         trackPoints: controller.track.length,
@@ -363,6 +367,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
                 onCancelOwn: () => unawaited(controller.stopSos()),
                 onAcknowledge: (alert) =>
                     unawaited(controller.acknowledgeSos(alert)),
+              ),
+              DangerBanners(
+                warnings: controller.dangerWarnings,
+                onDismiss: controller.dismissDanger,
               ),
               Expanded(
                 child: LayoutBuilder(
@@ -517,6 +525,24 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       }
     }
     if (fresh) {
+      unawaited(HapticFeedback.vibrate());
+    }
+  }
+
+  final Set<String> _seenDanger = {};
+
+  /// Vibrates once per approach to a DANGER point.
+  void _alertOnDanger() {
+    var fresh = false;
+    for (final warning in _controller.dangerWarnings) {
+      if (_seenDanger.add(
+        '${warning.waypoint.code}@${warning.enteredAt.microsecondsSinceEpoch}',
+      )) {
+        fresh = true;
+      }
+    }
+    if (fresh) {
+      unawaited(HapticFeedback.heavyImpact());
       unawaited(HapticFeedback.vibrate());
     }
   }

@@ -80,6 +80,10 @@ class _CarModeScreenState extends State<CarModeScreen> {
                   onAcknowledge: (alert) =>
                       unawaited(controller.acknowledgeSos(alert)),
                 ),
+                DangerBanners(
+                  warnings: controller.dangerWarnings,
+                  onDismiss: controller.dismissDanger,
+                ),
                 Expanded(child: _CarPanel(controller: controller)),
               ],
             );

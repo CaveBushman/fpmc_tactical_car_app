@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tactical_car_app/app.dart';
+import 'package:tactical_car_app/screens/systems_page.dart';
 
 import 'support/fakes.dart';
 
@@ -34,6 +35,17 @@ void main() {
     expect(nightFilter, findsNothing);
 
     await tester.tap(find.text('Systém'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Noční režim'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(SystemsPage),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Noční režim'));
     await tester.pumpAndSettle();

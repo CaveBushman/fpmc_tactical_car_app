@@ -343,6 +343,50 @@ void main() {
     expect(controller.unreadTotal, 0);
   });
 
+  test('warns once when approaching a DANGER point', () async {
+    await controller.login('operator', 'operator-2026');
+    final notices = <String>[];
+    final subscription = controller.notices.listen(notices.add);
+    addTearDown(subscription.cancel);
+    LocationFix at(double lat) => LocationFix(
+      latitude: lat,
+      longitude: 15.5,
+      altitudeM: 300,
+      accuracyM: 5,
+      timestamp: DateTime.now(),
+    );
+
+    location.emit(at(49.0));
+    await pumpEventQueue();
+    controller.addWaypoint(
+      type: TacticalWaypointType.danger,
+      latitude: 49.01,
+      longitude: 15.5,
+      code: 'MINA',
+    );
+    expect(controller.dangerWarnings, isEmpty); // 1.1 km away
+
+    location.emit(at(49.008)); // ~220 m
+    await pumpEventQueue();
+    expect(controller.dangerWarnings.single.waypoint.code, 'MINA');
+    expect(notices.where((n) => n.startsWith('POZOR: MINA')), hasLength(1));
+
+    location.emit(at(49.0085));
+    await pumpEventQueue();
+    expect(notices.where((n) => n.startsWith('POZOR')), hasLength(1));
+
+    controller.dismissDanger(controller.dangerWarnings.single);
+    expect(controller.dangerWarnings, isEmpty);
+
+    controller.setDangerAlerts(false);
+    location.emit(at(49.0));
+    await pumpEventQueue();
+    location.emit(at(49.009));
+    await pumpEventQueue();
+    expect(controller.dangerWarnings, isEmpty);
+    expect(notices.where((n) => n.startsWith('POZOR')), hasLength(1));
+  });
+
   test('CONTACT reports become DANGER points for sender and receivers', () async {
     await controller.login('operator', 'operator-2026');
     final self = controller.selfNode;

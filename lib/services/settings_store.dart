@@ -46,6 +46,13 @@ class SettingsStore {
   Future<void> setBatterySaver(bool value) =>
       _set((prefs) => prefs.setBool('${prefix}batterySaver', value));
 
+  /// Warn near DANGER points (default on).
+  Future<bool> dangerAlerts() async =>
+      await _get((prefs) => prefs.getBool('${prefix}dangerAlerts')) ?? true;
+
+  Future<void> setDangerAlerts(bool value) =>
+      _set((prefs) => prefs.setBool('${prefix}dangerAlerts', value));
+
   /// Last communication group chosen by [userName].
   Future<String?> groupFor(String userName) =>
       _get((prefs) => prefs.getString('${prefix}group.$userName'));

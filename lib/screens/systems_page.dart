@@ -29,6 +29,8 @@ class SystemsPage extends StatelessWidget {
     this.onMgrsGridChanged,
     this.batterySaver = false,
     this.onBatterySaverChanged,
+    this.dangerAlerts = true,
+    this.onDangerAlertsChanged,
     this.sharePositionToMesh = true,
     this.onSharePositionToMeshChanged,
     this.trackPoints = 0,
@@ -63,6 +65,8 @@ class SystemsPage extends StatelessWidget {
   final ValueChanged<bool>? onMgrsGridChanged;
   final bool batterySaver;
   final ValueChanged<bool>? onBatterySaverChanged;
+  final bool dangerAlerts;
+  final ValueChanged<bool>? onDangerAlertsChanged;
   final bool sharePositionToMesh;
   final ValueChanged<bool>? onSharePositionToMeshChanged;
   final int trackPoints;
@@ -177,6 +181,14 @@ class SystemsPage extends StatelessWidget {
               secondary: const Icon(Icons.grid_4x4),
               title: const Text('Mřížka MGRS na mapě'),
               subtitle: const Text('1 km / 10 km / 100 km podle přiblížení'),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: dangerAlerts,
+              onChanged: onDangerAlertsChanged,
+              secondary: const Icon(Icons.dangerous_outlined),
+              title: const Text('Varovat u nebezpečí'),
+              subtitle: const Text('Pruh a vibrace do 300 m od bodu DANGER'),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../controllers/danger_proximity.dart';
 import '../models/sos.dart';
 import '../theme.dart';
 
@@ -75,6 +76,43 @@ class SosBanners extends StatelessWidget {
             ].join(' · '),
             actionLabel: 'Beru',
             onAction: () => onAcknowledge(alert),
+          ),
+      ],
+    );
+  }
+}
+
+/// One red bar per DANGER point we are close to, with "Beru" to hide it.
+class DangerBanners extends StatelessWidget {
+  const DangerBanners({
+    required this.warnings,
+    required this.onDismiss,
+    super.key,
+  });
+
+  final List<DangerWarning> warnings;
+  final ValueChanged<DangerWarning> onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    if (warnings.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final warning in warnings)
+          _Banner(
+            key: ValueKey('danger-${warning.waypoint.code}'),
+            icon: Icons.dangerous,
+            title: 'NEBEZPEČÍ ${warning.waypoint.code}',
+            subtitle: [
+              '${warning.distanceM.round()} m',
+              'AZ ${warning.bearingDeg.round()}°',
+              if (warning.waypoint.note.isNotEmpty) warning.waypoint.note,
+            ].join(' · '),
+            actionLabel: 'Beru',
+            onAction: () => onDismiss(warning),
           ),
       ],
     );

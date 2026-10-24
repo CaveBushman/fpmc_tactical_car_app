@@ -18,6 +18,7 @@ import '../services/native_bridges.dart';
 import '../services/settings_store.dart';
 import '../services/ptt/livekit_voice_transport.dart';
 import '../services/ptt/voice_transport.dart';
+import 'danger_proximity.dart';
 import 'mission_recorder.dart';
 import 'ptt_controller.dart';
 import 'session_keeper.dart';
@@ -124,6 +125,7 @@ class TacticalController extends ChangeNotifier {
   final NativePttBridge _nativePtt;
   final CarBridge _carBridge;
   final MissionRecorder _mission;
+  final DangerProximity _danger = DangerProximity();
   late final SessionKeeper _sessionKeeper;
   late final SosCoordinator _sos;
   final SettingsStore settings;
@@ -361,6 +363,7 @@ class TacticalController extends ChangeNotifier {
 
   void _resetOperationalData() {
     _unread.clear();
+    _danger.reset();
     _sos.reset();
     _mission.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
@@ -385,6 +388,7 @@ class TacticalController extends ChangeNotifier {
     _sharePositionToMesh = true;
     _mgrsGrid = true;
     _batterySaver = false;
+    _dangerAlerts = true;
     unawaited(_locationService.setPowerSaving(false));
     unawaited(_nativePtt.setVolumeKeyPtt(false));
     _notify();
@@ -433,6 +437,7 @@ class TacticalController extends ChangeNotifier {
     _sharePositionToMesh = await settings.sharePositionToMesh();
     _mgrsGrid = await settings.mgrsGrid();
     final batterySaver = await settings.batterySaver();
+    _dangerAlerts = await settings.dangerAlerts();
     if (_disposed) {
       return;
     }
@@ -496,6 +501,43 @@ class TacticalController extends ChangeNotifier {
     unawaited(settings.setBatterySaver(enabled));
     unawaited(_locationService.setPowerSaving(enabled));
     _notify();
+  }
+
+  bool _dangerAlerts = true;
+
+  /// Warn (banner + vibration) within 300 m of a DANGER point.
+  bool get dangerAlerts => _dangerAlerts;
+
+  void setDangerAlerts(bool enabled) {
+    _dangerAlerts = enabled;
+    unawaited(settings.setDangerAlerts(enabled));
+    _notify();
+  }
+
+  /// DANGER points we are close to, nearest first.
+  List<DangerWarning> get dangerWarnings =>
+      _dangerAlerts && _session != null ? _danger.warnings : const [];
+
+  /// "Beru": hides the warning until we leave the point and come back.
+  void dismissDanger(DangerWarning warning) {
+    _danger.dismiss(warning.waypoint.code);
+    _notify();
+  }
+
+  /// Runs before every notify, so position and point changes both count.
+  void _checkDangers() {
+    if (!_dangerAlerts || _session == null) {
+      _danger.reset();
+      return;
+    }
+    final entered = _danger.update(selfNode.latLng, _waypoints);
+    for (final warning in entered) {
+      _notice(
+        'POZOR: ${warning.waypoint.code} '
+        '${warning.distanceM.round()} m, '
+        'AZ ${warning.bearingDeg.round()}°',
+      );
+    }
   }
 
   /// MGRS/UTM grid lines on the map.
@@ -1733,6 +1775,7 @@ class TacticalController extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) {
+      _checkDangers();
       _syncCarTargets();
       notifyListeners();
     }
