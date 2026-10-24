@@ -92,6 +92,12 @@ class _CarModeScreenState extends State<CarModeScreen> {
                   onAcknowledge: controller.acknowledgeStatus,
                   onNavigate: controller.navigateToMember,
                 ),
+                LostContactBanners(
+                  contacts: controller.lostContacts,
+                  onAcknowledge: controller.acknowledgeLostContact,
+                  onNavigate: (contact) =>
+                      controller.navigateTo(NavTarget.node(contact.nodeNum)),
+                ),
                 DangerBanners(
                   warnings: controller.dangerWarnings,
                   onDismiss: controller.dismissDanger,

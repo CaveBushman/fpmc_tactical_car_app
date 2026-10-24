@@ -51,6 +51,9 @@ class MessagesPage extends StatefulWidget {
 class _MessagesPageState extends State<MessagesPage> {
   final TextEditingController _textController = TextEditingController();
   final TextEditingController _nodeSearchController = TextEditingController();
+  final TextEditingController _messageSearchController =
+      TextEditingController();
+  bool _priorityOnly = false;
   bool _directMode = false;
   int _selectedNodeIndex = 0;
 
@@ -62,6 +65,11 @@ class _MessagesPageState extends State<MessagesPage> {
         return;
       }
       setState(() => _selectedNodeIndex = 0);
+    });
+    _messageSearchController.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
     });
   }
 
@@ -77,6 +85,7 @@ class _MessagesPageState extends State<MessagesPage> {
   void dispose() {
     _textController.dispose();
     _nodeSearchController.dispose();
+    _messageSearchController.dispose();
     super.dispose();
   }
 
@@ -89,8 +98,14 @@ class _MessagesPageState extends State<MessagesPage> {
   @override
   Widget build(BuildContext context) {
     final selectedGroup = widget.groups[widget.selectedGroupIndex];
+    final query = _messageSearchController.text;
     final filteredMessages = widget.messages
-        .where((message) => message.groupId == selectedGroup.id)
+        .where(
+          (message) =>
+              message.groupId == selectedGroup.id &&
+              (!_priorityOnly || message.priority) &&
+              message.matchesSearch(query),
+        )
         .toList();
     final filteredDirectNodes = _filteredDirectNodes;
     final header = <Widget>[
@@ -241,6 +256,38 @@ class _MessagesPageState extends State<MessagesPage> {
           onPressed: _showSitrepReportSheet,
         ),
       ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: TacticalSearchField(
+                key: const ValueKey('message-search'),
+                controller: _messageSearchController,
+                label: 'Hledat ve zprávách',
+                hint: 'Text, odesílatel',
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilterChip(
+              key: const ValueKey('priority-only'),
+              avatar: const Icon(Icons.priority_high, size: 16),
+              label: const Text('Prioritní'),
+              selected: _priorityOnly,
+              onSelected: (value) => setState(() => _priorityOnly = value),
+            ),
+          ],
+        ),
+      ),
+      if (filteredMessages.isEmpty &&
+          (query.trim().isNotEmpty || _priorityOnly))
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+          child: Text(
+            'Žádná zpráva neodpovídá hledání.',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+          ),
+        ),
     ];
     Widget messageCard(MeshMessage message) {
       final onRetry = widget.onRetry;

@@ -20,6 +20,7 @@ import '../services/native_bridges.dart';
 import '../services/settings_store.dart';
 import '../services/ptt/livekit_voice_transport.dart';
 import '../services/ptt/voice_transport.dart';
+import 'contact_watch.dart';
 import 'danger_proximity.dart';
 import 'member_status_board.dart';
 import 'mission_recorder.dart';
@@ -136,6 +137,27 @@ class TacticalController extends ChangeNotifier {
   final MissionRecorder _mission;
   final DangerProximity _danger = DangerProximity();
   final PeerTrails _peerTrails = PeerTrails();
+  final ContactWatch _contactWatch = ContactWatch();
+
+  /// Alert when a teammate goes LOST.
+  bool get lostContactAlerts => _prefs.lostContactAlerts;
+
+  void setLostContactAlerts(bool enabled) {
+    _prefs.lostContactAlerts = enabled;
+    _notify();
+  }
+
+  /// Teammates heard this session who went silent, most recent first.
+  List<LostContact> get lostContacts =>
+      _prefs.lostContactAlerts && _session != null
+      ? _contactWatch.alerts
+      : const [];
+
+  /// "Beru" on a lost-contact alert.
+  void acknowledgeLostContact(LostContact contact) {
+    _contactWatch.acknowledge(contact.nodeNum);
+    _notify();
+  }
 
   /// Teammates' positions over the last 30 minutes, by node number.
   Map<int, List<LatLng>> get peerTrails => _peerTrails.trails;
@@ -378,6 +400,7 @@ class TacticalController extends ChangeNotifier {
     _danger.reset();
     _navTarget = null;
     _peerTrails.clear();
+    _contactWatch.clear();
     _courseDeg = null;
     _statuses.clear();
     _sos.reset();
@@ -1948,6 +1971,7 @@ class TacticalController extends ChangeNotifier {
       _checkNavTarget();
       if (_session != null) {
         _peerTrails.update(nodes);
+        _contactWatch.update(nodes);
       }
       _syncCarTargets();
       notifyListeners();

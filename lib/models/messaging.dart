@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'mesh_node.dart';
+import 'search_text.dart';
 
 enum MessageDelivery {
   /// Incoming message.
@@ -57,6 +58,14 @@ class MeshMessage {
 
   /// Destination node of an outgoing direct message (null = group).
   final int? toNode;
+
+  /// Text, sender or recipient contains [query] (case and diacritics
+  /// ignored); an empty query matches everything.
+  bool matchesSearch(String query) {
+    final folded = foldForSearch(query);
+    return folded.isEmpty ||
+        foldForSearch('$sender $body ${targetLabel ?? ''}').contains(folded);
+  }
 
   bool get canRetry =>
       delivery == MessageDelivery.notSent || delivery == MessageDelivery.failed;

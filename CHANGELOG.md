@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Lost contact alerts with navigation to the last known position.
+- Message search (case and diacritics ignored) and a priority filter.
+- Layout fixes for the team phone found by screen-by-screen audits
+  (Messages in landscape, map cards and buttons, forms with the keyboard,
+  navigation rail).
+
 ## 1.1.0 (build 2) – 2026-10-24
 
 ### Navigation and map

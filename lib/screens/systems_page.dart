@@ -33,6 +33,8 @@ class SystemsPage extends StatelessWidget {
     this.onBatterySaverChanged,
     this.dangerAlerts = true,
     this.onDangerAlertsChanged,
+    this.lostContactAlerts = true,
+    this.onLostContactAlertsChanged,
     this.hideSystemBars = true,
     this.onHideSystemBarsChanged,
     this.quickMessages = const [],
@@ -75,6 +77,8 @@ class SystemsPage extends StatelessWidget {
   final ValueChanged<bool>? onBatterySaverChanged;
   final bool dangerAlerts;
   final ValueChanged<bool>? onDangerAlertsChanged;
+  final bool lostContactAlerts;
+  final ValueChanged<bool>? onLostContactAlertsChanged;
   final bool hideSystemBars;
   final ValueChanged<bool>? onHideSystemBarsChanged;
   final List<String> quickMessages;
@@ -224,6 +228,16 @@ class SystemsPage extends StatelessWidget {
               secondary: const Icon(Icons.grid_4x4),
               title: const Text('Mřížka MGRS na mapě'),
               subtitle: const Text('1 km / 10 km / 100 km podle přiblížení'),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: lostContactAlerts,
+              onChanged: onLostContactAlertsChanged,
+              secondary: const Icon(Icons.portable_wifi_off),
+              title: const Text('Hlásit ztrátu spojení'),
+              subtitle: const Text(
+                'Pruh a vibrace, když se člen týmu 15 min neozve',
+              ),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

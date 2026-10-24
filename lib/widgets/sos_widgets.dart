@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../controllers/contact_watch.dart';
 import '../controllers/danger_proximity.dart';
 import '../models/member_status.dart';
 import '../models/sos.dart';
@@ -120,6 +121,46 @@ class MemberStatusBanners extends StatelessWidget {
                 : () => onNavigate!(alert.callSign),
             actionLabel: 'Beru',
             onAction: () => onAcknowledge(alert.callSign),
+          ),
+      ],
+    );
+  }
+}
+
+/// One bar per teammate who went silent, with "Navigovat" to their last
+/// position and "Beru".
+class LostContactBanners extends StatelessWidget {
+  const LostContactBanners({
+    required this.contacts,
+    required this.onAcknowledge,
+    this.onNavigate,
+    super.key,
+  });
+
+  final List<LostContact> contacts;
+  final ValueChanged<LostContact> onAcknowledge;
+  final ValueChanged<LostContact>? onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    if (contacts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final now = DateTime.now();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final contact in contacts)
+          _Banner(
+            key: ValueKey('lost-${contact.nodeNum}'),
+            icon: Icons.portable_wifi_off,
+            title: 'ZTRÁTA SPOJENÍ: ${contact.callSign}',
+            subtitle:
+                'naposledy před ${now.difference(contact.lastSeenAt).inMinutes} min · ${contact.mgrs}',
+            secondaryLabel: onNavigate == null ? null : 'Navigovat',
+            onSecondary: onNavigate == null ? null : () => onNavigate!(contact),
+            actionLabel: 'Beru',
+            onAction: () => onAcknowledge(contact),
           ),
       ],
     );

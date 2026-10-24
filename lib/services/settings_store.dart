@@ -90,6 +90,14 @@ class SettingsStore {
   Future<void> setQuickMessages(List<String> value) =>
       _set((prefs) => prefs.setStringList('${prefix}quickMessages', value));
 
+  /// Alert when a teammate goes LOST (default on).
+  Future<bool> lostContactAlerts() async =>
+      await _get((prefs) => prefs.getBool('${prefix}lostContactAlerts')) ??
+      true;
+
+  Future<void> setLostContactAlerts(bool value) =>
+      _set((prefs) => prefs.setBool('${prefix}lostContactAlerts', value));
+
   /// Last communication group chosen by [userName].
   Future<String?> groupFor(String userName) =>
       _get((prefs) => prefs.getString('${prefix}group.$userName'));

@@ -18,6 +18,7 @@ class UserPreferences {
   bool _mgrsGrid = true;
   bool _batterySaver = false;
   bool _dangerAlerts = true;
+  bool _lostContactAlerts = true;
   bool _hideSystemBars = true;
   bool _mapHeadingUp = false;
   List<String> _quickMessages = SettingsStore.defaultQuickMessages;
@@ -70,6 +71,12 @@ class UserPreferences {
     unawaited(store.setDangerAlerts(value));
   }
 
+  bool get lostContactAlerts => _lostContactAlerts;
+  set lostContactAlerts(bool value) {
+    _lostContactAlerts = value;
+    unawaited(store.setLostContactAlerts(value));
+  }
+
   bool get hideSystemBars => _hideSystemBars;
   set hideSystemBars(bool value) {
     _hideSystemBars = value;
@@ -97,6 +104,7 @@ class UserPreferences {
     _mgrsGrid = await store.mgrsGrid();
     _batterySaver = await store.batterySaver();
     _dangerAlerts = await store.dangerAlerts();
+    _lostContactAlerts = await store.lostContactAlerts();
     _hideSystemBars = await store.hideSystemBars();
     _mapHeadingUp = await store.mapHeadingUp();
     _quickMessages = List.unmodifiable(await store.quickMessages());
@@ -111,6 +119,7 @@ class UserPreferences {
     _mgrsGrid = true;
     _batterySaver = false;
     _dangerAlerts = true;
+    _lostContactAlerts = true;
     _hideSystemBars = true;
     _mapHeadingUp = false;
     _quickMessages = SettingsStore.defaultQuickMessages;

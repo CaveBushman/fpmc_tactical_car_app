@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'controllers/offline_maps_controller.dart';
 import 'controllers/tactical_controller.dart';
+import 'models/navigation.dart';
 import 'models/track.dart';
 import 'screens/car_mode_screen.dart';
 import 'screens/login_screen.dart';
@@ -177,6 +178,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     _controller.addListener(_alertOnSos);
     _controller.addListener(_alertOnDanger);
     _controller.addListener(_alertOnStatus);
+    _controller.addListener(_alertOnLostContact);
     _offlineMaps = widget.offlineMaps ?? OfflineMapsController();
     unawaited(_offlineMaps.init());
     _noticeSubscription = _controller.notices.listen((message) {
@@ -228,6 +230,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     _controller.removeListener(_alertOnSos);
     _controller.removeListener(_alertOnDanger);
     _controller.removeListener(_alertOnStatus);
+    _controller.removeListener(_alertOnLostContact);
     unawaited(_noticeSubscription.cancel());
     _controller.dispose();
     _offlineMaps.dispose();
@@ -333,6 +336,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         onBatterySaverChanged: controller.setBatterySaver,
         dangerAlerts: controller.dangerAlerts,
         onDangerAlertsChanged: controller.setDangerAlerts,
+        lostContactAlerts: controller.lostContactAlerts,
+        onLostContactAlertsChanged: controller.setLostContactAlerts,
         hideSystemBars: controller.hideSystemBars,
         onHideSystemBarsChanged: controller.setHideSystemBars,
         quickMessages: controller.quickMessages,
@@ -427,6 +432,12 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
                 alerts: controller.urgentStatuses,
                 onAcknowledge: controller.acknowledgeStatus,
                 onNavigate: controller.navigateToMember,
+              ),
+              LostContactBanners(
+                contacts: controller.lostContacts,
+                onAcknowledge: controller.acknowledgeLostContact,
+                onNavigate: (contact) =>
+                    controller.navigateTo(NavTarget.node(contact.nodeNum)),
               ),
               DangerBanners(
                 warnings: controller.dangerWarnings,
@@ -582,6 +593,23 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     for (final alert in _controller.activeSosAlerts) {
       if (_seenSos.add(
         '${alert.callSign}@${alert.lastAt.millisecondsSinceEpoch}',
+      )) {
+        fresh = true;
+      }
+    }
+    if (fresh) {
+      unawaited(HapticFeedback.vibrate());
+    }
+  }
+
+  final Set<String> _seenLost = {};
+
+  /// Vibrates once whenever a teammate goes silent.
+  void _alertOnLostContact() {
+    var fresh = false;
+    for (final contact in _controller.lostContacts) {
+      if (_seenLost.add(
+        '${contact.nodeNum}@${contact.lastSeenAt.microsecondsSinceEpoch}',
       )) {
         fresh = true;
       }
