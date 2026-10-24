@@ -248,6 +248,8 @@ class _AreaNameDialogState extends State<_AreaNameDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      // Scrolls when the keyboard leaves little room (phone in landscape).
+      scrollable: true,
       backgroundColor: panelGreen,
       title: const Text('Název offline oblasti'),
       content: TextField(

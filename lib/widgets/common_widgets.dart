@@ -113,6 +113,19 @@ class TacticalNavigationRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // With the keyboard up on a phone in landscape the rail gets less
+    // height than its four destinations need: let it scroll then.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: IntrinsicHeight(child: _rail()),
+        ),
+      ),
+    );
+  }
+
+  Widget _rail() {
     return NavigationRail(
       backgroundColor: const Color(0xFF171B13),
       indicatorColor: rangerGreen.withValues(alpha: 0.85),

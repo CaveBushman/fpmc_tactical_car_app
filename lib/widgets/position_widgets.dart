@@ -395,6 +395,8 @@ class _CoordinateEntryDialogState extends State<CoordinateEntryDialog> {
     final point = _parsed;
     final typed = _controller.text.trim().isNotEmpty;
     return AlertDialog(
+      // Scrolls when the keyboard leaves little room (phone in landscape).
+      scrollable: true,
       backgroundColor: panelGreen,
       title: const Text('Zadat souřadnice'),
       content: Column(

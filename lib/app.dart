@@ -526,6 +526,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        // Scrolls when the keyboard leaves little room (phone in landscape).
+        scrollable: true,
         backgroundColor: panelGreen,
         title: const Text('Nouzově smazat data'),
         content: Column(
@@ -640,6 +642,8 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        // Scrolls when the keyboard leaves little room (phone in landscape).
+        scrollable: true,
         backgroundColor: panelGreen,
         title: const Text('Odhlásit a smazat data?'),
         content: const Text(

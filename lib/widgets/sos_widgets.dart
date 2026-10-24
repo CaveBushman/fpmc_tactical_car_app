@@ -10,6 +10,8 @@ Future<bool> confirmSosStart(BuildContext context) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
+      // Scrolls when the keyboard leaves little room (phone in landscape).
+      scrollable: true,
       backgroundColor: panelGreen,
       icon: const Icon(Icons.sos, color: dangerRed, size: 40),
       title: const Text('Spustit SOS?'),

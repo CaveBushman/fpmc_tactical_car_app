@@ -597,6 +597,8 @@ class _QuickMessagesDialogState extends State<QuickMessagesDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      // Scrolls when the keyboard leaves little room (phone in landscape).
+      scrollable: true,
       backgroundColor: panelGreen,
       title: const Text('Rychlé zprávy'),
       content: TextField(
