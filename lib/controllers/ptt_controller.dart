@@ -58,6 +58,7 @@ class PttController extends ChangeNotifier {
   final Duration maxClockSkew;
 
   VoiceTransport? _transport;
+  final StreamController<RoomData> _roomData = StreamController.broadcast();
   StreamSubscription<VoiceEvent>? _eventsSubscription;
   Timer? _floorTimer;
   int _joinGeneration = 0;
@@ -82,6 +83,33 @@ class PttController extends ChangeNotifier {
   /// Who is talking now (floor holder, else LiveKit speaker detection).
   String? get speaker =>
       _floorHolder ?? (_speaking.isEmpty ? null : _speaking.first);
+
+  /// Non-floor data from the group room (positions, text).
+  Stream<RoomData> get roomData => _roomData.stream;
+
+  /// Our identity in the current room, null when not joined.
+  String? get identity => _transport == null ? null : _identity;
+
+  /// Whether a real room is joined (demo and errors: false).
+  bool get roomConnected =>
+      _transport != null &&
+      (_status == PttStatus.ready ||
+          _status == PttStatus.transmitting ||
+          _status == PttStatus.receiving);
+
+  /// Sends [data] on [topic] to the group room; false when not connected.
+  Future<bool> sendRoomData(String topic, List<int> data) async {
+    final transport = _transport;
+    if (!roomConnected || transport == null) {
+      return false;
+    }
+    try {
+      await transport.sendData(data, topic: topic);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   bool get canTransmit =>
       _status == PttStatus.ready || _status == PttStatus.transmitting;
@@ -191,13 +219,18 @@ class PttController extends ChangeNotifier {
     _disposed = true;
     _joinGeneration++;
     unawaited(_leaveRoom());
+    unawaited(_roomData.close());
     super.dispose();
   }
 
   void _onEvent(VoiceEvent event) {
     switch (event) {
-      case VoiceDataReceived(:final from, :final data):
-        _onFloorMessage(from, data);
+      case VoiceDataReceived(:final from, :final data, :final topic):
+        if (topic == RoomTopic.floor) {
+          _onFloorMessage(from, data);
+        } else if (!_roomData.isClosed) {
+          _roomData.add(RoomData(from: from, topic: topic, data: data));
+        }
       case VoiceSpeakersChanged(:final identities):
         _speaking = identities;
         _notify();
@@ -312,4 +345,13 @@ class PttController extends ChangeNotifier {
       notifyListeners();
     }
   }
+}
+
+/// A data message from another member of the group room.
+class RoomData {
+  const RoomData({required this.from, required this.topic, required this.data});
+
+  final String from;
+  final String topic;
+  final List<int> data;
 }

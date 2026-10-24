@@ -95,12 +95,30 @@ class NodeCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    node.callSign,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          node.callSign,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      if (node.viaInternet) ...[
+                        const SizedBox(width: 6),
+                        const Tooltip(
+                          message: 'Pozice přes internet',
+                          child: Icon(
+                            Icons.cloud_outlined,
+                            size: 16,
+                            color: blueForce,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(

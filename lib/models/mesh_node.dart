@@ -14,6 +14,7 @@ class MeshNode {
     this.distanceKm = 0,
     this.bearingDeg = 0,
     this.isSelf = false,
+    this.viaInternet = false,
   }) : mgrs = geo.formatMgrs(latitude, longitude);
 
   final int nodeNum;
@@ -34,6 +35,9 @@ class MeshNode {
   final double distanceKm;
   final double bearingDeg;
   final bool isSelf;
+
+  /// Last position came over the internet (group room), not LoRa.
+  final bool viaInternet;
 
   LatLng get latLng => LatLng(latitude, longitude);
 
@@ -91,6 +95,7 @@ class MeshNode {
       'batteryPercent': batteryPercent,
       'lastSeenAt': lastSeenAt.toUtc().toIso8601String(),
       'isSelf': isSelf,
+      'viaInternet': viaInternet,
     };
   }
 
@@ -108,6 +113,7 @@ class MeshNode {
           DateTime.tryParse(json['lastSeenAt']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       isSelf: json['isSelf'] == true,
+      viaInternet: json['viaInternet'] == true,
     );
   }
 
@@ -122,6 +128,7 @@ class MeshNode {
     double? distanceKm,
     double? bearingDeg,
     bool? isSelf,
+    bool? viaInternet,
   }) {
     return MeshNode(
       nodeNum: nodeNum ?? this.nodeNum,
@@ -134,6 +141,7 @@ class MeshNode {
       distanceKm: distanceKm ?? this.distanceKm,
       bearingDeg: bearingDeg ?? this.bearingDeg,
       isSelf: isSelf ?? this.isSelf,
+      viaInternet: viaInternet ?? this.viaInternet,
     );
   }
 

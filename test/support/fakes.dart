@@ -100,9 +100,30 @@ class FakeVoiceTransport implements VoiceTransport {
   }
 
   @override
-  Future<void> sendData(List<int> data) async {
-    sent.add(jsonDecode(utf8.decode(data)) as Map<String, dynamic>);
+  Future<void> sendData(
+    List<int> data, {
+    String topic = RoomTopic.floor,
+  }) async {
+    final message = jsonDecode(utf8.decode(data)) as Map<String, dynamic>;
+    if (topic == RoomTopic.floor) {
+      sent.add(message);
+    } else {
+      sentData.add((topic, message));
+    }
   }
+
+  /// Non-floor data sent to the room: (topic, decoded JSON).
+  final List<(String, Map<String, dynamic>)> sentData = [];
+
+  /// Data message on [topic] as another member would send it.
+  void remoteData(String from, String topic, Map<String, dynamic> message) =>
+      emit(
+        VoiceDataReceived(
+          from: from,
+          topic: topic,
+          data: utf8.encode(jsonEncode(message)),
+        ),
+      );
 
   @override
   Future<void> disconnect() async {}

@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/geo.dart' as geo;
 import '../models/mesh_node.dart';
 import '../models/messaging.dart';
 import '../models/navigation.dart';
@@ -67,6 +69,7 @@ class TacticalController extends ChangeNotifier {
       (error) => _notice('PTT na pozadí nelze spustit ($error).'),
     );
     _carReplySubscription = _carBridge.replies.listen(_onCarReply);
+    _roomDataSubscription = _ptt.roomData.listen(_onRoomData);
     unawaited(_loadSettings());
     _blePacketSubscription = _meshtasticBleService.packets.listen(
       _meshPacketRepository.ingest,
@@ -95,6 +98,10 @@ class TacticalController extends ChangeNotifier {
   late final StreamSubscription<NativePttButton> _nativeButtonSubscription;
   late final StreamSubscription<String> _nativeErrorSubscription;
   late final StreamSubscription<CarReply> _carReplySubscription;
+  late final StreamSubscription<RoomData> _roomDataSubscription;
+  bool _roomWasConnected = false;
+  DateTime? _lastInternetPositionAt;
+  LatLng? _lastInternetPosition;
   bool _appInForeground = true;
   bool _volumeKeyPtt = false;
   String? _lastCarTargets;
@@ -213,6 +220,7 @@ class TacticalController extends ChangeNotifier {
     unawaited(_nativeButtonSubscription.cancel());
     unawaited(_nativeErrorSubscription.cancel());
     unawaited(_carReplySubscription.cancel());
+    unawaited(_roomDataSubscription.cancel());
     if (_lastNativePttStatus != null) {
       unawaited(_nativePtt.hide());
     }
@@ -356,7 +364,212 @@ class TacticalController extends ChangeNotifier {
 
   void _onPttChanged() {
     _syncNativePtt();
+    final connected = _ptt.roomConnected;
+    if (connected && !_roomWasConnected) {
+      // New room (login, group change, reconnect): announce right away.
+      unawaited(_shareInternetPosition(force: true));
+    }
+    _roomWasConnected = connected;
     _notify();
+  }
+
+  // --- Internet fallback (group room data channel) ---------------------------
+
+  /// Own position to the group room, at most every 30 s or after 25 m.
+  Future<void> _shareInternetPosition({bool force = false}) async {
+    if (!_ptt.roomConnected || _session == null) {
+      return;
+    }
+    final self = selfNode;
+    final now = DateTime.now();
+    final last = _lastInternetPosition;
+    final lastAt = _lastInternetPositionAt;
+    if (!force &&
+        last != null &&
+        lastAt != null &&
+        now.difference(lastAt) < const Duration(seconds: 30) &&
+        geo.distanceKm(last, self.latLng) < 0.025) {
+      return;
+    }
+    _lastInternetPosition = self.latLng;
+    _lastInternetPositionAt = now;
+    await _ptt.sendRoomData(
+      RoomTopic.position,
+      utf8.encode(
+        jsonEncode({
+          'v': 1,
+          'callSign': self.callSign,
+          'nodeNum': self.nodeNum,
+          'lat': self.latitude,
+          'lon': self.longitude,
+          'alt': self.altitudeM,
+          'battery': ?self.batteryPercent,
+          'at': now.toUtc().toIso8601String(),
+        }),
+      ),
+    );
+  }
+
+  void _onRoomData(RoomData data) {
+    if (_session == null || data.from == _ptt.identity) {
+      return;
+    }
+    final Map<String, dynamic> message;
+    try {
+      message = jsonDecode(utf8.decode(data.data)) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+    final changed = switch (data.topic) {
+      RoomTopic.position => _applyInternetPosition(data.from, message),
+      RoomTopic.text => _applyInternetText(data.from, message),
+      _ => false,
+    };
+    if (changed) {
+      _notify();
+      unawaited(_persistState());
+    }
+  }
+
+  bool _applyInternetPosition(String from, Map<String, dynamic> message) {
+    final lat = (message['lat'] as num?)?.toDouble();
+    final lon = (message['lon'] as num?)?.toDouble();
+    final at = DateTime.tryParse(message['at']?.toString() ?? '');
+    final now = DateTime.now();
+    if (lat == null ||
+        lon == null ||
+        lat.abs() > 90 ||
+        lon.abs() > 180 ||
+        at == null ||
+        now.difference(at) > const Duration(minutes: 10) ||
+        at.difference(now) > const Duration(seconds: 30)) {
+      return false;
+    }
+    final self = selfNode;
+    final announced = (message['nodeNum'] as num?)?.toInt();
+    // A member with a radio reports its node number, so LoRa and internet
+    // updates merge into one node; otherwise derive a stable local one.
+    var index = announced == null
+        ? -1
+        : _nodes.indexWhere((n) => !n.isSelf && n.nodeNum == announced);
+    final nodeNum = index != -1 ? announced! : _internetNodeNum(from);
+    if (nodeNum == self.nodeNum) {
+      return false;
+    }
+    if (index == -1) {
+      index = _nodes.indexWhere((n) => n.nodeNum == nodeNum);
+    }
+    final existing = index == -1 ? null : _nodes[index];
+    if (existing != null && !existing.lastSeenAt.isBefore(at)) {
+      return false; // we already have a newer fix (e.g. via LoRa)
+    }
+    final callSign = message['callSign']?.toString().trim();
+    final updated = MeshNode(
+      nodeNum: nodeNum,
+      callSign: callSign == null || callSign.isEmpty
+          ? existing?.callSign ?? from
+          : callSign,
+      latitude: lat,
+      longitude: lon,
+      altitudeM: (message['alt'] as num?)?.toInt() ?? existing?.altitudeM ?? 0,
+      batteryPercent:
+          (message['battery'] as num?)?.toInt() ?? existing?.batteryPercent,
+      lastSeenAt: at.toLocal(),
+      viaInternet: true,
+    ).relativeTo(self);
+    if (index == -1) {
+      _nodes.add(updated);
+    } else {
+      _nodes[index] = updated;
+    }
+    return true;
+  }
+
+  /// Stable node number for a member known only by identity (outside the
+  /// range Meshtastic hands out to real radios).
+  static int _internetNodeNum(String identity) {
+    var hash = 0x811C9DC5;
+    for (final unit in utf8.encode(identity)) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xFFFFFFFF;
+    }
+    return 0x7E000000 | (hash & 0x00FFFFFF);
+  }
+
+  /// Team text received over the internet (sender had no radio link).
+  bool _applyInternetText(String from, Map<String, dynamic> message) {
+    final text = message['text']?.toString().trim() ?? '';
+    final id = (message['id'] as num?)?.toInt();
+    final groupId = message['groupId']?.toString();
+    final at = DateTime.tryParse(message['at']?.toString() ?? '');
+    if (text.isEmpty || id == null || at == null) {
+      return false;
+    }
+    // The room belongs to the selected group; never file it elsewhere.
+    final group = selectedGroup;
+    if (groupId != group.id) {
+      return false;
+    }
+    final fromNode = _internetNodeNum(from);
+    if (_messages.any(
+      (m) =>
+          m.delivery == MessageDelivery.received &&
+          m.packetId == id &&
+          m.fromNode == fromNode,
+    )) {
+      return false;
+    }
+    final callSign = message['callSign']?.toString().trim();
+    final sender = callSign == null || callSign.isEmpty ? from : callSign;
+    _applyStructuredText(text, sender: sender);
+    final incoming = MeshMessage(
+      sender: sender,
+      body: text,
+      sentAt: at.toLocal(),
+      groupId: group.id,
+      targetLabel: group.name,
+      priority: message['priority'] == true,
+      packetId: id,
+      fromNode: fromNode,
+      viaInternet: true,
+    );
+    _messages.insert(0, incoming);
+    if (!_appInForeground) {
+      unawaited(
+        _carBridge.notifyMessage(
+          groupId: group.id,
+          groupName: group.name,
+          sender: sender,
+          body: text,
+          sentAt: incoming.sentAt,
+        ),
+      );
+    }
+    return true;
+  }
+
+  /// Sends a group message over the room when no radio is connected.
+  /// Direct messages and other groups' traffic need the radio.
+  Future<bool> _sendViaInternet(MeshMessage message) async {
+    if (meshConnected ||
+        message.toNode != null ||
+        message.groupId != selectedGroup.id ||
+        !_ptt.roomConnected) {
+      return false;
+    }
+    return _ptt.sendRoomData(
+      RoomTopic.text,
+      utf8.encode(
+        jsonEncode({
+          'v': 1,
+          'id': message.packetId,
+          'callSign': message.sender,
+          'groupId': message.groupId,
+          'text': message.body,
+          'priority': message.priority,
+          'at': message.sentAt.toUtc().toIso8601String(),
+        }),
+      ),
+    );
   }
 
   /// Mirrors PTT state into the Android foreground service notification;
@@ -504,6 +717,7 @@ class TacticalController extends ChangeNotifier {
     );
     _replaceNodes(MeshNode.relativeToSelf(_nodes));
     _notify();
+    unawaited(_shareInternetPosition());
 
     // GPS can fire every few metres; persist the last known position at most
     // every 30 s so a restart still opens on a recent fix.
@@ -980,17 +1194,21 @@ class TacticalController extends ChangeNotifier {
     unawaited(_persistState());
 
     var delivery = MessageDelivery.sent;
+    var viaInternet = false;
     try {
       await _meshtasticBleService.writeToRadio(bytes);
     } catch (_) {
-      delivery = MessageDelivery.notSent;
-      _notice('T-Beam není připojen: zprávu lze odeslat znovu ze seznamu.');
+      viaInternet = await _sendViaInternet(message);
+      if (!viaInternet) {
+        delivery = MessageDelivery.notSent;
+        _notice('T-Beam není připojen: zprávu lze odeslat znovu ze seznamu.');
+      }
     }
 
     _replaceOutgoing(
       packetId,
       (current) => current.delivery == MessageDelivery.sending
-          ? current.copyWith(delivery: delivery)
+          ? current.copyWith(delivery: delivery, viaInternet: viaInternet)
           : current,
     );
   }

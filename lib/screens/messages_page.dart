@@ -771,7 +771,7 @@ class MessageCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  message.internetVoice
+                  message.viaInternet
                       ? Icons.cloud_outlined
                       : Icons.settings_input_antenna,
                   size: 16,

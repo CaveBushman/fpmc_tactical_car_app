@@ -13,6 +13,7 @@ Flutter hybrid prototype for a tactical Android/iOS app with Meshtastic position
 - Local and UTC clock.
 - Team list with distance, bearing, battery, and last seen status that ages to STALE/LOST.
 - Message delivery status (sent / delivered / failed) with resend for messages the T-Beam did not take.
+- Internet fallback through the group's PTT room (E2EE data channel): own position is shared every 30 s / 25 m and merged with LoRa nodes (cloud icon for internet-only members); without a connected T-Beam, group messages go over the room instead of failing. Direct messages and other groups still need the radio.
 - Message view with Meshtastic group messages, direct messages, quick actions, and internet PTT system messages.
 - Quick `NA POZICI` message includes full MGRS, latitude, and longitude.
 - Hold-to-talk PTT over a self-hosted LiveKit server with end-to-end encrypted audio, half-duplex floor control (one speaker at a time, "MLUVÍ …" / "OBSAZENO") and per-group rooms. Without `BACKEND_URL` the app runs in demo mode with local accounts and silent PTT.

@@ -31,7 +31,7 @@ class MeshMessage {
     this.targetLabel,
     this.delivery = MessageDelivery.received,
     this.priority = false,
-    this.internetVoice = false,
+    this.viaInternet = false,
     this.packetId,
     this.fromNode,
     this.toNode,
@@ -46,7 +46,9 @@ class MeshMessage {
   final String? targetLabel;
   final MessageDelivery delivery;
   final bool priority;
-  final bool internetVoice;
+
+  /// Arrived or was sent over the internet (group room), not LoRa.
+  final bool viaInternet;
 
   /// Meshtastic packet id and sender node, used to drop duplicate deliveries
   /// and to match routing ACKs to outgoing messages.
@@ -59,7 +61,11 @@ class MeshMessage {
   bool get canRetry =>
       delivery == MessageDelivery.notSent || delivery == MessageDelivery.failed;
 
-  MeshMessage copyWith({MessageDelivery? delivery, int? packetId}) {
+  MeshMessage copyWith({
+    MessageDelivery? delivery,
+    int? packetId,
+    bool? viaInternet,
+  }) {
     return MeshMessage(
       sender: sender,
       body: body,
@@ -68,7 +74,7 @@ class MeshMessage {
       targetLabel: targetLabel,
       delivery: delivery ?? this.delivery,
       priority: priority,
-      internetVoice: internetVoice,
+      viaInternet: viaInternet ?? this.viaInternet,
       packetId: packetId ?? this.packetId,
       fromNode: fromNode,
       toNode: toNode,
@@ -123,7 +129,7 @@ class MeshMessage {
       'targetLabel': targetLabel,
       'delivery': delivery.name,
       'priority': priority,
-      'internetVoice': internetVoice,
+      'viaInternet': viaInternet,
       'packetId': packetId,
       'fromNode': fromNode,
       'toNode': toNode,
@@ -149,7 +155,7 @@ class MeshMessage {
       targetLabel: json['targetLabel']?.toString(),
       delivery: delivery,
       priority: json['priority'] == true,
-      internetVoice: json['internetVoice'] == true,
+      viaInternet: json['viaInternet'] == true || json['internetVoice'] == true,
       packetId: (json['packetId'] as num?)?.toInt(),
       fromNode: (json['fromNode'] as num?)?.toInt(),
       toNode: (json['toNode'] as num?)?.toInt(),
@@ -175,7 +181,7 @@ class MeshMessage {
       body: 'ALPHA voice channel online. Floor control aktivni.',
       sentAt: now.subtract(const Duration(minutes: 7)),
       groupId: 'alpha',
-      internetVoice: true,
+      viaInternet: true,
     ),
     MeshMessage(
       sender: 'MED-4',

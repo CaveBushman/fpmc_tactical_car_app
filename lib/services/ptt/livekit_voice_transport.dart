@@ -6,8 +6,6 @@ import 'package:livekit_client/livekit_client.dart';
 import '../backend_client.dart';
 import 'voice_transport.dart';
 
-const _floorTopic = 'ptt-floor';
-
 /// LiveKit room with shared-key E2EE (AES-GCM frame encryption); the key
 /// comes from the backend, so the SFU only relays ciphertext.
 class LiveKitVoiceTransport implements VoiceTransport {
@@ -56,8 +54,9 @@ class LiveKitVoiceTransport implements VoiceTransport {
       })
       ..on<DataReceivedEvent>((event) {
         final from = event.participant?.identity;
-        if (event.topic == _floorTopic && from != null) {
-          _add(VoiceDataReceived(from: from, data: event.data));
+        final topic = event.topic;
+        if (from != null && topic != null && RoomTopic.all.contains(topic)) {
+          _add(VoiceDataReceived(from: from, data: event.data, topic: topic));
         }
       });
     _room = room;
@@ -72,11 +71,14 @@ class LiveKitVoiceTransport implements VoiceTransport {
   }
 
   @override
-  Future<void> sendData(List<int> data) async {
+  Future<void> sendData(
+    List<int> data, {
+    String topic = RoomTopic.floor,
+  }) async {
     await _room?.localParticipant?.publishData(
       data,
       reliable: true,
-      topic: _floorTopic,
+      topic: topic,
     );
   }
 
