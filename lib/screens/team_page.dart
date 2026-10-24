@@ -1,15 +1,30 @@
 import 'package:flutter/material.dart';
 
+import '../models/member_status.dart';
 import '../models/mesh_node.dart';
 import '../theme.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/node_widgets.dart';
 
 class TeamPage extends StatefulWidget {
-  const TeamPage({required this.nodes, required this.onCheckIn, super.key});
+  const TeamPage({
+    required this.nodes,
+    required this.onCheckIn,
+    this.statusOf,
+    this.ownStatus,
+    this.onOwnStatus,
+    super.key,
+  });
 
   final List<MeshNode> nodes;
   final ValueChanged<MeshNode> onCheckIn;
+
+  /// Last reported status by callsign.
+  final MemberStatusReport? Function(String callSign)? statusOf;
+  final MemberStatus? ownStatus;
+
+  /// Shows the "Můj stav" picker; sends the chosen status.
+  final ValueChanged<MemberStatus>? onOwnStatus;
 
   @override
   State<TeamPage> createState() => _TeamPageState();
@@ -38,6 +53,33 @@ class _TeamPageState extends State<TeamPage> {
           ..sort(MeshNode.teamOrder);
     return Column(
       children: [
+        if (widget.onOwnStatus != null)
+          SizedBox(
+            height: 48,
+            child: ListView.separated(
+              key: const ValueKey('own-status'),
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              scrollDirection: Axis.horizontal,
+              itemCount: MemberStatus.values.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 6),
+              itemBuilder: (context, index) {
+                final status = MemberStatus.values[index];
+                final selected = status == widget.ownStatus;
+                return ChoiceChip(
+                  avatar: Icon(status.icon, size: 16),
+                  label: Text(
+                    status.label,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  selected: selected,
+                  selectedColor: status.color.withValues(alpha: 0.9),
+                  backgroundColor: panelGreen,
+                  side: BorderSide(color: status.color.withValues(alpha: 0.6)),
+                  onSelected: (_) => widget.onOwnStatus!(status),
+                );
+              },
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
           child: TacticalSearchField(
@@ -57,6 +99,7 @@ class _TeamPageState extends State<TeamPage> {
                     final node = filteredNodes[index];
                     return NodeCard(
                       node: node,
+                      memberStatus: widget.statusOf?.call(node.callSign),
                       onCheckIn: node.isSelf
                           ? null
                           : () => widget.onCheckIn(node),

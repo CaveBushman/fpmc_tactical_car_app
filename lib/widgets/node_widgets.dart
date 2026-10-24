@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/member_status.dart';
 import '../models/mesh_node.dart';
 import '../theme.dart';
 
@@ -69,10 +70,18 @@ extension MeshNodeLinkStatusStyle on MeshNodeLinkStatus {
 }
 
 class NodeCard extends StatelessWidget {
-  const NodeCard({required this.node, this.onCheckIn, super.key});
+  const NodeCard({
+    required this.node,
+    this.onCheckIn,
+    this.memberStatus,
+    super.key,
+  });
 
   final MeshNode node;
   final VoidCallback? onCheckIn;
+
+  /// Last status the member reported about themselves.
+  final MemberStatusReport? memberStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +138,10 @@ class NodeCard extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
+                  if (memberStatus case final report?) ...[
+                    const SizedBox(height: 4),
+                    MemberStatusChip(report: report),
+                  ],
                   const SizedBox(height: 2),
                   Text(
                     '${node.distanceKm.toStringAsFixed(1)} km | ${node.bearingDeg.toStringAsFixed(0)} deg | ${node.lastSeenMinutes} min',
@@ -202,6 +215,45 @@ class BatteryBadge extends StatelessWidget {
               color: color,
               fontWeight: FontWeight.w800,
               fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Reported member status with its age, e.g. "ZRANĚN · 4 min".
+class MemberStatusChip extends StatelessWidget {
+  const MemberStatusChip({required this.report, super.key});
+
+  final MemberStatusReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = report.status;
+    final minutes = DateTime.now().difference(report.at).inMinutes;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: status.color.withValues(alpha: status.urgent ? 0.9 : 0.25),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: status.color),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(status.icon, size: 14, color: Colors.white),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              '${status.label} · ${minutes < 1 ? 'teď' : '$minutes min'}',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
         ],

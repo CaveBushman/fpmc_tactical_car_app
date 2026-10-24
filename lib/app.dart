@@ -267,6 +267,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
       navTarget: controller.navTarget,
       peerTrails: controller.peerTrails,
       courseDeg: controller.courseDeg,
+      statusOf: (callSign) => controller.statusOf(callSign)?.status,
       headingUp: controller.mapHeadingUp,
       onHeadingUpChanged: controller.setMapHeadingUp,
       onNavigate: controller.navigateTo,
@@ -295,7 +296,13 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     );
 
     final detailPages = [
-      TeamPage(nodes: nodes, onCheckIn: controller.sendCheckIn),
+      TeamPage(
+        nodes: nodes,
+        onCheckIn: controller.sendCheckIn,
+        statusOf: controller.statusOf,
+        ownStatus: controller.ownStatus,
+        onOwnStatus: (status) => unawaited(controller.setOwnStatus(status)),
+      ),
       MessagesPage(
         messages: controller.messages,
         groups: controller.allowedGroups,

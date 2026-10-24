@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/member_status.dart';
 import '../models/mesh_node.dart';
 import '../models/navigation.dart';
 import '../services/location_service.dart';
@@ -46,8 +47,12 @@ class MapPage extends StatefulWidget {
     this.courseDeg,
     this.headingUp = false,
     this.onHeadingUpChanged,
+    this.statusOf,
     super.key,
   });
+
+  /// Peers' reported status by callsign.
+  final MemberStatus? Function(String callSign)? statusOf;
 
   /// Teammates' recent positions by node number.
   final Map<int, List<LatLng>> peerTrails;
@@ -188,6 +193,7 @@ class _MapPageState extends State<MapPage> {
                 onEnterCoordinates: () => _enterCoordinates(self.latLng),
                 peerTrails: widget.peerTrails,
                 courseDeg: widget.courseDeg,
+                statusOf: widget.statusOf,
                 headingUp: widget.headingUp,
                 onHeadingUpChanged: widget.onHeadingUpChanged,
                 measure: _measure ?? const [],
@@ -508,8 +514,12 @@ class MeshMap extends StatefulWidget {
     this.courseDeg,
     this.headingUp = false,
     this.onHeadingUpChanged,
+    this.statusOf,
     super.key,
   });
+
+  /// Peers' reported status by callsign.
+  final MemberStatus? Function(String callSign)? statusOf;
 
   /// Own direction of travel; turns the self arrow (and the map when
   /// [headingUp]).
@@ -782,7 +792,10 @@ class _MeshMapState extends State<MeshMap> {
                                   : course + MapCamera.of(context).rotation,
                             ),
                           )
-                        : MapNodeMarker(node: node),
+                        : MapNodeMarker(
+                            node: node,
+                            memberStatus: widget.statusOf?.call(node.callSign),
+                          ),
                   ),
               ],
             ),
@@ -918,9 +931,17 @@ Widget _tacticalTileBuilder(
 }
 
 class MapNodeMarker extends StatelessWidget {
-  const MapNodeMarker({required this.node, this.arrowDeg, super.key});
+  const MapNodeMarker({
+    required this.node,
+    this.arrowDeg,
+    this.memberStatus,
+    super.key,
+  });
 
   final MeshNode node;
+
+  /// Reported status; replaces the link label when it is not OK.
+  final MemberStatus? memberStatus;
 
   /// Self only: direction of travel on screen (0 = up); null = no course.
   final double? arrowDeg;
@@ -977,7 +998,18 @@ class MapNodeMarker extends StatelessWidget {
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              if (!node.isSelf)
+              if (memberStatus case final status?
+                  when status != MemberStatus.ok)
+                Text(
+                  status.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: status.urgent ? dangerRed : status.color,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                  ),
+                )
+              else if (!node.isSelf)
                 Text(
                   node.linkStatus.label,
                   overflow: TextOverflow.ellipsis,

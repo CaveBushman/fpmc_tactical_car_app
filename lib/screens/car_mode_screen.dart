@@ -74,6 +74,7 @@ class _CarModeScreenState extends State<CarModeScreen> {
               navTarget: controller.navTarget?.position,
               peerTrails: controller.peerTrails,
               courseDeg: controller.courseDeg,
+              statusOf: (callSign) => controller.statusOf(callSign)?.status,
               headingUp: controller.mapHeadingUp,
               onHeadingUpChanged: controller.setMapHeadingUp,
             );

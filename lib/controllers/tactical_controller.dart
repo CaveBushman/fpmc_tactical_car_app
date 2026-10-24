@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../models/geo.dart' as geo;
+import '../models/member_status.dart';
 import '../models/mesh_node.dart';
 import '../models/messaging.dart';
 import '../models/navigation.dart';
@@ -372,6 +373,7 @@ class TacticalController extends ChangeNotifier {
     _navTarget = null;
     _peerTrails.clear();
     _courseDeg = null;
+    _statuses.clear();
     _sos.reset();
     _mission.clear();
     _replaceNodes(MeshNode.demoNodes(DateTime.now()));
@@ -1131,6 +1133,36 @@ class TacticalController extends ChangeNotifier {
 
   // --- Own position ----------------------------------------------------------
 
+  // --- Member status -------------------------------------------------------------
+
+  final Map<String, MemberStatusReport> _statuses = {};
+
+  /// Last status reported by [callSign] (own one included), or null.
+  MemberStatusReport? statusOf(String callSign) => _statuses[callSign];
+
+  /// Own status as last sent.
+  MemberStatus? get ownStatus => _statuses[selfNode.callSign]?.status;
+
+  /// Tells the selected group how we are; urgent ones go as priority.
+  Future<void> setOwnStatus(MemberStatus status) async {
+    if (_session == null) {
+      return;
+    }
+    final callSign = selfNode.callSign;
+    _statuses[callSign] = MemberStatusReport(
+      status: status,
+      at: DateTime.now(),
+    );
+    _notify();
+    await sendMeshText(
+      MeshMessageDraft(
+        text: status.shareText(callSign),
+        groupId: selectedGroup.id,
+        priority: status.urgent,
+      ),
+    );
+  }
+
   /// Below this speed the GPS course is noise.
   static const _minCourseSpeedMps = 1.5;
 
@@ -1526,6 +1558,16 @@ class TacticalController extends ChangeNotifier {
   /// CONTACT reports (plotted as a DANGER point at the estimated position).
   void _applyStructuredText(String text, {required String sender}) {
     final now = DateTime.now();
+    final status = MemberStatus.parse(text);
+    if (status != null) {
+      if (status.callSign != selfNode.callSign) {
+        _statuses[status.callSign] = MemberStatusReport(
+          status: status.status,
+          at: now,
+        );
+      }
+      return;
+    }
     final sos = SosSignal.parse(text);
     if (sos != null) {
       // Our own outgoing calls are shown by the "SOS AKTIVNÍ" banner.
