@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 
 import 'backend_client.dart';
 import 'device_identity.dart';
@@ -53,8 +54,40 @@ class AuthResult {
   bool get ok => session != null;
 }
 
+/// An account that can log in without a server (tests only; see
+/// [AuthService.offlineAccounts]).
+class OfflineAccount {
+  const OfflineAccount({required this.session, required this.passwordHash});
+
+  final AuthSession session;
+
+  /// SHA-256 hex of `1stpmc-demo:USER:PASSWORD`.
+  final String passwordHash;
+}
+
+/// Login without a backend. Release builds have no accounts here: they
+/// must be built with BACKEND_URL and use [RemoteAuthService].
 class AuthService {
-  AuthService({DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
+  AuthService({
+    DateTime Function()? clock,
+    Map<String, OfflineAccount>? accounts,
+  }) : _clock = clock ?? DateTime.now,
+       _accounts = accounts ?? offlineAccounts;
+
+  /// Accounts for builds without a server. Empty in the app; the test
+  /// suite fills it with its own accounts.
+  @visibleForTesting
+  static Map<String, OfflineAccount> offlineAccounts = const {};
+
+  static const noServerMessage =
+      'Aplikace nemá nastavený server. Je potřeba ji sestavit s adresou '
+      'serveru (BACKEND_URL).';
+
+  /// SHA-256 used for [OfflineAccount.passwordHash].
+  static String offlineHash(String userName, String password) =>
+      _passwordHash(userName.trim().toLowerCase(), password);
+
+  final Map<String, OfflineAccount> _accounts;
 
   static const maxFailedAttempts = 5;
   static const lockoutDuration = Duration(seconds: 30);
@@ -72,6 +105,9 @@ class AuthService {
     if (normalizedUser.isEmpty) {
       return const AuthResult.failure('Zadej uživatele.');
     }
+    if (_accounts.isEmpty) {
+      return const AuthResult.failure(noServerMessage);
+    }
 
     final lockedUntil = _lockedUntil;
     final now = _clock();
@@ -80,14 +116,12 @@ class AuthService {
       return AuthResult.failure('Příliš mnoho pokusů. Zkus to za $seconds s.');
     }
 
-    final demoSession = _demoUsers[normalizedUser];
-    final expectedHash = _demoPasswordHashes[normalizedUser];
+    final account = _accounts[normalizedUser];
     // Hash even for unknown users so the response does not reveal which
     // user names exist.
     final actualHash = _passwordHash(normalizedUser, password);
-    if (demoSession == null ||
-        expectedHash == null ||
-        !_constantTimeEquals(actualHash, expectedHash)) {
+    if (account == null ||
+        !_constantTimeEquals(actualHash, account.passwordHash)) {
       _failedAttempts++;
       if (_failedAttempts >= maxFailedAttempts) {
         _failedAttempts = 0;
@@ -98,7 +132,7 @@ class AuthService {
 
     _failedAttempts = 0;
     _lockedUntil = null;
-    return AuthResult.success(demoSession);
+    return AuthResult.success(account.session);
   }
 
   static String _passwordHash(String userName, String password) {
@@ -118,38 +152,6 @@ class AuthService {
   }
 
   Future<void> logout() async {}
-
-  /// Local demo credentials only: SHA-256 of `1stpmc-demo:USER:PASSWORD`,
-  /// where each demo password is `USER-2026`. Replace with
-  /// server-backed authentication before real deployment.
-  static const Map<String, String> _demoPasswordHashes = {
-    'operator':
-        '079245eb502a5f2ff2b199fc48ea7e98290b392f93e4404fe192d44345324a6f',
-    'commander':
-        '86ea987500d5cefd9868ced11006b63187932e630e6714fd6e96f3435e26ce53',
-    'medic': 'e8f8259ba1f939972dcdd8539b06b342aa3ba5398f92d8f81176632184be5bfb',
-  };
-
-  static const Map<String, AuthSession> _demoUsers = {
-    'operator': AuthSession(
-      userName: 'operator',
-      displayName: 'OPERATOR',
-      role: 'operator',
-      allowedGroupIds: {'alpha', 'bravo', 'med'},
-    ),
-    'commander': AuthSession(
-      userName: 'commander',
-      displayName: 'COMMANDER',
-      role: 'commander',
-      allowedGroupIds: {'alpha', 'bravo', 'med', 'command'},
-    ),
-    'medic': AuthSession(
-      userName: 'medic',
-      displayName: 'MEDIC',
-      role: 'medic',
-      allowedGroupIds: {'alpha', 'med'},
-    ),
-  };
 }
 
 /// Logs in against the tactical backend.

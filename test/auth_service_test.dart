@@ -71,4 +71,14 @@ void main() {
     );
     expect(unlocked.ok, isTrue);
   });
+
+  test('without offline accounts it asks for a server build', () async {
+    final service = AuthService(accounts: const {});
+    final result = await service.login(
+      userName: 'operator',
+      password: 'operator-2026',
+    );
+    expect(result.ok, isFalse);
+    expect(result.errorMessage, AuthService.noServerMessage);
+  });
 }
