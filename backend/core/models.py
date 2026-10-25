@@ -60,6 +60,9 @@ class User(AbstractBaseUser):
     disabled = models.BooleanField(default=False)
     # Bumped to revoke every session token of the user.
     session_version = models.PositiveIntegerField(default=1)
+    # Highest panel message id the member's app confirmed it received
+    # (sent back as sinceMessageId with the next position report).
+    messages_seen_id = models.PositiveIntegerField(default=0)
 
     objects = UserManager()
 

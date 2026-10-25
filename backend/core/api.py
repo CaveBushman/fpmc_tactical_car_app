@@ -287,7 +287,9 @@ def report_position(request):
     battery = _number(body.get("battery"))
     altitude = _number(body.get("alt"))
     accuracy = _number(body.get("accuracy"))
-    pending = _pending_messages(user, body.get("sinceMessageId"))
+    since = body.get("sinceMessageId")
+    pending = _pending_messages(user, since)
+    _confirm_messages(user, since)
     previous = MemberPosition.objects.filter(user=user).first()
     if previous is not None and previous.reported_at > reported:
         # An older report arrived late: keep the newer position.
@@ -314,6 +316,20 @@ def report_position(request):
 # Without a known last message id the app gets what it may have missed
 # recently, not the whole history.
 FIRST_PICKUP_WINDOW = timedelta(minutes=30)
+
+
+def _confirm_messages(user, since):
+    """Records that the member's app has panel messages up to [since]. It
+    never goes back, and never past the newest message, so a client cannot
+    pre-confirm messages that do not exist yet."""
+    if type(since) is not int or since <= user.messages_seen_id:
+        return
+    newest = GroupMessage.objects.order_by("-id").values_list("id", flat=True).first()
+    seen = min(since, newest or 0)
+    if seen > user.messages_seen_id:
+        User.objects.filter(pk=user.pk, messages_seen_id__lt=seen).update(
+            messages_seen_id=seen
+        )
 
 
 def _pending_messages(user, since):

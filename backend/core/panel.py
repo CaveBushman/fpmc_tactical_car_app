@@ -608,9 +608,31 @@ def situation(request):
             "groups": TeamGroup.objects.all(),
             "group_id": group_id,
             "stale_minutes": int(STALE_AFTER.total_seconds() // 60),
-            "recent_messages": GroupMessage.objects.all()[:10],
+            "recent_messages": _with_receipts(GroupMessage.objects.all()[:10]),
         },
     )
+
+
+def _with_receipts(messages):
+    """Each message with who in its group has confirmed receiving it."""
+    messages = list(messages)
+    members = {}
+    for user in User.objects.filter(
+        disabled=False, groups__id__in={m.group_id for m in messages}
+    ).distinct().prefetch_related("groups"):
+        for group in user.groups.all():
+            members.setdefault(group.id, []).append(user)
+    rows = []
+    for message in messages:
+        group = sorted(members.get(message.group_id, []), key=lambda u: u.username)
+        missing = [u for u in group if u.messages_seen_id < message.id]
+        rows.append({
+            "message": message,
+            "received": len(group) - len(missing),
+            "total": len(group),
+            "missing": [u.display_name or u.username for u in missing],
+        })
+    return rows
 
 
 @commander_required

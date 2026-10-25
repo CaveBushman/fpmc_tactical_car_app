@@ -917,6 +917,47 @@ class GroupMessageTests(ApiTestCase):
                          token=token).json()["messages"]
         self.assertEqual(none, [])
 
+    def test_apps_confirm_received_messages_for_the_panel(self):
+        token = self.login()  # operator: alpha, bravo; commander: alpha too
+        # A message to the commander's other group, so the commander matches
+        # twice in the member lookup and must still count once.
+        GroupMessage.objects.create(group_id="command", text="Porada",
+                                    author="VELITEL")
+        message = GroupMessage.objects.create(group_id="alpha", text="Přesun",
+                                              author="VELITEL")
+
+        def receipt():
+            self.client.force_login(self.commander)
+            row = self.client.get("/panel/situation").context["recent_messages"][0]
+            return row["received"], row["total"], row["missing"]
+
+        self.assertEqual(receipt(), (0, 2, ["COMMANDER", "OPERATOR"]))
+        # Picking the message up is not yet a confirmation; the next report is.
+        self.call("POST", "/report", {"lat": 50, "lon": 14}, token=token)
+        self.assertEqual(receipt()[0], 0)
+        self.call("POST", "/report",
+                  {"lat": 50, "lon": 14, "sinceMessageId": message.id}, token=token)
+        self.assertEqual(receipt(), (1, 2, ["COMMANDER"]))
+        page = self.client.get("/panel/situation")
+        self.assertContains(page, "1/2")
+        self.assertContains(page, "čeká: COMMANDER")
+        # Never past the newest message, never backwards.
+        self.call("POST", "/report",
+                  {"lat": 50, "lon": 14, "sinceMessageId": message.id + 100},
+                  token=token)
+        self.operator.refresh_from_db()
+        self.assertEqual(self.operator.messages_seen_id, message.id)
+        self.call("POST", "/report",
+                  {"lat": 50, "lon": 14, "sinceMessageId": 0}, token=token)
+        self.operator.refresh_from_db()
+        self.assertEqual(self.operator.messages_seen_id, message.id)
+        later = GroupMessage.objects.create(group_id="alpha", text="Další",
+                                            author="VELITEL")
+        self.assertEqual(
+            self.client.get("/panel/situation").context["recent_messages"][0]
+            ["message"], later)
+        self.assertEqual(receipt()[0], 0)
+
     def test_panel_sends_to_a_group(self):
         self.client.force_login(self.commander)
         form = self.client.get("/panel/situation/message", {"group": "bravo"})
