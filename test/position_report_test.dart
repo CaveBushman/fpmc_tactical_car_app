@@ -131,4 +131,17 @@ void main() {
     expect(reports, hasLength(2));
     expect(reports.last['lat'], 50.0);
   });
+
+  test(
+    'a real session starts without the sample team, messages or points',
+    () async {
+      expect(controller.peers, isEmpty);
+      expect(controller.messages, isEmpty);
+      expect(controller.waypoints, isEmpty);
+      expect(controller.selfNode.callSign, 'OPERATOR');
+      // No sample battery is reported as the member's.
+      await fix(50.0);
+      expect(reports.single, isNot(contains('battery')));
+    },
+  );
 }

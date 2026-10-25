@@ -20,6 +20,11 @@ import '../widgets/navigation_widgets.dart';
 import '../widgets/node_widgets.dart';
 import '../widgets/position_widgets.dart';
 
+/// Width of the landscape side column (map details or another tab, with the
+/// PTT controls at its bottom), for a screen [totalWidth] wide.
+double landscapeSidePanelWidth(double totalWidth) =>
+    (totalWidth * 0.34).clamp(240.0, 340.0);
+
 /// Full-bleed map. Position readout floats top-left; team metrics, navigation
 /// targets and waypoints live in a bottom sheet that peeks with the nearest
 /// target and drags up for the rest, so small phones keep most of the screen
@@ -48,6 +53,8 @@ class MapPage extends StatefulWidget {
     this.onClearOldWaypoints,
     this.focusRequest,
     this.onFocusConsumed,
+    this.detailsOnSide = false,
+    this.sideFooter,
     this.onSetRendezvous,
     this.baseCode,
     this.speedKmh = TacticalNavSolution.walkingKmh,
@@ -77,6 +84,13 @@ class MapPage extends StatefulWidget {
   /// card; [onFocusConsumed] is called once applied.
   final LatLng? focusRequest;
   final VoidCallback? onFocusConsumed;
+
+  /// Landscape: the details (target, team, points) in a column on the
+  /// right instead of a bottom sheet, so the map keeps its full height.
+  final bool detailsOnSide;
+
+  /// Shown at the bottom of that column (the PTT controls).
+  final Widget? sideFooter;
 
   /// Shares a meeting at a point at the chosen time.
   final void Function(TacticalWaypoint waypoint, DateTime at)? onSetRendezvous;
@@ -277,14 +291,41 @@ class _MapPageState extends State<MapPage> {
         // Expanded readout only where it does not bury the map; the user can
         // still toggle it.
         final positionExpanded = _positionExpanded ?? height >= 640;
-        final showSheet = widget.showDetailsSheet && height >= 240;
+        final showSheet =
+            widget.showDetailsSheet && !widget.detailsOnSide && height >= 240;
         final peekHeight = MapPage.peekHeightFor(context);
         final mapBottom = showSheet ? peekHeight - 8 : 0.0;
         // Ruler, coordinates and recenter buttons.
         final cardLeft = MeshMap.cardLeft(height - mapBottom, 3);
         final cardBottom = (showSheet ? peekHeight : 0.0) + 8;
 
-        return Stack(
+        Widget details({required bool docked}) => _MapDetailsSheet(
+          docked: docked,
+          peekFraction: (peekHeight / height).clamp(0.05, 0.5),
+          nodes: nodes,
+          navSolutions: navSolutions,
+          waypoints: widget.waypoints,
+          pttActive: widget.pttActive,
+          channelLabel: widget.channelLabel,
+          onShareWaypoint: widget.onShareWaypoint,
+          onDeleteWaypoint: widget.onDeleteWaypoint,
+          speedKmh: widget.speedKmh,
+          onRendezvous: widget.onSetRendezvous == null
+              ? null
+              : _pickRendezvousTime,
+          onClearOld: widget.onClearOldWaypoints == null
+              ? null
+              : _confirmClearOld,
+          onEditWaypoint: widget.onCreateWaypoint == null
+              ? null
+              : (waypoint) =>
+                    _createWaypointAt(waypoint.latLng, editing: waypoint),
+          navTarget: widget.navTarget,
+          onNavigate: widget.onNavigate,
+          onClearNavTarget: widget.onClearNavTarget,
+        );
+
+        final stack = Stack(
           children: [
             Positioned(
               left: 0,
@@ -393,31 +434,26 @@ class _MapPageState extends State<MapPage> {
                       ),
               ),
             ),
-            if (showSheet)
-              _MapDetailsSheet(
-                peekFraction: (peekHeight / height).clamp(0.05, 0.5),
-                nodes: nodes,
-                navSolutions: navSolutions,
-                waypoints: widget.waypoints,
-                pttActive: widget.pttActive,
-                channelLabel: widget.channelLabel,
-                onShareWaypoint: widget.onShareWaypoint,
-                onDeleteWaypoint: widget.onDeleteWaypoint,
-                speedKmh: widget.speedKmh,
-                onRendezvous: widget.onSetRendezvous == null
-                    ? null
-                    : _pickRendezvousTime,
-                onClearOld: widget.onClearOldWaypoints == null
-                    ? null
-                    : _confirmClearOld,
-                onEditWaypoint: widget.onCreateWaypoint == null
-                    ? null
-                    : (waypoint) =>
-                          _createWaypointAt(waypoint.latLng, editing: waypoint),
-                navTarget: widget.navTarget,
-                onNavigate: widget.onNavigate,
-                onClearNavTarget: widget.onClearNavTarget,
+            if (showSheet) details(docked: false),
+          ],
+        );
+        if (!widget.detailsOnSide) {
+          return stack;
+        }
+        final footer = widget.sideFooter;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: stack),
+            SizedBox(
+              width: landscapeSidePanelWidth(constraints.maxWidth),
+              child: Column(
+                children: [
+                  Expanded(child: details(docked: true)),
+                  ?footer,
+                ],
               ),
+            ),
           ],
         );
       },
@@ -438,6 +474,7 @@ class _MapDetailsSheet extends StatelessWidget {
     this.onEditWaypoint,
     this.onClearOld,
     this.onRendezvous,
+    this.docked = false,
     this.navTarget,
     this.onNavigate,
     this.onClearNavTarget,
@@ -445,6 +482,9 @@ class _MapDetailsSheet extends StatelessWidget {
   });
 
   final double speedKmh;
+
+  /// A fixed side column (landscape) instead of a draggable bottom sheet.
+  final bool docked;
   final VoidCallback? onClearOld;
   final ValueChanged<TacticalWaypoint>? onRendezvous;
   final ValueChanged<TacticalWaypoint>? onEditWaypoint;
@@ -464,6 +504,90 @@ class _MapDetailsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final health = NodeHealthSummary.fromNodes(nodes);
     final nearest = navSolutions.isEmpty ? null : navSolutions.first;
+    final content = <Widget>[
+      SizedBox(
+        height: MediaQuery.textScalerOf(context).scale(52),
+        child: Row(
+          children: [
+            Expanded(
+              child: navTarget != null
+                  ? NavigationCueBadge(
+                      solution: navTarget!,
+                      onClear: onClearNavTarget ?? () {},
+                    )
+                  : nearest == null
+                  ? const SizedBox.shrink()
+                  : NavigationCueBadge(solution: nearest),
+            ),
+            const SizedBox(width: 8),
+            _HealthDots(health: health),
+          ],
+        ),
+      ),
+      const SizedBox(height: 10),
+      GridView(
+        // Fixed tile height (scaled with the font setting) instead of
+        // an aspect ratio, which collapses on narrow phones.
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: MediaQuery.sizeOf(context).width > 640 ? 4 : 2,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          mainAxisExtent: MediaQuery.textScalerOf(context).scale(68),
+        ),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        children: [
+          MetricTile(
+            label: 'OK uzly',
+            value: '${health.ok}/${nodes.length}',
+            icon: Icons.hub_outlined,
+          ),
+          MetricTile(label: 'Kanál', value: channelLabel, icon: Icons.radio),
+          MetricTile(
+            label: 'Stale / Lost',
+            value: '${health.stale} / ${health.lost}',
+            icon: Icons.schedule_outlined,
+          ),
+          MetricTile(
+            label: 'Nejbližší',
+            value: _nearestLabel(nodes),
+            icon: Icons.near_me_outlined,
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      NavigationTargetStrip(
+        solutions: navSolutions,
+        onShareWaypoint: onShareWaypoint,
+        onNavigate: onNavigate,
+        speedKmh: speedKmh,
+      ),
+      const SizedBox(height: 10),
+      WaypointStrip(
+        waypoints: waypoints,
+        onShareWaypoint: onShareWaypoint,
+        onDeleteWaypoint: onDeleteWaypoint,
+        onEditWaypoint: onEditWaypoint,
+        onClearOld: onClearOld,
+        onRendezvous: onRendezvous,
+      ),
+      const SizedBox(height: 10),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: MapLegend(pttActive: pttActive),
+      ),
+    ];
+    if (docked) {
+      // Landscape: a fixed column beside the map instead of a bottom sheet.
+      return ColoredBox(
+        color: panelGreen,
+        child: ListView(
+          key: const ValueKey('map-details-panel'),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 12),
+          children: content,
+        ),
+      );
+    }
     return DraggableScrollableSheet(
       key: const ValueKey('map-details-sheet'),
       initialChildSize: peekFraction,
@@ -495,83 +619,7 @@ class _MapDetailsSheet extends StatelessWidget {
                   ),
                 ),
               ),
-              SizedBox(
-                height: MediaQuery.textScalerOf(context).scale(52),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: navTarget != null
-                          ? NavigationCueBadge(
-                              solution: navTarget!,
-                              onClear: onClearNavTarget ?? () {},
-                            )
-                          : nearest == null
-                          ? const SizedBox.shrink()
-                          : NavigationCueBadge(solution: nearest),
-                    ),
-                    const SizedBox(width: 8),
-                    _HealthDots(health: health),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 10),
-              GridView(
-                // Fixed tile height (scaled with the font setting) instead of
-                // an aspect ratio, which collapses on narrow phones.
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: MediaQuery.sizeOf(context).width > 640
-                      ? 4
-                      : 2,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  mainAxisExtent: MediaQuery.textScalerOf(context).scale(68),
-                ),
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  MetricTile(
-                    label: 'OK uzly',
-                    value: '${health.ok}/${nodes.length}',
-                    icon: Icons.hub_outlined,
-                  ),
-                  MetricTile(
-                    label: 'Kanál',
-                    value: channelLabel,
-                    icon: Icons.radio,
-                  ),
-                  MetricTile(
-                    label: 'Stale / Lost',
-                    value: '${health.stale} / ${health.lost}',
-                    icon: Icons.schedule_outlined,
-                  ),
-                  MetricTile(
-                    label: 'Nejbližší',
-                    value: _nearestLabel(nodes),
-                    icon: Icons.near_me_outlined,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              NavigationTargetStrip(
-                solutions: navSolutions,
-                onShareWaypoint: onShareWaypoint,
-                onNavigate: onNavigate,
-                speedKmh: speedKmh,
-              ),
-              const SizedBox(height: 10),
-              WaypointStrip(
-                waypoints: waypoints,
-                onShareWaypoint: onShareWaypoint,
-                onDeleteWaypoint: onDeleteWaypoint,
-                onEditWaypoint: onEditWaypoint,
-                onClearOld: onClearOld,
-                onRendezvous: onRendezvous,
-              ),
-              const SizedBox(height: 10),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: MapLegend(pttActive: pttActive),
-              ),
+              ...content,
             ],
           ),
         );

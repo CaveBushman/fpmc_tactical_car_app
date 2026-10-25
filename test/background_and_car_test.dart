@@ -5,6 +5,7 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tactical_car_app/controllers/ptt_controller.dart';
 import 'package:tactical_car_app/controllers/tactical_controller.dart';
+import 'package:tactical_car_app/models/navigation.dart';
 import 'package:tactical_car_app/services/backend_client.dart';
 import 'package:tactical_car_app/services/mesh_packet_repository.dart';
 import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
@@ -122,6 +123,14 @@ void main() {
   test('Android Auto gets nearest targets with positions', () async {
     await controller.login('operator', 'pw');
     await pumpEventQueue();
+    // A real session starts empty; a medevac point is added.
+    controller.addWaypoint(
+      type: TacticalWaypointType.medevac,
+      latitude: 50.083846,
+      longitude: 14.430171,
+      code: 'MED-POINT',
+    );
+    await pumpEventQueue();
 
     expect(car.targets, isNotEmpty);
     expect(car.targets.length, lessThanOrEqualTo(6));
@@ -137,6 +146,12 @@ void main() {
 
   test('messages are posted as car notifications only in background', () async {
     await controller.login('operator', 'pw');
+    repository.ingest(
+      MeshtasticBlePacket(
+        bytes: fromRadioNodeInfo(nodeNum: 0xA1100002, shortName: 'RAVEN-2'),
+        receivedAt: DateTime.now(),
+      ),
+    );
 
     repository.ingest(
       MeshtasticBlePacket(

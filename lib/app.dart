@@ -265,61 +265,64 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     final selfNode = controller.selfNode;
     final ptt = controller.ptt;
 
-    MapPage mapPage({bool showDetailsSheet = true}) => MapPage(
-      nodes: nodes,
-      waypoints: controller.waypoints,
-      pttActive: controller.pttActive,
-      locationState: controller.locationState,
-      channelLabel: controller.selectedGroup.name,
-      tileSource: _offlineMaps.source,
-      offlineStore: _offlineMaps.store,
-      onVisibleBoundsChanged: (bounds) => _visibleMapBounds = bounds,
-      track: [for (final point in controller.track) point.latLng],
-      showGrid: controller.mgrsGrid,
-      onSharePoint: (point) => unawaited(controller.sharePoint(point)),
-      showDetailsSheet: showDetailsSheet,
-      navTarget: controller.navTarget,
-      peerTrails: controller.peerTrails,
-      onClearOldWaypoints: controller.clearOldReceivedWaypoints,
-      focusRequest: _mapFocusRequest,
-      onSetRendezvous: (waypoint, at) =>
-          unawaited(controller.setRendezvous(waypoint, at)),
-      onFocusConsumed: () => setState(() => _mapFocusRequest = null),
-      baseCode: controller.baseWaypoint?.code,
-      speedKmh: controller.travelSpeedKmh,
-      courseDeg: controller.courseDeg,
-      statusOf: (callSign) => controller.statusOf(callSign)?.status,
-      headingUp: controller.mapHeadingUp,
-      onHeadingUpChanged: controller.setMapHeadingUp,
-      onNavigate: controller.navigateTo,
-      onClearNavTarget: controller.clearNavTarget,
-      onShareWaypoint: controller.shareWaypoint,
-      onDeleteWaypoint: controller.removeWaypoint,
-      onCreateWaypoint: (draft) {
-        final editing = draft.editing;
-        final waypoint = editing == null
-            ? controller.addWaypoint(
-                type: draft.type,
-                latitude: draft.latitude,
-                longitude: draft.longitude,
-                code: draft.code,
-                note: draft.note,
-              )
-            : controller.updateWaypoint(
-                editing,
-                type: draft.type,
-                note: draft.note,
-              );
-        if (draft.isBase) {
-          controller.setBase(waypoint);
-        } else if (controller.baseWaypoint?.code == waypoint.code) {
-          controller.setBase(null);
-        }
-        if (draft.share) {
-          unawaited(controller.shareWaypoint(waypoint));
-        }
-      },
-    );
+    MapPage mapPage({bool showDetailsSheet = true, Widget? sideFooter}) =>
+        MapPage(
+          nodes: nodes,
+          waypoints: controller.waypoints,
+          pttActive: controller.pttActive,
+          locationState: controller.locationState,
+          channelLabel: controller.selectedGroup.name,
+          tileSource: _offlineMaps.source,
+          offlineStore: _offlineMaps.store,
+          onVisibleBoundsChanged: (bounds) => _visibleMapBounds = bounds,
+          track: [for (final point in controller.track) point.latLng],
+          showGrid: controller.mgrsGrid,
+          onSharePoint: (point) => unawaited(controller.sharePoint(point)),
+          showDetailsSheet: showDetailsSheet,
+          detailsOnSide: sideFooter != null,
+          sideFooter: sideFooter,
+          navTarget: controller.navTarget,
+          peerTrails: controller.peerTrails,
+          onClearOldWaypoints: controller.clearOldReceivedWaypoints,
+          focusRequest: _mapFocusRequest,
+          onSetRendezvous: (waypoint, at) =>
+              unawaited(controller.setRendezvous(waypoint, at)),
+          onFocusConsumed: () => setState(() => _mapFocusRequest = null),
+          baseCode: controller.baseWaypoint?.code,
+          speedKmh: controller.travelSpeedKmh,
+          courseDeg: controller.courseDeg,
+          statusOf: (callSign) => controller.statusOf(callSign)?.status,
+          headingUp: controller.mapHeadingUp,
+          onHeadingUpChanged: controller.setMapHeadingUp,
+          onNavigate: controller.navigateTo,
+          onClearNavTarget: controller.clearNavTarget,
+          onShareWaypoint: controller.shareWaypoint,
+          onDeleteWaypoint: controller.removeWaypoint,
+          onCreateWaypoint: (draft) {
+            final editing = draft.editing;
+            final waypoint = editing == null
+                ? controller.addWaypoint(
+                    type: draft.type,
+                    latitude: draft.latitude,
+                    longitude: draft.longitude,
+                    code: draft.code,
+                    note: draft.note,
+                  )
+                : controller.updateWaypoint(
+                    editing,
+                    type: draft.type,
+                    note: draft.note,
+                  );
+            if (draft.isBase) {
+              controller.setBase(waypoint);
+            } else if (controller.baseWaypoint?.code == waypoint.code) {
+              controller.setBase(null);
+            }
+            if (draft.share) {
+              unawaited(controller.shareWaypoint(waypoint));
+            }
+          },
+        );
 
     final detailPages = [
       TeamPage(
@@ -413,11 +416,12 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     final narrow = screen.width < 480;
     final short = screen.height < 800;
 
-    PttBar pttBar({bool compact = false}) => PttBar(
+    PttBar pttBar({bool compact = false, bool vertical = false}) => PttBar(
       status: ptt.status,
       speaker: ptt.speaker,
       demo: ptt.isDemo,
       compact: compact,
+      vertical: vertical,
       channel: ptt.channel,
       userName: selfNode.callSign,
       onChanged: controller.setPttActive,
@@ -510,34 +514,39 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
                         constraints.maxWidth > constraints.maxHeight &&
                         constraints.maxWidth >= 720;
                     if (landscape) {
+                      // Landscape: the map keeps the full height; what sits
+                      // below it in portrait (target, team, PTT) moves into
+                      // a column on the right.
                       final fullMapMode = _selectedIndex == 0;
-                      return Column(
+                      final sidePtt = pttBar(compact: true, vertical: true);
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          TacticalNavigationRail(
+                            unreadMessages: controller.unreadTotal,
+                            selectedIndex: _selectedIndex,
+                            onDestinationSelected: _selectTab,
+                          ),
                           Expanded(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                TacticalNavigationRail(
-                                  unreadMessages: controller.unreadTotal,
-                                  selectedIndex: _selectedIndex,
-                                  onDestinationSelected: _selectTab,
-                                ),
-                                Expanded(
-                                  flex: fullMapMode ? 1 : 7,
-                                  child: mapPage(showDetailsSheet: fullMapMode),
-                                ),
-                                if (!fullMapMode)
-                                  SizedBox(
-                                    width:
-                                        (constraints.maxWidth.clamp(320, 430) *
-                                                0.95)
-                                            .toDouble(),
+                            child: fullMapMode
+                                ? mapPage(sideFooter: sidePtt)
+                                : mapPage(showDetailsSheet: false),
+                          ),
+                          if (!fullMapMode)
+                            SizedBox(
+                              // Tabs need more room than the map column.
+                              width:
+                                  (constraints.maxWidth.clamp(320, 430) * 0.95)
+                                      .toDouble(),
+                              child: Column(
+                                children: [
+                                  Expanded(
                                     child: detailPages[_selectedIndex - 1],
                                   ),
-                              ],
+                                  sidePtt,
+                                ],
+                              ),
                             ),
-                          ),
-                          pttBar(compact: true),
                         ],
                       );
                     }

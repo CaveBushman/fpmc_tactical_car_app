@@ -372,6 +372,7 @@ class PttBar extends StatelessWidget {
     this.speaker,
     this.demo = false,
     this.compact = false,
+    this.vertical = false,
     super.key,
   });
 
@@ -386,6 +387,9 @@ class PttBar extends StatelessWidget {
   /// Demo mode: no voice server, the button only changes local state.
   final bool demo;
   final bool compact;
+
+  /// Name and status above a full-width button (landscape side column).
+  final bool vertical;
 
   bool get active => status == PttStatus.transmitting;
   bool get enabled =>
@@ -405,89 +409,98 @@ class PttBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final receiving = status == PttStatus.receiving;
+    final info = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          userName,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: signalAmber,
+            fontSize: compact ? 15 : 17,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          _statusLabel,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: switch (status) {
+              PttStatus.error || PttStatus.offline => dangerRed,
+              PttStatus.disabled => Colors.white54,
+              PttStatus.receiving => blueForce,
+              _ => Colors.white,
+            },
+            fontSize: compact ? 11 : 12,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+          ),
+        ),
+      ],
+    );
+    final button = GestureDetector(
+      onTapDown: enabled ? (_) => onChanged(true) : null,
+      onTapUp: enabled ? (_) => onChanged(false) : null,
+      onTapCancel: enabled ? () => onChanged(false) : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: compact ? 44 : 54,
+        width: vertical ? double.infinity : (compact ? 132 : 150),
+        decoration: BoxDecoration(
+          color: !enabled
+              ? Colors.grey.shade800
+              : (active ? signalAmber : rangerGreen),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: signalAmber.withValues(alpha: 0.35),
+                    blurRadius: 18,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              active ? Icons.mic : (receiving ? Icons.hearing : Icons.mic_none),
+              color: active ? Colors.black : Colors.white,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              active ? 'TALK' : (receiving ? 'OBSAZENO' : 'PTT'),
+              style: TextStyle(
+                color: active ? Colors.black : Colors.white,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (vertical) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+        color: const Color(0xFF10130D),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [info, const SizedBox(height: 6), button],
+        ),
+      );
+    }
     return Container(
       padding: EdgeInsets.fromLTRB(12, compact ? 6 : 8, 12, compact ? 8 : 10),
       color: const Color(0xFF10130D),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  userName,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: signalAmber,
-                    fontSize: compact ? 15 : 17,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _statusLabel,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: switch (status) {
-                      PttStatus.error || PttStatus.offline => dangerRed,
-                      PttStatus.disabled => Colors.white54,
-                      PttStatus.receiving => blueForce,
-                      _ => Colors.white,
-                    },
-                    fontSize: compact ? 11 : 12,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTapDown: enabled ? (_) => onChanged(true) : null,
-            onTapUp: enabled ? (_) => onChanged(false) : null,
-            onTapCancel: enabled ? () => onChanged(false) : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              height: compact ? 44 : 54,
-              width: compact ? 132 : 150,
-              decoration: BoxDecoration(
-                color: !enabled
-                    ? Colors.grey.shade800
-                    : (active ? signalAmber : rangerGreen),
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: active
-                    ? [
-                        BoxShadow(
-                          color: signalAmber.withValues(alpha: 0.35),
-                          blurRadius: 18,
-                          spreadRadius: 2,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    active
-                        ? Icons.mic
-                        : (receiving ? Icons.hearing : Icons.mic_none),
-                    color: active ? Colors.black : Colors.white,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    active ? 'TALK' : (receiving ? 'OBSAZENO' : 'PTT'),
-                    style: TextStyle(
-                      color: active ? Colors.black : Colors.white,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          Expanded(child: info),
+          button,
         ],
       ),
     );
@@ -516,35 +529,40 @@ class MetricTile extends StatelessWidget {
           horizontal: compact ? 10 : 12,
           vertical: compact ? 8 : 10,
         ),
-        child: Row(
-          children: [
-            Icon(icon, color: sand, size: compact ? 18 : 20),
-            SizedBox(width: compact ? 8 : 10),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.white.withValues(alpha: 0.62),
+        // In a narrow column (landscape side panel) the icon gives way.
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              if (constraints.maxWidth >= 110) ...[
+                Icon(icon, color: sand, size: compact ? 18 : 20),
+                SizedBox(width: compact ? 8 : 10),
+              ],
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withValues(alpha: 0.62),
+                      ),
                     ),
-                  ),
-                  Text(
-                    value,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: compact ? 14 : 16,
+                    Text(
+                      value,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: compact ? 14 : 16,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

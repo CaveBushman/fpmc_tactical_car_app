@@ -438,101 +438,141 @@ class WaypointCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: EdgeInsets.all(compact ? 9 : 12),
-        child: Row(
-          children: [
-            Container(
-              height: compact ? 34 : 40,
-              width: compact ? 34 : 40,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: color.withValues(alpha: 0.38)),
-              ),
-              child: Icon(waypoint.icon, color: color, size: compact ? 18 : 21),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${waypoint.code} | ${waypoint.typeLabel}',
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: compact ? 12 : 14,
-                      fontWeight: FontWeight.w900,
-                    ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 330;
+            return Row(
+              children: [
+                Container(
+                  height: compact ? 34 : 40,
+                  width: compact ? 34 : 40,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: color.withValues(alpha: 0.38)),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    waypoint.mgrs,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: sand,
-                      fontSize: compact ? 11 : 12,
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.w800,
-                    ),
+                  child: Icon(
+                    waypoint.icon,
+                    color: color,
+                    size: compact ? 18 : 21,
                   ),
-                  if (!compact) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      [
-                        if (waypoint.note.isNotEmpty) waypoint.note,
-                        if (waypoint.sharedBy != null)
-                          'od ${waypoint.sharedBy}',
-                        ?waypoint.ageLabelAt(DateTime.now()),
-                      ].join(' · '),
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.66),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            IconButton.filled(
-              key: ValueKey('share-waypoint-${waypoint.code}'),
-              tooltip: 'Sdílet ${waypoint.code}',
-              onPressed: onShare,
-              style: IconButton.styleFrom(
-                backgroundColor: rangerGreen,
-                foregroundColor: Colors.white,
-                fixedSize: Size(compact ? 38 : 42, compact ? 38 : 42),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
                 ),
-              ),
-              icon: const Icon(Icons.send, size: 18),
-            ),
-            if (onRendezvous != null)
-              IconButton(
-                key: ValueKey('rendezvous-${waypoint.code}'),
-                tooltip: 'Sraz zde',
-                onPressed: onRendezvous,
-                icon: const Icon(Icons.groups_outlined, size: 20),
-                color: Colors.white.withValues(alpha: 0.7),
-              ),
-            if (onEdit != null)
-              IconButton(
-                key: ValueKey('edit-waypoint-${waypoint.code}'),
-                tooltip: 'Upravit ${waypoint.code}',
-                onPressed: onEdit,
-                icon: const Icon(Icons.edit_outlined, size: 20),
-                color: Colors.white.withValues(alpha: 0.7),
-              ),
-            if (onDelete != null)
-              IconButton(
-                key: ValueKey('delete-waypoint-${waypoint.code}'),
-                tooltip: 'Smazat ${waypoint.code}',
-                onPressed: onDelete,
-                icon: const Icon(Icons.delete_outline, size: 20),
-                color: Colors.white.withValues(alpha: 0.7),
-              ),
-          ],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${waypoint.code} | ${waypoint.typeLabel}',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: compact ? 12 : 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        waypoint.mgrs,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: sand,
+                          fontSize: compact ? 11 : 12,
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (!compact) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          [
+                            if (waypoint.note.isNotEmpty) waypoint.note,
+                            if (waypoint.sharedBy != null)
+                              'od ${waypoint.sharedBy}',
+                            ?waypoint.ageLabelAt(DateTime.now()),
+                          ].join(' · '),
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.66),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                IconButton.filled(
+                  key: ValueKey('share-waypoint-${waypoint.code}'),
+                  tooltip: 'Sdílet ${waypoint.code}',
+                  onPressed: onShare,
+                  style: IconButton.styleFrom(
+                    backgroundColor: rangerGreen,
+                    foregroundColor: Colors.white,
+                    fixedSize: Size(compact ? 38 : 42, compact ? 38 : 42),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(Icons.send, size: 18),
+                ),
+                if (narrow && (onRendezvous ?? onEdit ?? onDelete) != null)
+                  // Narrow column (landscape side panel): the rarer actions
+                  // fold into a menu so the row fits.
+                  PopupMenuButton<VoidCallback>(
+                    key: ValueKey('more-waypoint-${waypoint.code}'),
+                    tooltip: 'Další akce ${waypoint.code}',
+                    icon: Icon(
+                      Icons.more_vert,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                    onSelected: (action) => action(),
+                    itemBuilder: (context) => [
+                      if (onRendezvous case final action?)
+                        PopupMenuItem(
+                          value: action,
+                          child: const Text('Sraz zde'),
+                        ),
+                      if (onEdit case final action?)
+                        PopupMenuItem(
+                          value: action,
+                          child: const Text('Upravit'),
+                        ),
+                      if (onDelete case final action?)
+                        PopupMenuItem(
+                          value: action,
+                          child: const Text('Smazat'),
+                        ),
+                    ],
+                  )
+                else ...[
+                  if (onRendezvous != null)
+                    IconButton(
+                      key: ValueKey('rendezvous-${waypoint.code}'),
+                      tooltip: 'Sraz zde',
+                      onPressed: onRendezvous,
+                      icon: const Icon(Icons.groups_outlined, size: 20),
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  if (onEdit != null)
+                    IconButton(
+                      key: ValueKey('edit-waypoint-${waypoint.code}'),
+                      tooltip: 'Upravit ${waypoint.code}',
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  if (onDelete != null)
+                    IconButton(
+                      key: ValueKey('delete-waypoint-${waypoint.code}'),
+                      tooltip: 'Smazat ${waypoint.code}',
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                ],
+              ],
+            );
+          },
         ),
       ),
     );

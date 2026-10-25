@@ -429,7 +429,20 @@ void main() {
         final mapBox = tester.getRect(find.byType(MeshMap));
         // The map must own most of the body, not a card squeezed by panels.
         expect(mapBox.height, greaterThan(size.height * 0.45));
-        expect(find.byKey(const ValueKey('map-details-sheet')), findsOneWidget);
+        if (size.width > size.height) {
+          // Landscape: details and PTT sit in a right column, the map keeps
+          // the full height below the app bar.
+          expect(
+            find.byKey(const ValueKey('map-details-panel')),
+            findsOneWidget,
+          );
+          expect(mapBox.height, greaterThan(size.height * 0.7));
+        } else {
+          expect(
+            find.byKey(const ValueKey('map-details-sheet')),
+            findsOneWidget,
+          );
+        }
       },
     );
   }

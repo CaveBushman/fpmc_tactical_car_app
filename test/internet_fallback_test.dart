@@ -7,9 +7,11 @@ import 'package:tactical_car_app/models/messaging.dart';
 import 'package:tactical_car_app/services/backend_client.dart';
 import 'package:tactical_car_app/services/location_service.dart';
 import 'package:tactical_car_app/services/mesh_packet_repository.dart';
+import 'package:tactical_car_app/services/meshtastic_ble_service.dart';
 import 'package:tactical_car_app/services/ptt/voice_transport.dart';
 
 import 'support/fakes.dart';
+import 'support/mesh_bytes.dart';
 
 BackendClient _backend() => BackendClient(
   baseUrl: 'https://ptt.example.test',
@@ -34,6 +36,7 @@ void main() {
   late FakeBleService ble;
   late List<FakeVoiceTransport> rooms;
   late TacticalController controller;
+  late MeshPacketRepository repository;
 
   FakeVoiceTransport room() => rooms.last;
 
@@ -44,7 +47,7 @@ void main() {
     controller = TacticalController(
       locationService: location,
       meshtasticBleService: ble,
-      meshPacketRepository: MeshPacketRepository(),
+      meshPacketRepository: repository = MeshPacketRepository(),
       backend: _backend(),
       voiceTransportFactory: () {
         final transport = FakeVoiceTransport();
@@ -55,6 +58,19 @@ void main() {
       carBridge: FakeCarBridge(),
     );
     await controller.login('operator', 'pw');
+    await pumpEventQueue();
+    // A real session starts with an empty team: RAVEN-2 is heard over LoRa.
+    repository.ingest(
+      MeshtasticBlePacket(
+        bytes: fromRadioNodeInfo(
+          nodeNum: 0xA1100002,
+          shortName: 'RAVEN-2',
+          latitude: 50.09422,
+          longitude: 14.407812,
+        ),
+        receivedAt: DateTime.now(),
+      ),
+    );
     await pumpEventQueue();
   });
 

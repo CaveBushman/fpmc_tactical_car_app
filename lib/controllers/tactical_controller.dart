@@ -348,6 +348,29 @@ class TacticalController extends ChangeNotifier {
   /// Returns an error message, or null on success.
   String? _lastUserName;
 
+  /// A real (backend) session starts with nothing but the own node: the
+  /// sample team, messages and points are for offline test accounts only
+  /// and must never pass for real people or places. Saved state from an
+  /// earlier session is restored on top as usual.
+  void _startCleanMission(AuthSession session) {
+    final self = selfNode;
+    _replaceNodes([
+      MeshNode(
+        nodeNum: self.nodeNum,
+        callSign: session.displayName.isEmpty
+            ? session.userName.toUpperCase()
+            : session.displayName,
+        latitude: self.latitude,
+        longitude: self.longitude,
+        altitudeM: self.altitudeM,
+        lastSeenAt: DateTime.now(),
+        isSelf: true,
+      ),
+    ]);
+    _messages.clear();
+    _waypoints.clear();
+  }
+
   /// Prefilled on the login screen: the last user who logged in here.
   String? get lastUserName => _lastUserName;
 
@@ -363,6 +386,9 @@ class TacticalController extends ChangeNotifier {
     _lastUserName = session.userName;
     unawaited(settings.setLastUserName(session.userName));
     _session = session;
+    if (!session.isDemo) {
+      _startCleanMission(session);
+    }
     _groups = session.groupDefinitions.isEmpty
         ? CommunicationGroup.demoGroups
         : [
@@ -435,6 +461,7 @@ class TacticalController extends ChangeNotifier {
     _danger.reset();
     _navTarget = null;
     _peerTrails.clear();
+    _knownNames.clear();
     _rendezvous = null;
     _lastBackendReportAt = null;
     _contactWatch.clear();
@@ -1289,7 +1316,8 @@ class TacticalController extends ChangeNotifier {
         at: fix.timestamp,
         altitudeM: fix.altitudeM.round(),
         accuracyM: fix.accuracyM,
-        batteryPercent: self.batteryPercent,
+        // Only a connected T-Beam's own reading, never a stale or sample one.
+        batteryPercent: meshConnected ? self.batteryPercent : null,
         status: ownStatus?.name,
       );
     } on BackendException {
@@ -1425,6 +1453,13 @@ class TacticalController extends ChangeNotifier {
         batteryPercent: battery,
       );
       return true;
+    }
+
+    // Names arrive even from nodes without a GPS fix; remember them so
+    // their messages show the callsign rather than the node number.
+    final announced = _eventCallSign(event);
+    if (announced != null) {
+      _knownNames[nodeNum] = announced;
     }
 
     final existingIndex = _nodes.indexWhere((node) => node.nodeNum == nodeNum);
@@ -2384,6 +2419,9 @@ class TacticalController extends ChangeNotifier {
     }
   }
 
+  /// Callsigns announced by nodes, including ones without a position yet.
+  final Map<int, String> _knownNames = {};
+
   String? _nodeCallSign(int? nodeNum) {
     if (nodeNum == null) {
       return null;
@@ -2393,7 +2431,7 @@ class TacticalController extends ChangeNotifier {
         return node.callSign;
       }
     }
-    return null;
+    return _knownNames[nodeNum];
   }
 
   String _nodeHex(int? nodeNum) {
