@@ -805,9 +805,50 @@ class SituationTests(ApiTestCase):
         self.assertTrue(rows[0]["low_battery"])
         self.assertFalse(rows[1]["low_battery"])
         self.assertContains(page, "<title>(!1) Situace")
+        self.assertContains(page, '<svg viewBox="0 0 640 360"')
+        self.assertContains(page, ">Schéma vzájemných poloh")
         only_med = self.client.get("/panel/situation", {"group": "med"})
         self.assertEqual([r["member"].username for r in only_med.context["rows"]],
                          ["medic"])
+
+
+class SketchTests(TestCase):
+    def rows(self, *points):
+        from types import SimpleNamespace
+
+        return [
+            {
+                "member": SimpleNamespace(display_name="", username=f"m{i}"),
+                "position": SimpleNamespace(latitude=lat, longitude=lon),
+                "urgent": urgent, "stale": False,
+            }
+            for i, (lat, lon, urgent) in enumerate(points)
+        ]
+
+    def test_points_keep_north_up_and_fit_the_drawing(self):
+        from . import sketch
+
+        plot = sketch.build(self.rows(
+            (50.10, 14.40, False), (50.08, 14.40, True), (50.09, 14.43, False),
+        ))
+        points = {p["label"]: (float(p["x"]), float(p["y"])) for p in plot["points"]}
+        self.assertLess(points["m0"][1], points["m1"][1])  # north is up
+        self.assertGreater(points["m2"][0], points["m0"][0])  # east is right
+        for x, y in points.values():
+            self.assertTrue(0 <= x <= sketch.WIDTH and 0 <= y <= sketch.HEIGHT)
+        # Urgent member last, so it is drawn on top.
+        self.assertEqual(plot["points"][-1]["label"], "m1")
+        self.assertEqual(plot["scale"]["label"], "1 km")
+
+    def test_single_member_and_locale_safe_numbers(self):
+        from . import sketch
+
+        self.assertIsNone(sketch.build([]))
+        plot = sketch.build(self.rows((50.0, 14.0, False)))
+        self.assertEqual((plot["points"][0]["x"], plot["points"][0]["y"]),
+                         ("320.0", "180.0"))
+        self.assertEqual(plot["scale"]["label"], "200 m")
+        self.assertNotIn(",", plot["scale"]["px"])
 
 
 class PasswordlessLoginTests(ApiTestCase):

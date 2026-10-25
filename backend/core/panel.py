@@ -22,7 +22,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from . import audit, keys, security
+from . import audit, keys, security, sketch
 from .api import GROUP_ID, MIN_PASSWORD_LENGTH, USER_NAME
 from .mgrs import to_mgrs
 from .models import ROLE_LABELS, ROLES, AuditEntry, GroupMessage, TeamGroup, User
@@ -603,6 +603,7 @@ def situation(request):
             "rows": rows,
             "silent": silent,
             "summary": summary,
+            "sketch": sketch.build(rows),
             "low_battery_percent": LOW_BATTERY_PERCENT,
             "groups": TeamGroup.objects.all(),
             "group_id": group_id,

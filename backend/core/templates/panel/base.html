@@ -38,6 +38,20 @@
   .stat.warn b { color:var(--sand); }
   .stat.alarm { border-color:var(--danger); }
   .stat.alarm b { color:var(--danger); }
+  .sketch { margin:0 0 14px; }
+  .sketch svg { display:block; width:100%; height:auto; max-height:440px; background:#151b12; border:1px solid var(--line); border-radius:8px; }
+  .sketch figcaption { margin-top:4px; }
+  .sk-bg { fill:#151b12; }
+  .sk-north path { fill:var(--sand); }
+  .sk-north text, .sk-scale text { fill:var(--muted); font-size:15px; }
+  .sk-scale path { fill:none; stroke:var(--muted); stroke-width:1.5; }
+  .sk-pt circle { fill:var(--sand); stroke:#0c0f0a; stroke-width:1.5; }
+  .sk-pt text { fill:var(--text); font-size:17px; paint-order:stroke; stroke:#151b12; stroke-width:3px; }
+  .sk-stale circle { fill:#6d6b5c; }
+  .sk-stale text { fill:var(--muted); }
+  .sk-urgent circle { fill:var(--danger); }
+  .sk-urgent .sk-ring { fill:none; stroke:var(--danger); stroke-width:2; }
+  .sk-urgent text { fill:#ff9c98; font-weight:700; }
   fieldset { border:1px solid var(--line); border-radius:6px; padding:6px 12px 10px; margin:10px 0 0; }
   legend { font-weight:600; padding:0 4px; }
   .helptext ul, ul.helptext { margin:2px 0; padding-left:0; list-style:none; }

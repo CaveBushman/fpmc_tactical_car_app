@@ -19,6 +19,28 @@
   <div class="stat{% if summary.silent %} warn{% endif %}"><b>{{ summary.silent }}</b>bez polohy</div>
   <div class="stat{% if summary.low_battery %} warn{% endif %}"><b>{{ summary.low_battery }}</b>baterie ≤ {{ low_battery_percent }} %</div>
 </div>
+{% if sketch %}
+<figure class="sketch">
+  <svg viewBox="0 0 {{ sketch.width }} {{ sketch.height }}" role="img" aria-label="Schematická mapa poloh členů">
+    <rect width="{{ sketch.width }}" height="{{ sketch.height }}" class="sk-bg"/>
+    <g class="sk-north" transform="translate({{ sketch.width|add:"-28" }} 30)">
+      <path d="M0 -16 L7 6 L0 1 L-7 6 Z"/><text y="22" text-anchor="middle">S</text>
+    </g>
+    <g class="sk-scale" transform="translate(16 {{ sketch.height|add:"-18" }})">
+      <path d="M0 -5 V0 H{{ sketch.scale.px }} V-5"/>
+      <text x="{{ sketch.scale.px }}" dx="6" y="0">{{ sketch.scale.label }}</text>
+    </g>
+    {% for p in sketch.points %}
+    <g class="sk-pt{% if p.urgent %} sk-urgent{% elif p.stale %} sk-stale{% endif %}">
+      {% if p.urgent %}<circle cx="{{ p.x }}" cy="{{ p.y }}" r="13" class="sk-ring"/>{% endif %}
+      <circle cx="{{ p.x }}" cy="{{ p.y }}" r="6"/>
+      <text x="{{ p.x }}" y="{{ p.y }}" dx="{{ p.dx }}" dy="6" text-anchor="{{ p.anchor }}">{{ p.label }}</text>
+    </g>
+    {% endfor %}
+  </svg>
+  <figcaption class="muted">Schéma vzájemných poloh (sever nahoře), bez mapového podkladu. Červeně členové v nouzi, šedě bez hlášení &gt; {{ stale_minutes }} min.</figcaption>
+</figure>
+{% endif %}
 <a class="button" href="{% url 'panel-situation-message' %}{% if group_id %}?group={{ group_id }}{% endif %}">Poslat zprávu skupině</a>
 <p class="muted">Aktualizováno {% now "H:i:s" %}, stránka se obnovuje každou minutu.
   Poslední poloha, kterou aplikace člena poslala na server (každé 2 minuty, i když stojí).
