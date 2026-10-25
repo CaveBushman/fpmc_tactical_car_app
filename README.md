@@ -145,7 +145,7 @@ Put a TLS reverse proxy in front (the app needs `https://` for the backend and `
 flutter build apk --release --dart-define=BACKEND_URL=https://ptt.example.cz/api
 ```
 
-Web panel: `https://ptt.example.cz/api/panel/` (log in as a commander). Users (create, display name, role, groups, block, new password, log out everywhere, unbind devices; search, last activity, inactive/blocked filters; bulk creation from a pasted CSV list `user;display name;role;groups` with a per-line preview and generated one-time passwords offered as a download, never stored), own password change, groups (name, Meshtastic channel 0–7, PTT on/off, description, new E2EE key, delete when empty) and the audit log. Plain HTML forms with CSRF protection, no JavaScript, strict CSP. Changes of role, groups, password or blocking end that user's sessions immediately.
+Web panel: `https://ptt.example.cz/api/panel/` (log in as a commander). Users (create, display name, role, groups, block, new password, log out everywhere, unbind devices; search, last activity, inactive/blocked filters; bulk creation from a pasted CSV list `user;display name;role;groups` with a per-line preview and generated one-time passwords offered as a download, never stored), own password change, a situation page (each member's latest reported position in MGRS with a map link, status with ZRANĚN/POTŘEBUJI PODPORU first, T-Beam battery and age; only the latest position is stored, no movement history), groups (name, Meshtastic channel 0–7, PTT on/off, description, new E2EE key, delete when empty) and the audit log. Plain HTML forms with CSRF protection, no JavaScript, strict CSP. Changes of role, groups, password or blocking end that user's sessions immediately.
 
 Moving from the former Dart server: copy its data directory and run `python manage.py import_dart_data /path/to/data` (users with their password hashes, session versions and devices, groups, E2EE keys, audit log). Password hashes keep the same format (`pbkdf2-sha256$…`), so nobody has to change passwords. `python manage.py hash_password` prints a hash in that format.
 
@@ -153,7 +153,7 @@ Login protection: 5 wrong passwords lock that user name for 5 minutes from the s
 
 Device binding: the app sends a random per-installation id at login; an account may use at most `MAX_DEVICES_PER_USER` devices (default 2, `0` = unlimited) until a commander unbinds one.
 
-API (unchanged from the Dart server): `POST /auth/login`, `POST /auth/refresh`, `POST /auth/password`, `POST /ptt/<group>/join`, admin endpoints under `/admin/…` (commander, Bearer token), `GET /health`. Configuration is documented in `backend/tactical/settings.py`.
+API (as the Dart server, plus `POST /report`): `POST /auth/login`, `POST /auth/refresh`, `POST /auth/password`, `POST /ptt/<group>/join`, `POST /report` (own position, status and battery; the app sends it at most every 2 minutes, 5 in battery saver, and at once on a status change), admin endpoints under `/admin/…` (commander, Bearer token), `GET /health`. Configuration is documented in `backend/tactical/settings.py`.
 
 Operations (docker-compose):
 - `backup` dumps PostgreSQL every night into `deploy/backups/` (custom format, kept `BACKUP_KEEP_DAYS`, default 14). Restore: `docker compose exec -T db pg_restore -U tactical -d tactical --clean --if-exists < backups/tactical-YYYYMMDD-HHMM.dump`. Copy the backups off the server too.

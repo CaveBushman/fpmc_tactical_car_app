@@ -77,3 +77,11 @@ done
 curl -fsS "http://127.0.0.1:$port/health" >/dev/null
 
 BACKEND_E2E_URL="http://127.0.0.1:$port" flutter test test/e2e/backend_e2e_test.dart
+
+# The report sent by the app is stored for the situation page.
+(cd "$backend_dir" && "$PYTHON" manage.py shell -c '
+from core.models import MemberPosition
+p = MemberPosition.objects.get(user__username="e2e-operator")
+assert (round(p.latitude, 6), p.status, p.battery_percent) == (50.087451, "holding", 76), p
+print("position report stored")
+')

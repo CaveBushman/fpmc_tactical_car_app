@@ -10,6 +10,7 @@ urlpatterns = [
     path("auth/refresh", api.routes(POST=api.refresh)),
     path("auth/password", api.routes(POST=api.change_password)),
     path("ptt/<str:group>/join", api.routes(POST=api.join_ptt)),
+    path("report", api.routes(POST=api.report_position)),
     path(
         "admin/users",
         api.routes(GET=api.list_users, POST=api.create_user),

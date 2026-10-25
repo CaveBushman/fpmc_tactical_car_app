@@ -219,6 +219,14 @@ const helpTopics = [
   // Bezpečnost
   HelpTopic(
     'Bezpečnost',
+    'Poloha pro velitele',
+    'Přihlášená aplikace posílá na server vaši polohu, stav a baterii '
+        'T-Beamu – nejvýš každé 2 minuty (v úsporném režimu 5), při změně '
+        'stavu hned. Velitelé ji vidí v panelu na stránce Situace. Server '
+        'drží jen poslední polohu, historii pohybu neukládá.',
+  ),
+  HelpTopic(
+    'Bezpečnost',
     'Odhlášení a nouzový výmaz',
     'Data v zařízení jsou šifrovaná. Odhlášení smaže zprávy, body a polohy. '
         'Nouzový výmaz v nabídce uživatele (vpravo nahoře) po podržení 3 s '

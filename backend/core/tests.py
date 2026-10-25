@@ -13,7 +13,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from . import security
-from .models import AuditEntry, Device, GroupKey, TeamGroup, User
+from .models import AuditEntry, Device, GroupKey, MemberPosition, TeamGroup, User
 from .passwords import hash_password, verify_password
 
 # A hash written by the former Dart server (password "operator-2026").
@@ -683,3 +683,92 @@ class OperationsTests(TestCase):
                 "/panel/login", HTTP_X_FORWARDED_PROTO="https", secure=True
             )
             self.assertEqual(secure.status_code, 200)
+
+
+# Reference values produced by the app's formatMgrs (mgrs_dart).
+MGRS_REFERENCE = [
+    (50.087451, 14.420671, "33U VR 58556 48514"),
+    (49.19506, 16.606837, "33U XQ 17066 50382"),
+    (49.8346, 18.282, "34U CA 04553 23784"),
+    (51.0, 12.0, "33U TS 89511 54109"),
+    (-33.8688, 151.2093, "56H LH 34368 50948"),
+    (0.5, 10.0, "32N PF 11276 55273"),
+    (64.1466, -21.9426, "27W VM 54138 13689"),
+    (40.7128, -74.006, "18T WL 83959 07350"),
+    (-0.1, -78.5, "17M QV 78275 88936"),
+    (59.9139, 10.7522, "32V NM 97979 43118"),  # Norway exception
+    (-54.8, -68.3, "19F EV 45000 27239"),
+]
+
+
+class SituationTests(ApiTestCase):
+    def test_mgrs_matches_the_app(self):
+        from .mgrs import to_mgrs
+
+        for lat, lon, expected in MGRS_REFERENCE:
+            self.assertEqual(to_mgrs(lat, lon), expected, (lat, lon))
+        self.assertIsNone(to_mgrs(85, 0))
+
+    def report(self, token, **body):
+        return self.call("POST", "/report", body, token=token)
+
+    def test_report_keeps_only_the_latest_position(self):
+        token = self.login()
+        ok = self.report(token, lat=50.087451, lon=14.420671, alt=240.6,
+                         battery=101, status="wounded")
+        self.assertEqual(ok.json(), {"ok": True})
+        position = self.operator.position
+        self.assertEqual((position.battery_percent, position.altitude_m,
+                          position.status), (100, 240, "wounded"))
+        # A later report replaces it; a late, older one is ignored.
+        now = timezone.now()
+        self.report(token, lat=50.1, lon=14.5, at=now.isoformat())
+        self.report(token, lat=10.0, lon=10.0,
+                    at=(now - timedelta(minutes=10)).isoformat())
+        position = MemberPosition.objects.get(user=self.operator)
+        self.assertEqual((position.latitude, position.status), (50.1, "wounded"))
+        self.assertEqual(MemberPosition.objects.count(), 1)
+
+    def test_report_validation(self):
+        token = self.login()
+        cases = [
+            ({"lat": 91, "lon": 0}, "invalid_position"),
+            ({"lat": "50", "lon": 14}, "invalid_position"),
+            ({"lat": 50, "lon": 14, "status": "asleep"}, "invalid_status"),
+            ({"lat": 50, "lon": 14, "at": "yesterday"}, "invalid_time"),
+            ({"lat": 50, "lon": 14,
+              "at": (timezone.now() + timedelta(hours=1)).isoformat()},
+             "invalid_time"),
+        ]
+        for body, code in cases:
+            response = self.report(token, **body)
+            self.assertEqual((response.status_code, response.json()["error"]),
+                             (400, code), body)
+        self.assertEqual(self.call("POST", "/report", {"lat": 1, "lon": 1})
+                         .status_code, 401)
+        self.assertFalse(AuditEntry.objects.filter(event__contains="report").exists())
+
+    def test_situation_page_puts_urgent_and_fresh_first(self):
+        medic = make_user("medic", "medic-pass-1", groups=("med",))
+        make_user("silent", "silent-pass-1", groups=("alpha",))
+        now = timezone.now()
+        MemberPosition.objects.create(
+            user=self.operator, latitude=50.087451, longitude=14.420671,
+            status="ok", battery_percent=80, reported_at=now - timedelta(hours=1),
+        )
+        MemberPosition.objects.create(
+            user=medic, latitude=49.19506, longitude=16.606837,
+            status="wounded", reported_at=now - timedelta(minutes=2),
+        )
+        self.client.force_login(self.commander)
+        page = self.client.get("/panel/situation")
+        rows = page.context["rows"]
+        self.assertEqual([r["member"].username for r in rows], ["medic", "operator"])
+        self.assertEqual(rows[0]["status"], "ZRANĚN")
+        self.assertTrue(rows[1]["stale"])
+        self.assertEqual(rows[1]["mgrs"], "33U VR 58556 48514")
+        self.assertIn("silent", [m.username for m in page.context["silent"]])
+        self.assertContains(page, "mapy.cz")
+        only_med = self.client.get("/panel/situation", {"group": "med"})
+        self.assertEqual([r["member"].username for r in only_med.context["rows"]],
+                         ["medic"])

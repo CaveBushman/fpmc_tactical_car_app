@@ -16,6 +16,8 @@
   filter layer.
 - Backend rewritten in Django with PostgreSQL and a web panel; the app has
   no built-in training accounts any more.
+- Commanders' situation page: members' latest positions, statuses and
+  batteries reported by the app (latest only, no history).
 
 ## 1.2.0 (build 3) – 2026-10-24
 

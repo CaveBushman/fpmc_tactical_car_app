@@ -182,6 +182,32 @@ class BackendClient {
     );
   }
 
+  /// Latest own position, status and battery for the commanders' panel.
+  Future<void> reportPosition(
+    String sessionToken, {
+    required double latitude,
+    required double longitude,
+    required DateTime at,
+    int? altitudeM,
+    double? accuracyM,
+    int? batteryPercent,
+    String? status,
+  }) async {
+    await _post(
+      'report',
+      sessionToken: sessionToken,
+      body: {
+        'lat': latitude,
+        'lon': longitude,
+        'at': at.toUtc().toIso8601String(),
+        'alt': ?altitudeM,
+        'accuracy': ?accuracyM,
+        'battery': ?batteryPercent,
+        'status': ?status,
+      },
+    );
+  }
+
   void close() => _http.close();
 
   Future<Map<String, dynamic>> _post(

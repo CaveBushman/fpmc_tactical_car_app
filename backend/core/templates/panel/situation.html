@@ -1,0 +1,35 @@
+{% extends "panel/base.html" %}
+{% block title %}Situace{% endblock %}
+{% block content %}
+<h1>Situace</h1>
+<form method="get" class="card">
+  <label for="group">Skupina</label>
+  <select id="group" name="group">
+    <option value="">všechny</option>
+    {% for g in groups %}<option value="{{ g.id }}" {% if g.id == group_id %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+  </select>
+  <button type="submit">Zobrazit</button>
+  <a class="button secondary" href="">Obnovit</a>
+</form>
+<p class="muted">Poslední poloha, kterou aplikace člena poslala na server (nejvýš každé 2 minuty).
+  Údaje starší než {{ stale_minutes }} minut jsou šedé. Historie pohybu se neukládá.</p>
+<div class="wrap"><table>
+  <tr><th>Člen</th><th>Stav</th><th>Poloha (MGRS)</th><th>Baterie</th><th>Před</th><th></th></tr>
+  {% for row in rows %}
+  <tr{% if row.stale %} class="muted"{% endif %}>
+    <td><strong>{{ row.member.display_name|default:row.member.username }}</strong> <span class="muted">{{ row.member.username }}</span></td>
+    <td>{% if row.urgent %}<span class="off">{{ row.status }}</span>{% else %}{{ row.status|default:"–" }}{% endif %}</td>
+    <td><code>{{ row.mgrs }}</code></td>
+    <td>{% if row.position.battery_percent is not None %}{{ row.position.battery_percent }} %{% else %}–{% endif %}</td>
+    <td>{{ row.minutes }} min</td>
+    <td><a href="{{ row.map_url }}" target="_blank" rel="noopener noreferrer">Mapa</a></td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="6" class="muted">Žádný člen zatím polohu neposlal.</td></tr>
+  {% endfor %}
+</table></div>
+{% if silent %}
+<h2>Bez polohy</h2>
+<p>{% for m in silent %}<span class="tag">{{ m.username }}</span>{% endfor %}</p>
+{% endif %}
+{% endblock %}

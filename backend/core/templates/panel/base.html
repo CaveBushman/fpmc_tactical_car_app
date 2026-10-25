@@ -53,6 +53,7 @@
   <strong>FPMC Tactical · panel velitele</strong>
   {% if user.is_authenticated %}
   <nav>
+    <a href="{% url 'panel-situation' %}" {% if section == 'situation' %}class="active"{% endif %}>Situace</a>
     <a href="{% url 'panel-users' %}" {% if section == 'users' %}class="active"{% endif %}>Uživatelé</a>
     <a href="{% url 'panel-groups' %}" {% if section == 'groups' %}class="active"{% endif %}>Skupiny</a>
     <a href="{% url 'panel-audit' %}" {% if section == 'audit' %}class="active"{% endif %}>Audit</a>

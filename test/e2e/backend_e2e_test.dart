@@ -54,6 +54,26 @@ void main() {
     expect(ptt.token.split('.'), hasLength(3));
     expect(ptt.keys.last.bytes, hasLength(32)); // decoded 256-bit key
 
+    // Position report for the commanders' situation page.
+    await client.reportPosition(
+      refreshed.token,
+      latitude: 50.087451,
+      longitude: 14.420671,
+      at: DateTime.now(),
+      altitudeM: 240,
+      batteryPercent: 76,
+      status: 'holding',
+    );
+    final badReport = await failure(
+      client.reportPosition(
+        refreshed.token,
+        latitude: 95,
+        longitude: 14,
+        at: DateTime.now(),
+      ),
+    );
+    expect((badReport.statusCode, badReport.code), (400, 'invalid_position'));
+
     final denied = await failure(client.joinPtt(refreshed.token, 'command'));
     expect((denied.statusCode, denied.code), (403, 'forbidden_group'));
     final silent = await failure(client.joinPtt(refreshed.token, 'recon'));

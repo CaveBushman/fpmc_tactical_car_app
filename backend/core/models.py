@@ -139,6 +139,31 @@ class GroupKey(models.Model):
         return {"id": self.key_id, "key": self.key}
 
 
+MEMBER_STATUSES = (
+    "ok", "moving", "holding", "wounded", "needSupport", "outOfAction",
+)
+
+
+class MemberPosition(models.Model):
+    """The last position a member's app reported. Only the latest is
+    kept: no movement history is stored on the server."""
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="position"
+    )
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    altitude_m = models.IntegerField(null=True, blank=True)
+    accuracy_m = models.FloatField(null=True, blank=True)
+    battery_percent = models.PositiveSmallIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=16, blank=True, default="")
+    reported_at = models.DateTimeField()
+    received_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-reported_at"]
+
+
 class AuditEntry(models.Model):
     at = models.DateTimeField(default=timezone.now, db_index=True)
     event = models.CharField(max_length=40)

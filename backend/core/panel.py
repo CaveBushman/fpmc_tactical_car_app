@@ -23,6 +23,7 @@ from django.views.decorators.http import require_POST
 
 from . import audit, keys, security
 from .api import GROUP_ID, MIN_PASSWORD_LENGTH, USER_NAME
+from .mgrs import to_mgrs
 from .models import ROLES, AuditEntry, TeamGroup, User
 
 ROLE_CHOICES = [
@@ -534,6 +535,70 @@ def group_rotate(request, group_id):
         "příštím připojení k hlasovému kanálu.",
     )
     return redirect("panel-groups")
+
+
+# --- Situation -------------------------------------------------------------------
+
+STATUS_LABELS = {
+    "ok": "OK",
+    "moving": "V POHYBU",
+    "holding": "NA POZICI",
+    "wounded": "ZRANĚN",
+    "needSupport": "POTŘEBUJI PODPORU",
+    "outOfAction": "MIMO AKCI",
+}
+URGENT_STATUSES = {"wounded", "needSupport"}
+# Same as the app's LOST link status.
+STALE_AFTER = timedelta(minutes=15)
+
+
+@commander_required
+def situation(request):
+    group_id = request.GET.get("group", "")
+    members = (
+        User.objects.filter(disabled=False)
+        .select_related("position")
+        .prefetch_related("groups")
+    )
+    if group_id:
+        members = members.filter(groups__id=group_id)
+    now = timezone.now()
+    rows, silent = [], []
+    for member in members:
+        position = getattr(member, "position", None)
+        if position is None:
+            silent.append(member)
+            continue
+        age = now - position.reported_at
+        rows.append(
+            {
+                "member": member,
+                "position": position,
+                "mgrs": to_mgrs(position.latitude, position.longitude) or "–",
+                "status": STATUS_LABELS.get(position.status, ""),
+                "urgent": position.status in URGENT_STATUSES,
+                "minutes": max(0, int(age.total_seconds() // 60)),
+                "stale": age > STALE_AFTER,
+                "map_url": (
+                    "https://mapy.cz/zakladni?source=coor"
+                    f"&id={position.longitude:.6f},{position.latitude:.6f}"
+                    f"&x={position.longitude:.6f}&y={position.latitude:.6f}&z=15"
+                ),
+            }
+        )
+    # Urgent first, then fresh before stale, then by name.
+    rows.sort(key=lambda r: (not r["urgent"], r["stale"], r["member"].username))
+    return render(
+        request,
+        "panel/situation.html",
+        {
+            "rows": rows,
+            "silent": silent,
+            "groups": TeamGroup.objects.all(),
+            "group_id": group_id,
+            "stale_minutes": int(STALE_AFTER.total_seconds() // 60),
+        },
+    )
 
 
 # --- Audit ---------------------------------------------------------------------

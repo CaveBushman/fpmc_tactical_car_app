@@ -426,6 +426,7 @@ class TacticalController extends ChangeNotifier {
     _navTarget = null;
     _peerTrails.clear();
     _rendezvous = null;
+    _lastBackendReportAt = null;
     _contactWatch.clear();
     _batteryWatch.clear();
     _speedKmh = null;
@@ -1224,6 +1225,7 @@ class TacticalController extends ChangeNotifier {
     final callSign = selfNode.callSign;
     _statuses.report(callSign, status, DateTime.now());
     unawaited(_persistState());
+    unawaited(_reportToBackend(force: true));
     _log(MissionEventKind.status, 'Můj stav: ${status.label}');
     _notify();
     await sendMeshText(
@@ -1233,6 +1235,55 @@ class TacticalController extends ChangeNotifier {
         priority: status.urgent,
       ),
     );
+  }
+
+  // --- Position report to the backend --------------------------------------------
+
+  DateTime? _lastBackendReportAt;
+  bool _backendReporting = false;
+
+  /// Sends position, status and battery to the backend for the
+  /// commanders' situation page: at most every 2 minutes (5 in battery
+  /// saver), at once when [force]d (status change). Failures are silent:
+  /// the next fix tries again.
+  Future<void> _reportToBackend({
+    LocationFix? latest,
+    bool force = false,
+  }) async {
+    final backend = _backend;
+    final token = _session?.sessionToken;
+    // The fix itself: the location state stream may not have caught up yet.
+    final fix = latest ?? _locationState.lastFix;
+    if (backend == null || token == null || fix == null || _backendReporting) {
+      return;
+    }
+    final now = _clock();
+    final last = _lastBackendReportAt;
+    final interval = _prefs.batterySaver
+        ? const Duration(minutes: 5)
+        : const Duration(minutes: 2);
+    if (!force && last != null && now.difference(last) < interval) {
+      return;
+    }
+    _backendReporting = true;
+    _lastBackendReportAt = now;
+    try {
+      final self = selfNode;
+      await backend.reportPosition(
+        token,
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+        at: fix.timestamp,
+        altitudeM: fix.altitudeM.round(),
+        accuracyM: fix.accuracyM,
+        batteryPercent: self.batteryPercent,
+        status: ownStatus?.name,
+      );
+    } on BackendException {
+      _lastBackendReportAt = null; // try again with the next fix
+    } finally {
+      _backendReporting = false;
+    }
   }
 
   /// Below this speed the GPS course is noise.
@@ -1265,6 +1316,7 @@ class TacticalController extends ChangeNotifier {
     _replaceNodes(MeshNode.relativeToSelf(_nodes));
     if (_session != null) {
       _mission.record(fix);
+      unawaited(_reportToBackend(latest: fix));
     }
     _notify();
     unawaited(_shareInternetPosition());

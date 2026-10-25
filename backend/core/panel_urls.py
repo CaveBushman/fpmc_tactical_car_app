@@ -22,5 +22,6 @@ urlpatterns = [
     path("groups/<str:group_id>", panel.group_edit, name="panel-group-edit"),
     path("groups/<str:group_id>/delete", panel.group_delete, name="panel-group-delete"),
     path("groups/<str:group_id>/rotate", panel.group_rotate, name="panel-group-rotate"),
+    path("situation", panel.situation, name="panel-situation"),
     path("audit", panel.audit_log, name="panel-audit"),
 ]

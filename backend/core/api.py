@@ -4,6 +4,7 @@ keep working."""
 
 import json
 import re
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.db import DatabaseError, connection, transaction
@@ -12,7 +13,14 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from . import audit, keys, security, tokens
-from .models import ROLES, Device, TeamGroup, User
+from .models import (
+    MEMBER_STATUSES,
+    ROLES,
+    Device,
+    MemberPosition,
+    TeamGroup,
+    User,
+)
 from .passwords import DUMMY_HASH, verify_password
 
 MIN_PASSWORD_LENGTH = 10
@@ -240,6 +248,60 @@ def join_ptt(request, group):
     if previous is not None:
         data["previousKey"] = previous.to_json()
     return _json(200, data)
+
+
+def _number(value):
+    return value if type(value) in (int, float) else None
+
+
+def report_position(request):
+    """Latest position, status and battery of the calling member, for the
+    commanders' situation page. Not audited (it arrives every few minutes);
+    only the latest report is kept."""
+    user, _, error = _require_user(request)
+    if error:
+        return error
+    body = _body(request)
+    lat, lon = _number(body.get("lat")), _number(body.get("lon"))
+    if lat is None or lon is None or abs(lat) > 90 or abs(lon) > 180:
+        return _error(400, "invalid_position")
+    now = timezone.now()
+    reported = now
+    if body.get("at") is not None:
+        try:
+            reported = datetime.fromisoformat(str(body["at"]).replace("Z", "+00:00"))
+        except ValueError:
+            return _error(400, "invalid_time")
+        if timezone.is_naive(reported):
+            return _error(400, "invalid_time")
+        if reported > now + timedelta(minutes=5) or reported < now - timedelta(hours=1):
+            return _error(400, "invalid_time")
+    status = _text(body.get("status")).strip()
+    if status and status not in MEMBER_STATUSES:
+        return _error(400, "invalid_status")
+    battery = _number(body.get("battery"))
+    altitude = _number(body.get("alt"))
+    accuracy = _number(body.get("accuracy"))
+    previous = MemberPosition.objects.filter(user=user).first()
+    if previous is not None and previous.reported_at > reported:
+        return _json(200, {"ok": True})  # an older report arrived late
+    MemberPosition.objects.update_or_create(
+        user=user,
+        defaults={
+            "latitude": lat,
+            "longitude": lon,
+            "altitude_m": int(altitude) if altitude is not None else None,
+            "accuracy_m": accuracy,
+            # Above 100 = external power, shown as full.
+            "battery_percent": (
+                max(0, min(int(battery), 100)) if battery is not None else None
+            ),
+            "status": status or (previous.status if previous else ""),
+            "reported_at": reported,
+            "received_at": now,
+        },
+    )
+    return _json(200, {"ok": True})
 
 
 # --- Admin: users -------------------------------------------------------------
