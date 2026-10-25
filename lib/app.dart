@@ -255,7 +255,10 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
     final controller = _controller;
     final session = controller.session;
     if (session == null) {
-      return LoginScreen(onLogin: controller.login);
+      return LoginScreen(
+        onLogin: controller.login,
+        lastUserName: controller.lastUserName,
+      );
     }
 
     final nodes = controller.nodes;

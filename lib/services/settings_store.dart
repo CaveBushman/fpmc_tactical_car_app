@@ -98,6 +98,13 @@ class SettingsStore {
   Future<void> setLostContactAlerts(bool value) =>
       _set((prefs) => prefs.setBool('${prefix}lostContactAlerts', value));
 
+  /// User name of the last successful login on this device (prefilled).
+  Future<String?> lastUserName() =>
+      _get((prefs) => prefs.getString('${prefix}lastUserName'));
+
+  Future<void> setLastUserName(String value) =>
+      _set((prefs) => prefs.setString('${prefix}lastUserName', value));
+
   /// Last communication group chosen by [userName].
   Future<String?> groupFor(String userName) =>
       _get((prefs) => prefs.getString('${prefix}group.$userName'));

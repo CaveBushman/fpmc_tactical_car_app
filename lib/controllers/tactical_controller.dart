@@ -343,6 +343,11 @@ class TacticalController extends ChangeNotifier {
   // --- Session -------------------------------------------------------------
 
   /// Returns an error message, or null on success.
+  String? _lastUserName;
+
+  /// Prefilled on the login screen: the last user who logged in here.
+  String? get lastUserName => _lastUserName;
+
   Future<String?> login(String userName, String password) async {
     final result = await _authService.login(
       userName: userName,
@@ -352,6 +357,8 @@ class TacticalController extends ChangeNotifier {
       return result.errorMessage;
     }
     final session = result.session!;
+    _lastUserName = session.userName;
+    unawaited(settings.setLastUserName(session.userName));
     _session = session;
     _groups = session.groupDefinitions.isEmpty
         ? CommunicationGroup.demoGroups
@@ -452,6 +459,7 @@ class TacticalController extends ChangeNotifier {
     await logout();
     await settings.clearAll();
     _prefs.reset();
+    _lastUserName = null;
     unawaited(_locationService.setPowerSaving(false));
     unawaited(_nativePtt.setVolumeKeyPtt(false));
     _notify();
@@ -495,6 +503,7 @@ class TacticalController extends ChangeNotifier {
 
   Future<void> _loadSettings() async {
     await _prefs.load();
+    _lastUserName = await settings.lastUserName();
     if (_disposed) {
       return;
     }

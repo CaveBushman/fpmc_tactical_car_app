@@ -772,3 +772,38 @@ class SituationTests(ApiTestCase):
         only_med = self.client.get("/panel/situation", {"group": "med"})
         self.assertEqual([r["member"].username for r in only_med.context["rows"]],
                          ["medic"])
+
+
+class PasswordlessLoginTests(ApiTestCase):
+    def login_without_password(self, name="operator"):
+        return self.call("POST", "/auth/login", {"userName": name, "password": ""})
+
+    def test_off_by_default(self):
+        self.assertEqual(self.login_without_password().status_code, 400)
+
+    def test_development_switch(self):
+        with self.settings(DEV_PASSWORDLESS_LOGIN=True):
+            ok = self.login_without_password()
+            self.assertEqual(ok.status_code, 200)
+            self.assertEqual(ok.json()["user"]["userName"], "operator")
+            # Unknown names and blocked accounts still cannot log in.
+            self.assertEqual(self.login_without_password("nobody").status_code, 401)
+            self.operator.disabled = True
+            self.operator.save()
+            self.assertEqual(self.login_without_password().json(),
+                             {"error": "account_disabled"})
+        self.assertTrue(
+            AuditEntry.objects.filter(event="login_passwordless").exists()
+        )
+
+    def test_needs_debug(self):
+        import importlib
+        import os
+
+        from tactical import settings as module
+
+        with mock.patch.dict(os.environ, {"DEV_PASSWORDLESS_LOGIN": "1",
+                                          "DEBUG": ""}):
+            reloaded = importlib.reload(module)
+            self.assertFalse(reloaded.DEV_PASSWORDLESS_LOGIN)
+        importlib.reload(module)

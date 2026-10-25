@@ -19,6 +19,8 @@ Dart server where they overlap):
   to turn off) and HSTS (HSTS_SECONDS, default 180 days).
 - AUDIT_RETENTION_DAYS (default 365): `prune_audit` deletes older entries.
 - DEBUG=1: development only.
+- DEV_PASSWORDLESS_LOGIN=1 (with DEBUG=1 only): app logins accept any
+  password for existing, unblocked users; every such login is audited.
 """
 
 import hashlib
@@ -170,6 +172,19 @@ if TRUST_PROXY:
     # The proxy talks to us over plain HTTP on localhost; health checks
     # from Docker must not be redirected.
     SECURE_REDIRECT_EXEMPT = [r"^health$"]
+
+# Development only: existing, unblocked users log in to the app API
+# without a password. Ignored unless DEBUG=1, so a production server cannot
+# be switched to it by one stray variable.
+DEV_PASSWORDLESS_LOGIN = DEBUG and _env("DEV_PASSWORDLESS_LOGIN") == "1"
+if DEV_PASSWORDLESS_LOGIN:
+    import warnings
+
+    warnings.warn(
+        "DEV_PASSWORDLESS_LOGIN is on: app logins need no password. "
+        "Development use only.",
+        stacklevel=1,
+    )
 
 # Audit entries older than this are deleted by `prune_audit`.
 AUDIT_RETENTION_DAYS = int(_env("AUDIT_RETENTION_DAYS", "365"))

@@ -137,7 +137,8 @@ def login(request):
     device_id = body.get("deviceId")
     device_id = None if device_id is None else str(device_id).strip()
     device_name = _text(body.get("deviceName")).strip()
-    if not user_name or not password:
+    passwordless = settings.DEV_PASSWORDLESS_LOGIN
+    if not user_name or (not password and not passwordless):
         return _error(400, "missing_credentials")
 
     ip = security.client_ip(request)
@@ -152,6 +153,9 @@ def login(request):
 
     user = User.objects.filter(username=user_name).first()
     valid = verify_password(password, user.password if user else DUMMY_HASH)
+    if passwordless and user is not None:
+        valid = True
+        audit.record("login_passwordless", user_name, ip=ip)
     if user is None or not valid:
         security.record_failure(user_name, ip)
         audit.record("login_failed", user_name, ip=ip)

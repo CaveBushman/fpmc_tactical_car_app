@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({required this.onLogin, super.key});
+  const LoginScreen({required this.onLogin, this.lastUserName, super.key});
+
+  /// Prefilled user name (last login on this device).
+  final String? lastUserName;
 
   final Future<String?> Function(String userName, String password) onLogin;
 
@@ -14,13 +17,23 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _userController = TextEditingController(
-    text: 'operator',
+  late final TextEditingController _userController = TextEditingController(
+    text: widget.lastUserName ?? '',
   );
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _submitting = false;
   String? _errorMessage;
+
+  @override
+  void didUpdateWidget(covariant LoginScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Settings load after the first frame: fill in only an untouched field.
+    final last = widget.lastUserName;
+    if (last != null && _userController.text.isEmpty) {
+      _userController.text = last;
+    }
+  }
 
   @override
   void dispose() {
