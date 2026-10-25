@@ -75,6 +75,8 @@ void main() {
       at: DateTime.now(),
       batteryPercent: 76,
       sinceMessageId: hq.single.id,
+      // "Rozumím" on the priority order.
+      acknowledgedMessageIds: [hq.single.id],
     );
     expect(newer, isEmpty);
     final badReport = await failure(

@@ -62,14 +62,17 @@
 </table></div>
 {% if recent_messages %}
 <h2>Poslední zprávy z panelu</h2>
-<p class="muted">Převzetí potvrzuje aplikace člena s dalším hlášením polohy (do 2 minut, v úsporném režimu do 5).</p>
+<p class="muted">Převzetí potvrzuje aplikace člena s dalším hlášením polohy (do 2 minut, v úsporném režimu do 5).
+  Prioritní zprávy navíc člen potvrzuje tlačítkem „Rozumím“.</p>
 <div class="wrap"><table class="stack">
   <tr><th>Čas</th><th>Skupina</th><th>Od</th><th>Zpráva</th><th>Převzalo</th></tr>
   {% for row in recent_messages %}{% with m=row.message %}
   <tr><td data-label="Čas">{{ m.created_at|date:"j. n. H:i" }}</td><td data-label="Skupina">{{ m.group_id }}</td><td data-label="Od">{{ m.author }}</td>
     <td data-label="Zpráva">{% if m.priority %}<span class="off">PRIORITNÍ</span> {% endif %}{{ m.text }}</td>
     <td data-label="Převzalo"><span{% if row.missing %} class="{% if m.priority %}off{% else %}pending{% endif %}"{% endif %}>{{ row.received }}/{{ row.total }}</span>
-      {% if row.missing %}<br><span class="muted">čeká: {{ row.missing|join:", " }}</span>{% endif %}</td></tr>
+      {% if row.missing %}<br><span class="muted">čeká: {{ row.missing|join:", " }}</span>{% endif %}
+      {% if m.priority %}<br>Rozumím: <span class="{% if row.unacked %}off{% else %}ok{% endif %}">{{ row.acked }}/{{ row.total }}</span>
+        {% if row.unacked %}<br><span class="muted">nepotvrdil: {{ row.unacked|join:", " }}</span>{% endif %}{% endif %}</td></tr>
   {% endwith %}{% endfor %}
 </table></div>
 {% endif %}

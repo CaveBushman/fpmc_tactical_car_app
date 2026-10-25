@@ -22,6 +22,7 @@ class MessagesPage extends StatefulWidget {
     required this.onGroupSelected,
     required this.onSend,
     this.onRetry,
+    this.onAcknowledge,
     this.onSos,
     this.unreadIn,
     this.quickMessages = const [],
@@ -41,6 +42,9 @@ class MessagesPage extends StatefulWidget {
   final ValueChanged<int> onGroupSelected;
   final Future<void> Function(MeshMessageDraft draft) onSend;
   final ValueChanged<MeshMessage>? onRetry;
+
+  /// Confirms a priority order from the commanders' panel ("Rozumím").
+  final ValueChanged<MeshMessage>? onAcknowledge;
 
   /// Starts (or, while active, cancels) the repeated distress call.
   final VoidCallback? onSos;
@@ -330,9 +334,13 @@ class _MessagesPageState extends State<MessagesPage> {
     ];
     Widget messageCard(MeshMessage message) {
       final onRetry = widget.onRetry;
+      final onAcknowledge = widget.onAcknowledge;
       return MessageCard(
         message: message,
         onRetry: onRetry == null ? null : () => onRetry(message),
+        onAcknowledge: onAcknowledge == null
+            ? null
+            : () => onAcknowledge(message),
         onLongPress: () => _showMessageActions(message),
       );
     }
@@ -982,12 +990,16 @@ class MessageCard extends StatelessWidget {
   const MessageCard({
     required this.message,
     this.onRetry,
+    this.onAcknowledge,
     this.onLongPress,
     super.key,
   });
 
   final MeshMessage message;
   final VoidCallback? onRetry;
+
+  /// Shown as "Rozumím" on priority orders from the panel.
+  final VoidCallback? onAcknowledge;
 
   /// Opens the message actions.
   final VoidCallback? onLongPress;
@@ -1058,6 +1070,38 @@ class MessageCard extends StatelessWidget {
                 message.body,
                 style: const TextStyle(fontSize: 14, height: 1.25),
               ),
+              if (message.needsAcknowledgement && onAcknowledge != null) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    key: ValueKey('ack-${message.hqMessageId}'),
+                    onPressed: onAcknowledge,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: signalAmber,
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size(0, 44),
+                    ),
+                    icon: const Icon(Icons.task_alt, size: 18),
+                    label: const Text('Rozumím'),
+                  ),
+                ),
+              ],
+              if (message.acknowledgedAt case final at?
+                  when message.hqMessageId != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Icon(Icons.task_alt, size: 14, color: blueForce),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Potvrzeno ${_clock(at)}',
+                      style: const TextStyle(color: blueForce, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
               if (message.canRetry && onRetry != null) ...[
                 const SizedBox(height: 8),
                 Align(
@@ -1076,6 +1120,13 @@ class MessageCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Local `HH:mm`.
+String _clock(DateTime at) {
+  final local = at.toLocal();
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${two(local.hour)}:${two(local.minute)}';
 }
 
 class DeliveryStatusIcon extends StatelessWidget {

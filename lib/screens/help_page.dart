@@ -139,7 +139,9 @@ const helpTopics = [
     'Zprávy z velitelství',
     'Velitelé mohou z webového panelu poslat zprávu skupině. Aplikace ji '
         'vyzvedne s dalším hlášením polohy (do 2 minut, v úsporném režimu do '
-        '5) a ukáže ji ve skupině od VELITELSTVÍ, na pozadí i s upozorněním.',
+        '5) a ukáže ji ve skupině od VELITELSTVÍ, na pozadí i s upozorněním. '
+        'U prioritní zprávy potvrďte tlačítkem Rozumím – velitel v panelu '
+        'vidí, kdo rozkaz potvrdil.',
   ),
   HelpTopic(
     'Zprávy a hlášení',

@@ -19,6 +19,7 @@ from .models import (
     Device,
     GroupMessage,
     MemberPosition,
+    MessageAck,
     TeamGroup,
     User,
 )
@@ -290,6 +291,7 @@ def report_position(request):
     since = body.get("sinceMessageId")
     pending = _pending_messages(user, since)
     _confirm_messages(user, since)
+    _acknowledge_messages(user, body.get("ackMessageIds"))
     previous = MemberPosition.objects.filter(user=user).first()
     if previous is not None and previous.reported_at > reported:
         # An older report arrived late: keep the newer position.
@@ -330,6 +332,33 @@ def _confirm_messages(user, since):
         User.objects.filter(pk=user.pk, messages_seen_id__lt=seen).update(
             messages_seen_id=seen
         )
+
+
+# More than an app can have confirmed between two reports.
+MAX_ACKS_PER_REPORT = 50
+
+
+def _acknowledge_messages(user, ids):
+    """Records "Rozumím" for priority messages of the member's own groups;
+    unknown, foreign or repeated ids are ignored."""
+    if not isinstance(ids, list):
+        return
+    wanted = {i for i in ids[:MAX_ACKS_PER_REPORT] if type(i) is int and i > 0}
+    if not wanted:
+        return
+    messages = list(
+        GroupMessage.objects.filter(
+            id__in=wanted,
+            priority=True,
+            group_id__in=user.groups.values_list("id", flat=True),
+        ).exclude(acks__user=user)
+    )
+    MessageAck.objects.bulk_create(
+        [MessageAck(message=message, user=user) for message in messages],
+        ignore_conflicts=True,
+    )
+    # A confirmed message was received, whatever the app's last id says.
+    _confirm_messages(user, max(m.id for m in messages) if messages else None)
 
 
 def _pending_messages(user, since):

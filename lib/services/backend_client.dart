@@ -222,6 +222,7 @@ class BackendClient {
   /// Latest own position, status and battery for the commanders' panel.
   /// Returns the panel messages for the member's groups after
   /// [sinceMessageId] (they ride on this call instead of a separate poll).
+  /// [acknowledgedMessageIds] are priority messages the member confirmed.
   Future<List<HqMessage>> reportPosition(
     String sessionToken, {
     required double latitude,
@@ -232,12 +233,15 @@ class BackendClient {
     int? batteryPercent,
     String? status,
     int? sinceMessageId,
+    List<int> acknowledgedMessageIds = const [],
   }) async {
     final response = await _post(
       'report',
       sessionToken: sessionToken,
       body: {
         'sinceMessageId': ?sinceMessageId,
+        if (acknowledgedMessageIds.isNotEmpty)
+          'ackMessageIds': acknowledgedMessageIds,
         'lat': latitude,
         'lon': longitude,
         'at': at.toUtc().toIso8601String(),

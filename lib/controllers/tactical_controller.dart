@@ -463,6 +463,7 @@ class TacticalController extends ChangeNotifier {
     _peerTrails.clear();
     _knownNames.clear();
     _lastHqMessageId = null;
+    _pendingHqAcks.clear();
     _rendezvous = null;
     _lastBackendReportAt = null;
     _contactWatch.clear();
@@ -1310,9 +1311,11 @@ class TacticalController extends ChangeNotifier {
     _lastBackendReportAt = now;
     try {
       final self = selfNode;
+      final acks = _pendingHqAcks.toList()..sort();
       final incoming = await backend.reportPosition(
         token,
         sinceMessageId: _lastHqMessageId,
+        acknowledgedMessageIds: acks,
         latitude: fix.latitude,
         longitude: fix.longitude,
         at: fix.timestamp,
@@ -1322,11 +1325,21 @@ class TacticalController extends ChangeNotifier {
         batteryPercent: meshConnected ? self.batteryPercent : null,
         status: ownStatus?.name,
       );
+      if (acks.isNotEmpty) {
+        _pendingHqAcks.removeAll(acks);
+        unawaited(_persistState());
+      }
       _applyHqMessages(incoming);
     } on BackendException {
       _lastBackendReportAt = null; // try again with the next fix
+      return;
     } finally {
       _backendReporting = false;
+    }
+    // Confirmed while this report was on its way: send it now, not with the
+    // next regular report minutes later.
+    if (_pendingHqAcks.isNotEmpty) {
+      unawaited(_reportToBackend(force: true));
     }
   }
 
@@ -1335,6 +1348,31 @@ class TacticalController extends ChangeNotifier {
   /// Sender shown for panel messages.
   static const hqSender = 'VELITELSTVÍ';
   int? _lastHqMessageId;
+
+  /// Confirmed priority messages not yet reported to the server.
+  final Set<int> _pendingHqAcks = {};
+
+  /// Confirms a priority panel message ("Rozumím"); the confirmation goes
+  /// to the server right away, or with the next report when offline.
+  void acknowledgeHqMessage(MeshMessage message) {
+    final id = message.hqMessageId;
+    if (id == null || !message.needsAcknowledgement) {
+      return;
+    }
+    final index = _messages.indexWhere((m) => m.hqMessageId == id);
+    if (index == -1) {
+      return;
+    }
+    _messages[index] = _messages[index].copyWith(acknowledgedAt: _clock());
+    _pendingHqAcks.add(id);
+    _log(
+      MissionEventKind.status,
+      'Potvrzen rozkaz velitelství: ${message.body}',
+    );
+    _notify();
+    unawaited(_persistState());
+    unawaited(_reportToBackend(force: true));
+  }
 
   void _applyHqMessages(List<HqMessage> incoming) {
     var added = false;
@@ -1360,6 +1398,7 @@ class TacticalController extends ChangeNotifier {
           targetLabel: group.name,
           priority: message.priority,
           viaInternet: true,
+          hqMessageId: message.id,
         ),
       );
       _countIncoming(group.id);
@@ -2386,6 +2425,10 @@ class TacticalController extends ChangeNotifier {
         (_lastHqMessageId == null || hqMessageId > _lastHqMessageId!)) {
       _lastHqMessageId = hqMessageId;
     }
+    final acks = extras['hqAcks'];
+    if (acks is List) {
+      _pendingHqAcks.addAll(acks.whereType<int>());
+    }
     final sos = map(extras['sos']);
     if (sos != null && _sos.restore(sos, now: _clock()) && !_sos.active) {
       // The app was killed or the phone restarted during our own distress
@@ -2439,6 +2482,7 @@ class TacticalController extends ChangeNotifier {
           'statuses': _statuses.toJson(),
           'sos': _sos.toJson(),
           'hqMessageId': ?_lastHqMessageId,
+          if (_pendingHqAcks.isNotEmpty) 'hqAcks': _pendingHqAcks.toList(),
         },
         owner: session.userName,
       );

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:tactical_car_app/controllers/tactical_controller.dart';
 import 'package:tactical_car_app/models/member_status.dart';
+import 'package:tactical_car_app/models/messaging.dart';
 import 'package:tactical_car_app/services/backend_client.dart';
 import 'package:tactical_car_app/services/location_service.dart';
 import 'package:tactical_car_app/services/mesh_packet_repository.dart';
@@ -190,6 +191,84 @@ void main() {
     expect(
       controller.messages.where((m) => m.body == 'Přesun na RV-1'),
       hasLength(1),
+    );
+  });
+
+  test('"Rozumím" on a priority order reaches the server at once', () async {
+    final at = DateTime.now().toUtc().toIso8601String();
+    hqMessages = [
+      {
+        'id': 7,
+        'groupId': 'alpha',
+        'text': 'Stáhnout se',
+        'priority': true,
+        'author': 'VELITEL',
+        'at': at,
+      },
+      {
+        'id': 9,
+        'groupId': 'alpha',
+        'text': 'Jen informace',
+        'priority': false,
+        'author': 'VELITEL',
+        'at': at,
+      },
+    ];
+    await fix(50.0);
+    hqMessages = [];
+    final order = controller.messages.firstWhere((m) => m.hqMessageId == 7);
+    final info = controller.messages.firstWhere((m) => m.hqMessageId == 9);
+    expect(order.needsAcknowledgement, isTrue);
+    expect(info.needsAcknowledgement, isFalse);
+
+    // Offline first: the confirmation waits for a report that gets through.
+    reportStatus = 503;
+    controller.acknowledgeHqMessage(order);
+    await pumpEventQueue();
+    expect(reports.last['ackMessageIds'], [7]);
+    final acknowledged = controller.messages.firstWhere(
+      (m) => m.hqMessageId == 7,
+    );
+    expect(acknowledged.needsAcknowledgement, isFalse);
+    expect(acknowledged.acknowledgedAt, isNotNull);
+    expect(
+      controller.missionEvents.first.text,
+      'Potvrzen rozkaz velitelství: Stáhnout se',
+    );
+
+    reportStatus = 200;
+    await fix(50.001);
+    expect(reports.last['ackMessageIds'], [7]);
+    offset = const Duration(minutes: 3);
+    await fix(50.002);
+    expect(reports.last, isNot(contains('ackMessageIds')));
+    // A second tap does nothing.
+    final count = reports.length;
+    controller.acknowledgeHqMessage(acknowledged);
+    await pumpEventQueue();
+    expect(reports, hasLength(count));
+  });
+
+  test('acknowledgement survives a JSON round trip', () {
+    final message = MeshMessage(
+      sender: TacticalController.hqSender,
+      body: 'Stáhnout se',
+      sentAt: DateTime.utc(2026, 10, 26, 9),
+      groupId: 'alpha',
+      priority: true,
+      viaInternet: true,
+      hqMessageId: 7,
+      acknowledgedAt: DateTime.utc(2026, 10, 26, 9, 5),
+    );
+    final restored = MeshMessage.fromJson(message.toJson());
+    expect(restored.hqMessageId, 7);
+    expect(restored.acknowledgedAt, DateTime.utc(2026, 10, 26, 9, 5));
+    expect(restored.needsAcknowledgement, isFalse);
+    expect(
+      MeshMessage.fromJson(
+        {...message.toJson()}..remove('acknowledgedAt'),
+      ).needsAcknowledgement,
+      isTrue,
     );
   });
 }

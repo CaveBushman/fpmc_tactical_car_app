@@ -204,6 +204,21 @@ class GroupMessage(models.Model):
         }
 
 
+class MessageAck(models.Model):
+    """A member confirmed a priority panel message ("Rozumím" in the app)."""
+
+    message = models.ForeignKey(
+        GroupMessage, on_delete=models.CASCADE, related_name="acks"
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="acks")
+    at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["message", "user"], name="one_ack_per_member")
+        ]
+
+
 class AuditEntry(models.Model):
     at = models.DateTimeField(default=timezone.now, db_index=True)
     event = models.CharField(max_length=40)

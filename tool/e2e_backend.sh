@@ -88,4 +88,8 @@ from core.models import MemberPosition
 p = MemberPosition.objects.get(user__username="e2e-operator")
 assert (round(p.latitude, 6), p.status, p.battery_percent) == (50.087451, "holding", 76), p
 print("position report stored")
+from core.models import MessageAck
+acks = list(MessageAck.objects.values_list("user__username", "message__text"))
+assert acks == [("e2e-operator", "Přesun na RV-1 – ihned")], acks
+print("acknowledgement stored")
 ')

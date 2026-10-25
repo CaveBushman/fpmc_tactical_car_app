@@ -36,6 +36,8 @@ class MeshMessage {
     this.packetId,
     this.fromNode,
     this.toNode,
+    this.hqMessageId,
+    this.acknowledgedAt,
   });
 
   final String sender;
@@ -59,6 +61,16 @@ class MeshMessage {
   /// Destination node of an outgoing direct message (null = group).
   final int? toNode;
 
+  /// Server id of a message from the commanders' panel.
+  final int? hqMessageId;
+
+  /// When the member confirmed a priority panel message ("Rozumím").
+  final DateTime? acknowledgedAt;
+
+  /// A priority order from the panel still waiting for "Rozumím".
+  bool get needsAcknowledgement =>
+      hqMessageId != null && priority && acknowledgedAt == null;
+
   /// Text, sender or recipient contains [query] (case and diacritics
   /// ignored); an empty query matches everything.
   bool matchesSearch(String query) {
@@ -74,6 +86,7 @@ class MeshMessage {
     MessageDelivery? delivery,
     int? packetId,
     bool? viaInternet,
+    DateTime? acknowledgedAt,
   }) {
     return MeshMessage(
       sender: sender,
@@ -87,6 +100,8 @@ class MeshMessage {
       packetId: packetId ?? this.packetId,
       fromNode: fromNode,
       toNode: toNode,
+      hqMessageId: hqMessageId,
+      acknowledgedAt: acknowledgedAt ?? this.acknowledgedAt,
     );
   }
 
@@ -149,6 +164,8 @@ class MeshMessage {
       'packetId': packetId,
       'fromNode': fromNode,
       'toNode': toNode,
+      'hqMessageId': ?hqMessageId,
+      'acknowledgedAt': ?acknowledgedAt?.toUtc().toIso8601String(),
     };
   }
 
@@ -175,6 +192,10 @@ class MeshMessage {
       packetId: (json['packetId'] as num?)?.toInt(),
       fromNode: (json['fromNode'] as num?)?.toInt(),
       toNode: (json['toNode'] as num?)?.toInt(),
+      hqMessageId: (json['hqMessageId'] as num?)?.toInt(),
+      acknowledgedAt: DateTime.tryParse(
+        json['acknowledgedAt']?.toString() ?? '',
+      ),
     );
   }
 

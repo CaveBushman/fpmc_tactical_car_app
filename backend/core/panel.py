@@ -25,7 +25,15 @@ from django.views.decorators.http import require_POST
 from . import audit, keys, security, sketch
 from .api import GROUP_ID, MIN_PASSWORD_LENGTH, USER_NAME
 from .mgrs import to_mgrs
-from .models import ROLE_LABELS, ROLES, AuditEntry, GroupMessage, TeamGroup, User
+from .models import (
+    ROLE_LABELS,
+    ROLES,
+    AuditEntry,
+    GroupMessage,
+    MessageAck,
+    TeamGroup,
+    User,
+)
 
 ROLE_CHOICES = [(r, ROLE_LABELS[r]) for r in ("operator", "medic", "commander")]
 assert {r for r, _ in ROLE_CHOICES} == set(ROLES)
@@ -679,16 +687,28 @@ def _with_receipts(messages):
     ).distinct().prefetch_related("groups"):
         for group in user.groups.all():
             members.setdefault(group.id, []).append(user)
+    acked = {}
+    for message_id, user_id in MessageAck.objects.filter(
+        message__in=[m for m in messages if m.priority]
+    ).values_list("message_id", "user_id"):
+        acked.setdefault(message_id, set()).add(user_id)
     rows = []
     for message in messages:
         group = sorted(members.get(message.group_id, []), key=lambda u: u.username)
         missing = [u for u in group if u.messages_seen_id < message.id]
-        rows.append({
+        row = {
             "message": message,
             "received": len(group) - len(missing),
             "total": len(group),
             "missing": [u.display_name or u.username for u in missing],
-        })
+        }
+        if message.priority:
+            confirmed = acked.get(message.id, set())
+            row["acked"] = sum(u.pk in confirmed for u in group)
+            row["unacked"] = [
+                u.display_name or u.username for u in group if u.pk not in confirmed
+            ]
+        rows.append(row)
     return rows
 
 

@@ -363,6 +363,7 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
         onGroupSelected: controller.selectGroup,
         onSend: controller.sendMeshText,
         onRetry: controller.retryMessage,
+        onAcknowledge: controller.acknowledgeHqMessage,
         onSos: _toggleSos,
       ),
       SystemsPage(

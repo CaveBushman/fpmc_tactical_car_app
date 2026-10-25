@@ -19,6 +19,7 @@ from .models import (
     GroupKey,
     GroupMessage,
     MemberPosition,
+    MessageAck,
     TeamGroup,
     User,
 )
@@ -1033,6 +1034,40 @@ class GroupMessageTests(ApiTestCase):
             self.client.get("/panel/situation").context["recent_messages"][0]
             ["message"], later)
         self.assertEqual(receipt()[0], 0)
+
+    def test_members_acknowledge_priority_orders(self):
+        token = self.login()  # operator: alpha, bravo; commander: alpha too
+        order = GroupMessage.objects.create(group_id="alpha", text="Stáhnout se",
+                                            priority=True, author="VELITEL")
+        info = GroupMessage.objects.create(group_id="alpha", text="Info",
+                                           author="VELITEL")
+        foreign = GroupMessage.objects.create(group_id="command", text="Jen velení",
+                                              priority=True, author="VELITEL")
+        for _ in range(2):  # a repeated ack is harmless
+            response = self.call(
+                "POST", "/report",
+                {"lat": 50, "lon": 14,
+                 "ackMessageIds": [order.id, info.id, foreign.id, 999, "x", -1]},
+                token=token,
+            )
+            self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(MessageAck.objects.values_list("message_id", "user__username")),
+            [(order.id, "operator")],
+        )
+        # Acknowledging implies the message arrived.
+        self.operator.refresh_from_db()
+        self.assertEqual(self.operator.messages_seen_id, order.id)
+        self.call("POST", "/report", {"lat": 50, "lon": 14, "ackMessageIds": "x"},
+                  token=token)
+
+        self.client.force_login(self.commander)
+        page = self.client.get("/panel/situation")
+        rows = {r["message"].text: r for r in page.context["recent_messages"]}
+        self.assertEqual((rows["Stáhnout se"]["acked"], rows["Stáhnout se"]["unacked"]),
+                         (1, ["COMMANDER"]))
+        self.assertNotIn("acked", rows["Info"])
+        self.assertContains(page, "nepotvrdil: COMMANDER")
 
     def test_panel_sends_to_a_group(self):
         self.client.force_login(self.commander)
