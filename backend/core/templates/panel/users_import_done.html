@@ -1,0 +1,16 @@
+{% extends "panel/base.html" %}
+{% block title %}Založeno{% endblock %}
+{% block content %}
+<h1>Založeno {{ created|length }} uživatelů</h1>
+<p class="off">Hesla se zobrazí jen teď – server je neukládá. Stáhněte si je nebo opište a předejte
+  každému jeho heslo osobně.</p>
+<a class="button" download="hesla.csv" href="data:text/csv;charset=utf-8;base64,{{ download }}">Stáhnout CSV s hesly</a>
+<div class="wrap" style="margin-top:12px"><table>
+  <tr><th>Uživatel</th><th>Jméno</th><th>Role</th><th>Skupiny</th><th>Heslo</th></tr>
+  {% for row in created %}
+  <tr><td>{{ row.user_name }}</td><td>{{ row.display_name }}</td><td>{{ row.role }}</td>
+    <td>{{ row.groups|join:" " }}</td><td><code>{{ row.password }}</code></td></tr>
+  {% endfor %}
+</table></div>
+<p><a href="{% url 'panel-users' %}">Zpět na uživatele</a></p>
+{% endblock %}

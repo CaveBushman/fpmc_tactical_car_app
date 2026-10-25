@@ -1,16 +1,24 @@
 """Server-rendered web panel for commanders: users, devices, groups, keys
 and the audit log. Plain HTML forms with CSRF protection, no JavaScript."""
 
+import base64
+import csv
+import io
+import re
+import secrets
+from datetime import timedelta
 from functools import wraps
 
 from django import forms
 from django.contrib import messages
-from django.contrib.auth import logout
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth import logout, update_session_auth_hash
+from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import audit, keys, security
@@ -143,13 +151,170 @@ class PasswordForm(forms.Form):
     )
 
 
+INACTIVE_AFTER = timedelta(days=14)
+
+
 @commander_required
 def users(request):
+    query = request.GET.get("q", "").strip()
+    show = request.GET.get("show", "")
+    users = User.objects.prefetch_related("groups", "devices").annotate(
+        last_active=Max("devices__last_seen")
+    )
+    if query:
+        users = users.filter(
+            Q(username__icontains=query) | Q(display_name__icontains=query)
+        )
+    if show == "disabled":
+        users = users.filter(disabled=True)
+    elif show == "inactive":
+        users = users.filter(
+            Q(last_active__isnull=True)
+            | Q(last_active__lt=timezone.now() - INACTIVE_AFTER)
+        )
     return render(
         request,
         "panel/users.html",
-        {"users": User.objects.prefetch_related("groups", "devices")},
+        {
+            "users": users,
+            "query": query,
+            "show": show,
+            "inactive_days": INACTIVE_AFTER.days,
+        },
     )
+
+
+# --- Bulk import -----------------------------------------------------------------
+
+ROLE_ALIASES = {
+    "operator": "operator", "operátor": "operator", "op": "operator",
+    "medic": "medic", "zdravotník": "medic", "zdravotnik": "medic",
+    "commander": "commander", "velitel": "commander",
+}
+# No 0/O, 1/l/I: passwords are read off paper.
+PASSWORD_ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def generate_password(length=12):
+    return "".join(secrets.choice(PASSWORD_ALPHABET) for _ in range(length))
+
+
+def parse_import(text):
+    """Rows of ``user;display name;role;groups`` (comma also works; groups
+    separated by spaces or |). Returns (rows, errors), each row a dict and
+    each error ``(line number, message)``."""
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        return [], [(0, "Seznam je prázdný.")]
+    delimiter = ";" if lines[0].count(";") >= lines[0].count(",") else ","
+    known_groups = set(TeamGroup.objects.values_list("id", flat=True))
+    existing = set(User.objects.values_list("username", flat=True))
+    rows, errors, seen = [], [], set()
+    for number, cells in enumerate(csv.reader(lines, delimiter=delimiter), 1):
+        cells = [cell.strip() for cell in cells] + ["", "", "", ""]
+        name, display, role, groups = cells[:4]
+        name = name.lower()
+        if number == 1 and name in ("user", "uzivatel", "uživatel", "username"):
+            continue  # header
+        problems = []
+        if not USER_NAME.match(name):
+            problems.append("neplatné jméno")
+        elif name in existing or name in seen:
+            problems.append("jméno už existuje")
+        role_id = ROLE_ALIASES.get(role.lower() or "operator")
+        if role_id is None:
+            problems.append(f"neznámá role {role}")
+        group_ids = sorted({g.lower() for g in re.split(r"[\s|]+", groups) if g})
+        unknown = [g for g in group_ids if g not in known_groups]
+        if unknown:
+            problems.append("neznámé skupiny " + ", ".join(unknown))
+        if len(display) > 40:
+            problems.append("zobrazované jméno je delší než 40 znaků")
+        if problems:
+            errors.append((number, f"{name or '?'}: " + "; ".join(problems)))
+            continue
+        seen.add(name)
+        rows.append(
+            {
+                "user_name": name,
+                "display_name": display or name.upper(),
+                "role": role_id,
+                "groups": group_ids,
+            }
+        )
+    return rows, errors
+
+
+@commander_required
+def users_import(request):
+    text = request.POST.get("rows", "")
+    rows, errors = parse_import(text) if request.method == "POST" else ([], [])
+    if request.POST.get("action") == "create" and rows and not errors:
+        created = []
+        with transaction.atomic():
+            for row in rows:
+                password = generate_password()
+                user = User.objects.create_user(
+                    row["user_name"], password,
+                    display_name=row["display_name"], role=row["role"],
+                )
+                user.groups.set(row["groups"])
+                created.append({**row, "password": password})
+                audit.record(
+                    "user_created", request.user, target=user.username,
+                    role=user.role, groups=row["groups"], imported=True,
+                )
+        sheet = io.StringIO()
+        writer = csv.writer(sheet, delimiter=";")
+        writer.writerow(["uzivatel", "jmeno", "role", "skupiny", "heslo"])
+        for row in created:
+            writer.writerow(
+                [row["user_name"], row["display_name"], row["role"],
+                 " ".join(row["groups"]), row["password"]]
+            )
+        # The passwords exist only in this response: not stored, not logged.
+        download = base64.b64encode(
+            ("\ufeff" + sheet.getvalue()).encode("utf-8")
+        ).decode()
+        return render(
+            request,
+            "panel/users_import_done.html",
+            {"created": created, "download": download},
+        )
+    return render(
+        request,
+        "panel/users_import.html",
+        {"rows": rows, "errors": errors, "text": text,
+         "previewed": request.method == "POST"},
+    )
+
+
+# --- Own password ------------------------------------------------------------------
+
+
+class OwnPasswordForm(PasswordChangeForm):
+    error_messages = {
+        **PasswordChangeForm.error_messages,
+        "password_incorrect": "Současné heslo nesouhlasí.",
+        "password_mismatch": "Nová hesla se neshodují.",
+    }
+
+
+@commander_required
+def own_password(request):
+    form = OwnPasswordForm(request.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.save(commit=False)
+        # Like a password change in the app: every app session ends.
+        user.session_version += 1
+        user.save()
+        update_session_auth_hash(request, user)
+        audit.record("password_changed", user)
+        messages.success(
+            request, "Heslo změněno. Aplikace se musí přihlásit znovu."
+        )
+        return redirect("panel-users")
+    return render(request, "panel/own_password.html", {"form": form})
 
 
 @commander_required

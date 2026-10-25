@@ -56,6 +56,7 @@
     <a href="{% url 'panel-users' %}" {% if section == 'users' %}class="active"{% endif %}>Uživatelé</a>
     <a href="{% url 'panel-groups' %}" {% if section == 'groups' %}class="active"{% endif %}>Skupiny</a>
     <a href="{% url 'panel-audit' %}" {% if section == 'audit' %}class="active"{% endif %}>Audit</a>
+    <a href="{% url 'panel-own-password' %}">Moje heslo</a>
   </nav>
   <form class="inline" method="post" action="{% url 'panel-logout' %}">
     {% csrf_token %}<span class="muted">{{ user.username }}</span>

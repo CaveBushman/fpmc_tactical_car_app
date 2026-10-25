@@ -1,0 +1,38 @@
+{% extends "panel/base.html" %}
+{% block title %}Hromadné založení{% endblock %}
+{% block content %}
+<h1>Hromadné založení uživatelů</h1>
+<form method="post" class="card">
+  {% csrf_token %}
+  <label for="rows">Seznam (jeden uživatel na řádek)</label>
+  <span class="helptext">uživatel;zobrazované jméno;role;skupiny – role operator, medic nebo commander (i česky);
+    skupiny oddělené mezerou. Funguje i oddělení čárkou a export z Excelu.</span>
+  <textarea id="rows" name="rows" rows="10" style="max-width:100%" placeholder="novak;NOVÁK;operator;alpha bravo
+dvorak;DVOŘÁK;medic;alpha med">{{ text }}</textarea>
+  <button type="submit" name="action" value="preview">Zkontrolovat</button>
+</form>
+
+{% if previewed %}
+  {% if errors %}
+  <h2>Chyby – opravte je a zkontrolujte znovu</h2>
+  <ul class="errorlist">{% for line, message in errors %}<li>Řádek {{ line }}: {{ message }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if rows %}
+  <h2>Náhled ({{ rows|length }})</h2>
+  <div class="wrap"><table>
+    <tr><th>Uživatel</th><th>Jméno</th><th>Role</th><th>Skupiny</th></tr>
+    {% for row in rows %}
+    <tr><td>{{ row.user_name }}</td><td>{{ row.display_name }}</td><td>{{ row.role }}</td>
+      <td>{% for g in row.groups %}<span class="tag">{{ g }}</span>{% empty %}<span class="muted">žádné</span>{% endfor %}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% if not errors %}
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="rows" value="{{ text }}">
+    <button type="submit" name="action" value="create">Založit {{ rows|length }} uživatelů</button>
+  </form>
+  {% endif %}
+  {% endif %}
+{% endif %}
+{% endblock %}

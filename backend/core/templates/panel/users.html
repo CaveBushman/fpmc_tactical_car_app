@@ -3,8 +3,20 @@
 {% block content %}
 <h1>Uživatelé</h1>
 <a class="button" href="{% url 'panel-user-create' %}">Nový uživatel</a>
+<a class="button secondary" href="{% url 'panel-users-import' %}">Hromadně ze seznamu</a>
+<form method="get" class="card" style="margin-top:12px">
+  <label for="q">Hledat</label>
+  <input type="text" id="q" name="q" value="{{ query }}" placeholder="jméno nebo zobrazované jméno">
+  <label for="show">Zobrazit</label>
+  <select id="show" name="show">
+    <option value="" {% if not show %}selected{% endif %}>všechny</option>
+    <option value="inactive" {% if show == 'inactive' %}selected{% endif %}>neaktivní (víc než {{ inactive_days }} dní)</option>
+    <option value="disabled" {% if show == 'disabled' %}selected{% endif %}>zablokované</option>
+  </select>
+  <button type="submit">Filtrovat</button>
+</form>
 <div class="wrap"><table>
-  <tr><th>Uživatel</th><th>Jméno</th><th>Role</th><th>Skupiny</th><th>Zařízení</th><th></th></tr>
+  <tr><th>Uživatel</th><th>Jméno</th><th>Role</th><th>Skupiny</th><th>Zařízení</th><th>Naposledy</th><th></th></tr>
   {% for u in users %}
   <tr>
     <td>{{ u.username }}{% if u.disabled %} <span class="off">ZABLOKOVÁN</span>{% endif %}</td>
@@ -12,10 +24,11 @@
     <td>{{ u.get_role_display }}</td>
     <td>{% for g in u.groups.all %}<span class="tag">{{ g.name }}</span>{% empty %}<span class="muted">žádné</span>{% endfor %}</td>
     <td>{{ u.devices.all|length }}</td>
+    <td>{% if u.last_active %}{{ u.last_active|date:"j. n. Y H:i" }}{% else %}<span class="muted">nikdy</span>{% endif %}</td>
     <td><a href="{% url 'panel-user-edit' u.username %}">Upravit</a></td>
   </tr>
   {% empty %}
-  <tr><td colspan="6" class="muted">Zatím žádní uživatelé.</td></tr>
+  <tr><td colspan="7" class="muted">Nic nenalezeno.</td></tr>
   {% endfor %}
 </table></div>
 {% endblock %}

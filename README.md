@@ -145,7 +145,7 @@ Put a TLS reverse proxy in front (the app needs `https://` for the backend and `
 flutter build apk --release --dart-define=BACKEND_URL=https://ptt.example.cz/api
 ```
 
-Web panel: `https://ptt.example.cz/api/panel/` (log in as a commander). Users (create, display name, role, groups, block, new password, log out everywhere, unbind devices), groups (name, Meshtastic channel 0–7, PTT on/off, description, new E2EE key, delete when empty) and the audit log. Plain HTML forms with CSRF protection, no JavaScript, strict CSP. Changes of role, groups, password or blocking end that user's sessions immediately.
+Web panel: `https://ptt.example.cz/api/panel/` (log in as a commander). Users (create, display name, role, groups, block, new password, log out everywhere, unbind devices; search, last activity, inactive/blocked filters; bulk creation from a pasted CSV list `user;display name;role;groups` with a per-line preview and generated one-time passwords offered as a download, never stored), own password change, groups (name, Meshtastic channel 0–7, PTT on/off, description, new E2EE key, delete when empty) and the audit log. Plain HTML forms with CSRF protection, no JavaScript, strict CSP. Changes of role, groups, password or blocking end that user's sessions immediately.
 
 Moving from the former Dart server: copy its data directory and run `python manage.py import_dart_data /path/to/data` (users with their password hashes, session versions and devices, groups, E2EE keys, audit log). Password hashes keep the same format (`pbkdf2-sha256$…`), so nobody has to change passwords. `python manage.py hash_password` prints a hash in that format.
 

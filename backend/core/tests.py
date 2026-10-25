@@ -1,5 +1,7 @@
+import base64
 import json
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -8,6 +10,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase
+from django.utils import timezone
 
 from . import security
 from .models import AuditEntry, Device, GroupKey, TeamGroup, User
@@ -554,3 +557,94 @@ class ImportTests(TestCase):
         )
         entry = AuditEntry.objects.get(event="login")
         self.assertEqual(entry.to_json()["ip"], "1.2.3.4")
+
+
+class PanelTeamToolsTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.commander = make_user("velitel", "velitel-pass", role="commander",
+                                   groups=("alpha",))
+        self.client.force_login(self.commander)
+
+    def test_import_preview_reports_errors_per_line(self):
+        make_user("novak", "novak-pass-1")
+        text = (
+            "uzivatel;jmeno;role;skupiny\n"
+            "novak;NOVÁK;operator;alpha\n"           # exists
+            "dvorak;DVOŘÁK;zdravotník;alpha med\n"   # fine (Czech role)
+            "x;;operator;\n"                         # bad name
+            "svoboda;;king;zulu\n"                   # bad role + group
+            "dvorak;;operator;\n"                    # duplicate in list
+        )
+        response = self.client.post("/panel/users/import",
+                                    {"rows": text, "action": "preview"})
+        errors = response.context["errors"]
+        self.assertEqual([line for line, _ in errors], [2, 4, 5, 6])
+        self.assertIn("neznámá role king", errors[2][1])
+        self.assertIn("neznámé skupiny zulu", errors[2][1])
+        self.assertEqual([r["user_name"] for r in response.context["rows"]],
+                         ["dvorak"])
+        # With errors nothing can be created.
+        self.client.post("/panel/users/import", {"rows": text, "action": "create"})
+        self.assertFalse(User.objects.filter(username="dvorak").exists())
+
+    def test_import_creates_users_with_one_time_passwords(self):
+        text = "novak,NOVÁK,operator,alpha|bravo\ndvorak,,medic,med\n"
+        response = self.client.post("/panel/users/import",
+                                    {"rows": text, "action": "create"})
+        created = response.context["created"]
+        self.assertEqual([c["user_name"] for c in created], ["novak", "dvorak"])
+        self.assertContains(response, "Stáhnout CSV s hesly")
+        dvorak = User.objects.get(username="dvorak")
+        self.assertEqual((dvorak.display_name, dvorak.role, dvorak.group_ids()),
+                         ("DVORAK", "medic", ["med"]))
+        password = created[1]["password"]
+        self.assertEqual(len(password), 12)
+        self.assertTrue(dvorak.check_password(password))
+        # The app can log in with it; the password is in no audit entry.
+        login = self.client.post(
+            "/auth/login",
+            data=json.dumps({"userName": "dvorak", "password": password}),
+            content_type="application/json",
+        )
+        self.assertEqual(login.status_code, 200)
+        for entry in AuditEntry.objects.all():
+            self.assertNotIn(password, json.dumps(entry.to_json()))
+        csv_text = base64.b64decode(response.context["download"]).decode("utf-8")
+        self.assertIn(f"dvorak;DVORAK;medic;med;{password}", csv_text)
+
+    def test_search_and_activity_filter(self):
+        quiet = make_user("tichy", "tichy-pass-1")
+        busy = make_user("aktivni", "aktivni-pass-1")
+        busy.display_name = "Rychlá četa"
+        busy.save()
+        Device.objects.create(user=busy, device_id="1" * 32)
+        Device.objects.create(
+            user=quiet, device_id="2" * 32,
+            last_seen=timezone.now() - timedelta(days=30),
+        )
+        names = lambda **q: [u.username for u in self.client.get(
+            "/panel/", q).context["users"]]
+        self.assertEqual(names(q="RYCHL"), ["aktivni"])
+        self.assertEqual(names(show="inactive"), ["tichy", "velitel"])
+        busy.disabled = True
+        busy.save()
+        self.assertEqual(names(show="disabled"), ["aktivni"])
+
+    def test_own_password_change_ends_app_sessions(self):
+        response = self.client.post(
+            "/panel/password",
+            {"old_password": "velitel-pass", "new_password1": "nove-heslo-123",
+             "new_password2": "nove-heslo-123"},
+        )
+        self.assertRedirects(response, "/panel/")
+        self.commander.refresh_from_db()
+        self.assertTrue(self.commander.check_password("nove-heslo-123"))
+        self.assertEqual(self.commander.session_version, 2)
+        # Still logged in to the panel.
+        self.assertEqual(self.client.get("/panel/").status_code, 200)
+        wrong = self.client.post(
+            "/panel/password",
+            {"old_password": "x", "new_password1": "a" * 12, "new_password2": "a" * 12},
+        )
+        self.assertContains(wrong, "Současné heslo nesouhlasí.")
