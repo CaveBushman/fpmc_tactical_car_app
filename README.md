@@ -155,6 +155,12 @@ Device binding: the app sends a random per-installation id at login; an account 
 
 API (unchanged from the Dart server): `POST /auth/login`, `POST /auth/refresh`, `POST /auth/password`, `POST /ptt/<group>/join`, admin endpoints under `/admin/…` (commander, Bearer token), `GET /health`. Configuration is documented in `backend/tactical/settings.py`.
 
+Operations (docker-compose):
+- `backup` dumps PostgreSQL every night into `deploy/backups/` (custom format, kept `BACKUP_KEEP_DAYS`, default 14). Restore: `docker compose exec -T db pg_restore -U tactical -d tactical --clean --if-exists < backups/tactical-YYYYMMDD-HHMM.dump`. Copy the backups off the server too.
+- `maintenance` runs `prune_audit` (keeps `AUDIT_RETENTION_DAYS`, default 365) and `clearsessions` daily.
+- `/health` also checks the database (503 when it is down); Docker's health check restarts an unhealthy backend.
+- Behind the proxy (`TRUST_PROXY=1`) the panel redirects to HTTPS and sends HSTS (`HSTS_SECONDS`, default 180 days); `/health` is exempt so local checks work over HTTP.
+
 End-to-end: `tool/e2e_backend.sh` starts the backend under gunicorn (throw-away SQLite, or the PostgreSQL given by `POSTGRES_*`), seeds test accounts and runs the app's real `BackendClient` against it over HTTP (`test/e2e/backend_e2e_test.dart`: login with device binding, refresh, PTT join with keys, Czech names, and the errors the app shows). CI runs it against PostgreSQL.
 
 Development and tests (SQLite, no PostgreSQL needed):

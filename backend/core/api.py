@@ -6,7 +6,7 @@ import json
 import re
 
 from django.conf import settings
-from django.db import transaction
+from django.db import DatabaseError, connection, transaction
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -112,6 +112,13 @@ def _require_commander(request):
 
 
 def health(request):
+    """Also checks the database, so a proxy or Docker can tell a backend
+    that answers but cannot work."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+    except DatabaseError:
+        return _json(503, {"ok": False, "error": "database_unavailable"})
     return _json(200, {"ok": True})
 
 

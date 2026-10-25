@@ -14,7 +14,10 @@ Dart server where they overlap):
 - CSRF_TRUSTED_ORIGINS: comma separated origins of the web panel behind
   a reverse proxy, e.g. https://ptt.example.cz.
 - MAX_DEVICES_PER_USER (default 2, 0 = unlimited).
-- TRUST_PROXY=1: take the client address from X-Forwarded-For.
+- TRUST_PROXY=1: take the client address from X-Forwarded-For and the
+  scheme from X-Forwarded-Proto; enables HTTPS redirect (SSL_REDIRECT=0
+  to turn off) and HSTS (HSTS_SECONDS, default 180 days).
+- AUDIT_RETENTION_DAYS (default 365): `prune_audit` deletes older entries.
 - DEBUG=1: development only.
 """
 
@@ -160,6 +163,16 @@ SECURE_REFERRER_POLICY = "no-referrer"
 X_FRAME_OPTIONS = "DENY"
 if TRUST_PROXY:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    # Served only over HTTPS behind the proxy: browsers must never fall back
+    # to plain HTTP for the panel.
+    SECURE_HSTS_SECONDS = int(_env("HSTS_SECONDS", str(180 * 24 * 3600)))
+    SECURE_SSL_REDIRECT = _env("SSL_REDIRECT", "1") == "1"
+    # The proxy talks to us over plain HTTP on localhost; health checks
+    # from Docker must not be redirected.
+    SECURE_REDIRECT_EXEMPT = [r"^health$"]
+
+# Audit entries older than this are deleted by `prune_audit`.
+AUDIT_RETENTION_DAYS = int(_env("AUDIT_RETENTION_DAYS", "365"))
 
 LANGUAGE_CODE = "cs"
 TIME_ZONE = "Europe/Prague"

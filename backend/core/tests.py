@@ -648,3 +648,38 @@ class PanelTeamToolsTests(TestCase):
             {"old_password": "x", "new_password1": "a" * 12, "new_password2": "a" * 12},
         )
         self.assertContains(wrong, "Současné heslo nesouhlasí.")
+
+
+class OperationsTests(TestCase):
+    def test_health_reports_a_dead_database(self):
+        self.assertEqual(self.client.get("/health").json(), {"ok": True})
+        from django.db import DatabaseError
+
+        with mock.patch("core.api.connection.cursor", side_effect=DatabaseError):
+            response = self.client.get("/health")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"], "database_unavailable")
+
+    def test_prune_audit_keeps_recent_entries(self):
+        old = AuditEntry.objects.create(event="login")
+        AuditEntry.objects.filter(pk=old.pk).update(
+            at=timezone.now() - timedelta(days=400)
+        )
+        recent = AuditEntry.objects.create(event="login")
+        out = mock.Mock()
+        call_command("prune_audit", stdout=out)
+        self.assertEqual(list(AuditEntry.objects.values_list("pk", flat=True)),
+                         [recent.pk])
+        call_command("prune_audit", days=0, stdout=out)  # disabled
+        self.assertEqual(AuditEntry.objects.count(), 1)
+
+    def test_https_redirect_spares_the_health_check(self):
+        with self.settings(SECURE_SSL_REDIRECT=True,
+                           SECURE_REDIRECT_EXEMPT=[r"^health$"]):
+            self.assertEqual(self.client.get("/health").status_code, 200)
+            self.assertEqual(self.client.get("/panel/login").status_code, 301)
+            # Behind the proxy the forwarded scheme counts as HTTPS.
+            secure = self.client.get(
+                "/panel/login", HTTP_X_FORWARDED_PROTO="https", secure=True
+            )
+            self.assertEqual(secure.status_code, 200)

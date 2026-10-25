@@ -57,6 +57,80 @@ services:
       # X-Forwarded-For / -Proto; used for rate limiting, audit and HTTPS.
       TRUST_PROXY: "1"
       FORWARDED_ALLOW_IPS: "*"
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
+    healthcheck:
+      # /health also checks the database; unhealthy -> Docker restarts it.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Daily housekeeping: old audit entries and expired panel sessions.
+  maintenance:
+    build: ../backend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        while true; do
+          python manage.py prune_audit
+          python manage.py clearsessions
+          sleep 86400
+        done
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      LIVEKIT_URL: ${LIVEKIT_PUBLIC_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      POSTGRES_DB: tactical
+      POSTGRES_USER: tactical
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: db
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
+
+  # Nightly pg_dump into ./backups, kept for BACKUP_KEEP_DAYS (default 14).
+  # Restore: docker compose exec -T db pg_restore -U tactical -d tactical \
+  #            --clean --if-exists < backups/tactical-YYYYMMDD-HHMM.dump
+  backup:
+    image: postgres:17
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: tactical
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: tactical
+      KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+    entrypoint:
+      - sh
+      - -c
+      - |
+        while true; do
+          file=/backups/tactical-$$(date +%Y%m%d-%H%M).dump
+          if pg_dump --format=custom --file="$$file.tmp"; then
+            mv "$$file.tmp" "$$file"
+            echo "backup $$file"
+          else
+            rm -f "$$file.tmp"
+            echo "backup FAILED" >&2
+          fi
+          find /backups -name 'tactical-*.dump' -mtime +$$KEEP_DAYS -delete
+          sleep 86400
+        done
 
 volumes:
   db-data:
