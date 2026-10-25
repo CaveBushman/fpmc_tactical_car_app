@@ -153,7 +153,7 @@ Login protection: 5 wrong passwords lock that user name for 5 minutes from the s
 
 Device binding: the app sends a random per-installation id at login; an account may use at most `MAX_DEVICES_PER_USER` devices (default 2, `0` = unlimited) until a commander unbinds one.
 
-API (as the Dart server, plus `POST /report`): `POST /auth/login`, `POST /auth/refresh`, `POST /auth/password`, `POST /ptt/<group>/join`, `POST /report` (own position, status and battery; the app sends it at most every 2 minutes, 5 in battery saver, and at once on a status change), admin endpoints under `/admin/…` (commander, Bearer token), `GET /health`. Configuration is documented in `backend/tactical/settings.py`.
+API (as the Dart server, plus `POST /report`): `POST /auth/login`, `POST /auth/refresh`, `POST /auth/password`, `POST /ptt/<group>/join`, `POST /report` (own position, status and battery; the app sends it every 2 minutes, 5 in battery saver, also when standing still, and at once on a status change), admin endpoints under `/admin/…` (commander, Bearer token), `GET /health`. Configuration is documented in `backend/tactical/settings.py`.
 
 Operations (docker-compose):
 - `backup` dumps PostgreSQL every night into `deploy/backups/` (custom format, kept `BACKUP_KEEP_DAYS`, default 14). Restore: `docker compose exec -T db pg_restore -U tactical -d tactical --clean --if-exists < backups/tactical-YYYYMMDD-HHMM.dump`. Copy the backups off the server too.

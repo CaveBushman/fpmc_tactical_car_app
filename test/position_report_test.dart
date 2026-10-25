@@ -64,6 +64,7 @@ void main() {
       nativePtt: FakeNativePttBridge(),
       carBridge: FakeCarBridge(),
       clock: () => DateTime.now().add(offset),
+      agingTick: const Duration(milliseconds: 20),
     );
     addTearDown(controller.dispose);
     await controller.login('operator', 'secret-pass');
@@ -119,5 +120,15 @@ void main() {
     offset = const Duration(minutes: 6);
     await fix(50.003);
     expect(reports, hasLength(3));
+  });
+
+  test('a phone standing still keeps reporting its last fix', () async {
+    await fix(50.0);
+    expect(reports, hasLength(1));
+    // No new fixes (GPS reports movement only), but time passes.
+    offset = const Duration(minutes: 2, seconds: 5);
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    expect(reports, hasLength(2));
+    expect(reports.last['lat'], 50.0);
   });
 }

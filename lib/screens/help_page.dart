@@ -221,8 +221,8 @@ const helpTopics = [
     'Bezpečnost',
     'Poloha pro velitele',
     'Přihlášená aplikace posílá na server vaši polohu, stav a baterii '
-        'T-Beamu – nejvýš každé 2 minuty (v úsporném režimu 5), při změně '
-        'stavu hned. Velitelé ji vidí v panelu na stránce Situace. Server '
+        'T-Beamu – každé 2 minuty (v úsporném režimu 5), i když stojíte, a '
+        'při změně stavu hned. Velitelé ji vidí v panelu na stránce Situace. Server '
         'drží jen poslední polohu, historii pohybu neukládá.',
   ),
   HelpTopic(

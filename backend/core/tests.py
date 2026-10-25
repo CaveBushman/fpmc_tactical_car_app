@@ -769,6 +769,7 @@ class SituationTests(ApiTestCase):
         self.assertEqual(rows[1]["mgrs"], "33U VR 58556 48514")
         self.assertIn("silent", [m.username for m in page.context["silent"]])
         self.assertContains(page, "mapy.cz")
+        self.assertContains(page, '<meta http-equiv="refresh" content="60">')
         only_med = self.client.get("/panel/situation", {"group": "med"})
         self.assertEqual([r["member"].username for r in only_med.context["rows"]],
                          ["medic"])

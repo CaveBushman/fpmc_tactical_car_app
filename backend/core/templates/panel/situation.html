@@ -1,5 +1,6 @@
 {% extends "panel/base.html" %}
 {% block title %}Situace{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
 {% block content %}
 <h1>Situace</h1>
 <form method="get" class="card">
@@ -11,7 +12,8 @@
   <button type="submit">Zobrazit</button>
   <a class="button secondary" href="">Obnovit</a>
 </form>
-<p class="muted">Poslední poloha, kterou aplikace člena poslala na server (nejvýš každé 2 minuty).
+<p class="muted">Aktualizováno {% now "H:i:s" %}, stránka se obnovuje každou minutu.
+  Poslední poloha, kterou aplikace člena poslala na server (každé 2 minuty, i když stojí).
   Údaje starší než {{ stale_minutes }} minut jsou šedé. Historie pohybu se neukládá.</p>
 <div class="wrap"><table>
   <tr><th>Člen</th><th>Stav</th><th>Poloha (MGRS)</th><th>Baterie</th><th>Před</th><th></th></tr>

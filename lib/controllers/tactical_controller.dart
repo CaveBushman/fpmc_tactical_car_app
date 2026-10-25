@@ -130,6 +130,9 @@ class TacticalController extends ChangeNotifier {
     _agingTimer = Timer.periodic(agingTick, (_) {
       if (_session != null) {
         _notify();
+        // GPS only reports movement: a member standing still still has
+        // to show up as alive on the commanders' situation page.
+        unawaited(_reportToBackend());
       }
     });
   }
@@ -1253,8 +1256,9 @@ class TacticalController extends ChangeNotifier {
 
   /// Sends position, status and battery to the backend for the
   /// commanders' situation page: at most every 2 minutes (5 in battery
-  /// saver), at once when [force]d (status change). Failures are silent:
-  /// the next fix tries again.
+  /// saver), also without movement (the aging tick calls it with the last
+  /// fix), and at once when [force]d (status change). Failures are silent:
+  /// the next fix or tick tries again.
   Future<void> _reportToBackend({
     LocationFix? latest,
     bool force = false,
