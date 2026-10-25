@@ -526,6 +526,82 @@ class PanelTests(TestCase):
         self.assertEqual(self.commander.role, "commander")
 
 
+class PanelSessionTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.commander = make_user("velitel", "velitel-pass", role="commander",
+                                   groups=("alpha",))
+        self.deputy = make_user("zastupce", "zastupce-pass", role="commander",
+                                groups=("alpha",))
+
+    def login(self, name, password):
+        from django.test import Client
+
+        client = Client()
+        response = client.post("/panel/login",
+                               {"username": name, "password": password})
+        self.assertEqual(response.status_code, 302)
+        return client
+
+    def logged_in(self, client):
+        return client.get("/panel/").status_code == 200
+
+    def test_revoking_or_blocking_ends_panel_sessions_too(self):
+        deputy = self.login("zastupce", "zastupce-pass")
+        commander = self.login("velitel", "velitel-pass")
+        commander.post("/panel/users/zastupce/revoke")
+        self.assertFalse(self.logged_in(deputy))
+        self.assertTrue(self.logged_in(commander))
+        deputy = self.login("zastupce", "zastupce-pass")
+        commander.post("/panel/users/zastupce",
+                       {"display_name": "", "role": "commander",
+                        "groups": ["alpha"], "disabled": "on"})
+        self.assertFalse(self.logged_in(deputy))
+
+    def test_own_changes_keep_this_browser_logged_in(self):
+        here = self.login("velitel", "velitel-pass")
+        elsewhere = self.login("velitel", "velitel-pass")
+        here.post("/panel/users/velitel",
+                  {"display_name": "", "role": "commander", "groups": ["alpha", "bravo"]})
+        self.assertTrue(self.logged_in(here))
+        self.assertFalse(self.logged_in(elsewhere))
+        elsewhere = self.login("velitel", "velitel-pass")
+        response = here.post("/panel/users/velitel/revoke", follow=True)
+        self.assertContains(response, "ze všech ostatních zařízení")
+        self.assertTrue(self.logged_in(here))
+        self.assertFalse(self.logged_in(elsewhere))
+        elsewhere = self.login("velitel", "velitel-pass")
+        here.post("/panel/users/velitel/password", {"password": "nove-heslo-123"})
+        self.assertTrue(self.logged_in(here))
+        self.assertFalse(self.logged_in(elsewhere))
+
+    def test_login_reports_the_previous_login_and_failed_attempts(self):
+        first = self.client.post("/panel/login", {"username": "velitel",
+                                                   "password": "velitel-pass"},
+                                 follow=True)
+        self.assertNotContains(first, "Předchozí přihlášení")
+        self.client.post("/panel/logout")
+        self.client.post("/panel/login", {"username": "velitel", "password": "spatne"})
+        self.client.post("/panel/login", {"username": "velitel", "password": "spatne"})
+        # Someone else's failures do not count.
+        self.client.post("/panel/login", {"username": "zastupce", "password": "spatne"})
+        cache.clear()  # the failures above would rate-limit this client
+        second = self.client.post("/panel/login", {"username": "velitel",
+                                                    "password": "velitel-pass"},
+                                  follow=True)
+        self.assertContains(second, "Předchozí přihlášení do panelu:")
+        self.assertContains(second, "z adresy 127.0.0.1")
+        self.assertContains(second, "Od té doby 2× neúspěšný pokus")
+        self.assertContains(second, 'class="warning"')
+        self.client.post("/panel/logout")
+        third = self.client.post("/panel/login", {"username": "velitel",
+                                                   "password": "velitel-pass"},
+                                 follow=True)
+        self.assertContains(third, "Předchozí přihlášení do panelu:")
+        self.assertNotContains(third, "neúspěšný pokus")
+        self.assertContains(third, 'class="info"')
+
+
 class ImportTests(TestCase):
     def test_imports_the_dart_data_directory(self):
         with tempfile.TemporaryDirectory() as directory:

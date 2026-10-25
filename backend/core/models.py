@@ -2,6 +2,7 @@ from datetime import timezone as dt_timezone
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.db import models
+from django.utils.crypto import salted_hmac
 from django.utils import timezone
 
 ROLES = ("commander", "medic", "operator")
@@ -73,6 +74,17 @@ class User(AbstractBaseUser):
 
     def __str__(self):
         return self.username
+
+    def _get_session_auth_hash(self, secret=None):
+        # Panel sessions carry this hash; mixing in session_version makes
+        # "log out everywhere", a role or group change and blocking end
+        # them too, not only the app's tokens.
+        return salted_hmac(
+            "core.models.User.get_session_auth_hash",
+            f"{self.password}:{self.session_version}",
+            secret=secret,
+            algorithm="sha256",
+        ).hexdigest()
 
     @property
     def is_active(self):

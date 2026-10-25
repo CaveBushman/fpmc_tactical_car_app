@@ -89,10 +89,58 @@ class CommanderLoginForm(AuthenticationForm):
         return self.cleaned_data
 
 
+# Failed or blocked attempts on an account, from the app or the panel.
+FAILED_LOGIN_EVENTS = (
+    "login_failed", "login_locked", "login_rate_limited", "login_disabled",
+    "panel_login_failed", "panel_login_limited",
+)
+
+
+def previous_login_notice(name):
+    """What a commander should know right after logging in: when and from
+    where the previous panel login came, and failed attempts since then."""
+    logins = list(
+        AuditEntry.objects.filter(event="panel_login", user=name)
+        .order_by("-at")[:2]
+    )
+    if not logins:
+        return None
+    previous = logins[1] if len(logins) > 1 else None
+    failed = AuditEntry.objects.filter(
+        user=name, event__in=FAILED_LOGIN_EVENTS, at__lt=logins[0].at
+    )
+    if previous is not None:
+        failed = failed.filter(at__gt=previous.at)
+    count = failed.count()
+    parts = []
+    if previous is not None:
+        at = timezone.localtime(previous.at)
+        when = f"{at.day}. {at.month}. {at.year} {at:%H:%M}"
+        parts.append(
+            f"Předchozí přihlášení do panelu: {when}"
+            f" z adresy {previous.details.get('ip', '?')}."
+        )
+    if count:
+        parts.append(
+            f"Od té doby {count}× neúspěšný pokus o přihlášení k tomuto účtu"
+            " – pokud jste to nebyli vy, změňte si heslo."
+        )
+    return {"text": " ".join(parts), "alarm": bool(count)} if parts else None
+
+
 class PanelLoginView(LoginView):
     template_name = "panel/login.html"
     authentication_form = CommanderLoginForm
     redirect_authenticated_user = True
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        notice = previous_login_notice(form.get_user().username)
+        if notice:
+            (messages.warning if notice["alarm"] else messages.info)(
+                self.request, notice["text"]
+            )
+        return response
 
 
 @require_POST
@@ -368,6 +416,8 @@ def user_edit(request, name):
             user.disabled = data["disabled"]
             user.save()
             user.groups.set(group_ids)
+            if user.pk == request.user.pk:
+                update_session_auth_hash(request, user)
             audit.record(
                 "user_updated", request.user, target=user.username,
                 role=user.role, groups=group_ids, disabled=user.disabled,
@@ -390,6 +440,8 @@ def user_password(request, name):
         user.set_password(form.cleaned_data["password"])
         user.session_version += 1
         user.save()
+        if user.pk == request.user.pk:
+            update_session_auth_hash(request, user)
         audit.record("password_reset", request.user, target=user.username)
         messages.success(request, "Heslo změněno, uživatel je všude odhlášen.")
     else:
@@ -406,7 +458,12 @@ def user_revoke(request, name):
     user.session_version += 1
     user.save(update_fields=["session_version"])
     audit.record("sessions_revoked", request.user, target=user.username)
-    messages.success(request, "Uživatel je odhlášen ze všech zařízení.")
+    if user.pk == request.user.pk:
+        # Ends the other sessions; this browser stays logged in.
+        update_session_auth_hash(request, user)
+        messages.success(request, "Odhlášeno ze všech ostatních zařízení i prohlížečů.")
+    else:
+        messages.success(request, "Uživatel je odhlášen ze všech zařízení i z panelu.")
     return redirect("panel-user-edit", name=user.username)
 
 
