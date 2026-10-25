@@ -574,6 +574,23 @@ class PanelTeamToolsTests(TestCase):
                                    groups=("alpha",))
         self.client.force_login(self.commander)
 
+    def test_audit_shows_czech_labels_and_readable_details(self):
+        AuditEntry.objects.create(event="user_created", user="velitel", details={
+            "target": "novak", "role": "medic", "groups": ["alpha", "bravo"],
+            "imported": True,
+        })
+        AuditEntry.objects.create(event="panel_login_failed", details={"ip": "10.0.0.9"})
+        html = self.client.get("/panel/audit").content.decode()
+        self.assertIn("Vytvořen uživatel", html)
+        self.assertIn("uživatel: novak; role: Zdravotník; skupiny: alpha, bravo; hromadně: ano", html)
+        self.assertIn('<span class="off">Chybné heslo do panelu</span>', html)
+        self.assertNotIn("[&#x27;alpha&#x27;", html)
+
+    def test_user_list_shows_czech_roles_as_phone_cards(self):
+        html = self.client.get("/panel/").content.decode()
+        self.assertIn('<td data-label="Role">Velitel</td>', html)
+        self.assertIn('<table class="stack">', html)
+
     def test_import_preview_reports_errors_per_line(self):
         make_user("novak", "novak-pass-1")
         text = (

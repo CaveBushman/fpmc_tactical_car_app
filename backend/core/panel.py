@@ -25,13 +25,9 @@ from django.views.decorators.http import require_POST
 from . import audit, keys, security
 from .api import GROUP_ID, MIN_PASSWORD_LENGTH, USER_NAME
 from .mgrs import to_mgrs
-from .models import ROLES, AuditEntry, GroupMessage, TeamGroup, User
+from .models import ROLE_LABELS, ROLES, AuditEntry, GroupMessage, TeamGroup, User
 
-ROLE_CHOICES = [
-    ("operator", "Operátor"),
-    ("medic", "Zdravotník"),
-    ("commander", "Velitel"),
-]
+ROLE_CHOICES = [(r, ROLE_LABELS[r]) for r in ("operator", "medic", "commander")]
 assert {r for r, _ in ROLE_CHOICES} == set(ROLES)
 
 
@@ -641,11 +637,75 @@ def group_message_send(request):
 
 # --- Audit ---------------------------------------------------------------------
 
+AUDIT_LABELS = {
+    "admin_denied": "Odepřen přístup ke správě",
+    "device_bound": "Připojeno zařízení",
+    "device_unbound": "Odpojeno zařízení",
+    "group_created": "Vytvořena skupina",
+    "group_deleted": "Smazána skupina",
+    "group_message": "Zpráva skupině",
+    "group_updated": "Upravena skupina",
+    "key_rotated": "Nový klíč skupiny",
+    "login": "Přihlášení v aplikaci",
+    "login_device_refused": "Odmítnuto zařízení nad limit",
+    "login_disabled": "Přihlášení zablokovaného účtu",
+    "login_failed": "Chybné heslo v aplikaci",
+    "login_locked": "Účet dočasně zamčen",
+    "login_passwordless": "Přihlášení bez hesla (vývoj)",
+    "login_rate_limited": "Příliš mnoho pokusů v aplikaci",
+    "panel_login": "Přihlášení do panelu",
+    "panel_login_failed": "Chybné heslo do panelu",
+    "panel_login_limited": "Příliš mnoho pokusů do panelu",
+    "panel_login_refused": "Panel odmítnut (není velitel)",
+    "password_changed": "Změněno vlastní heslo",
+    "password_change_failed": "Chybná změna hesla",
+    "password_reset": "Nastaveno heslo uživateli",
+    "ptt_denied": "Odepřena vysílačka",
+    "ptt_join": "Připojení k vysílačce",
+    "session_refreshed": "Obnovena relace",
+    "sessions_revoked": "Odhlášen ze všech zařízení",
+    "user_created": "Vytvořen uživatel",
+    "user_updated": "Upraven uživatel",
+}
+# Events a commander should notice at a glance.
+AUDIT_ALARMS = {
+    "admin_denied", "login_device_refused", "login_disabled", "login_failed",
+    "login_locked", "login_passwordless", "login_rate_limited",
+    "panel_login_failed", "panel_login_limited", "panel_login_refused",
+    "password_change_failed", "ptt_denied",
+}
+AUDIT_KEYS = {
+    "target": "uživatel", "role": "role", "groups": "skupiny", "group": "skupina",
+    "keyId": "klíč", "priority": "prioritní", "ip": "IP", "deviceName": "zařízení",
+    "disabled": "zablokován", "imported": "hromadně", "path": "adresa",
+    "id": "id", "name": "název", "channelIndex": "kanál", "pttEnabled": "vysílačka",
+    "description": "popis",
+}
+
+
+def audit_details(details):
+    """Readable ``klíč: hodnota`` pairs instead of Python reprs."""
+    parts = []
+    for key, value in details.items():
+        if isinstance(value, bool):
+            value = "ano" if value else "ne"
+        elif isinstance(value, (list, tuple)):
+            value = ", ".join(str(v) for v in value) or "žádné"
+        elif key == "role":
+            value = ROLE_LABELS.get(value, value)
+        parts.append(f"{AUDIT_KEYS.get(key, key)}: {value}")
+    return "; ".join(parts)
+
+
 
 @commander_required
 def audit_log(request):
     entries = []
     for entry in AuditEntry.objects.all()[:200]:
-        details = ", ".join(f"{k}={v}" for k, v in entry.details.items())
-        entries.append({"entry": entry, "details": details})
+        entries.append({
+            "entry": entry,
+            "label": AUDIT_LABELS.get(entry.event, entry.event),
+            "details": audit_details(entry.details),
+            "alarm": entry.event in AUDIT_ALARMS,
+        })
     return render(request, "panel/audit.html", {"entries": entries})

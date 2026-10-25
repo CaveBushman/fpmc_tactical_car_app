@@ -16,16 +16,16 @@
 <p class="muted">Aktualizováno {% now "H:i:s" %}, stránka se obnovuje každou minutu.
   Poslední poloha, kterou aplikace člena poslala na server (každé 2 minuty, i když stojí).
   Údaje starší než {{ stale_minutes }} minut jsou šedé. Historie pohybu se neukládá.</p>
-<div class="wrap"><table>
+<div class="wrap"><table class="stack">
   <tr><th>Člen</th><th>Stav</th><th>Poloha (MGRS)</th><th>Baterie</th><th>Před</th><th></th></tr>
   {% for row in rows %}
   <tr{% if row.stale %} class="muted"{% endif %}>
-    <td><strong>{{ row.member.display_name|default:row.member.username }}</strong> <span class="muted">{{ row.member.username }}</span></td>
-    <td>{% if row.urgent %}<span class="off">{{ row.status }}</span>{% else %}{{ row.status|default:"–" }}{% endif %}</td>
-    <td><code>{{ row.mgrs }}</code></td>
-    <td>{% if row.position.battery_percent is not None %}{{ row.position.battery_percent }} %{% else %}–{% endif %}</td>
-    <td>{{ row.minutes }} min</td>
-    <td><a href="{{ row.map_url }}" target="_blank" rel="noopener noreferrer">Mapa</a></td>
+    <td data-label="Člen"><strong>{{ row.member.display_name|default:row.member.username }}</strong> <span class="muted">{{ row.member.username }}</span></td>
+    <td data-label="Stav">{% if row.urgent %}<span class="off">{{ row.status }}</span>{% else %}{{ row.status|default:"–" }}{% endif %}</td>
+    <td data-label="Poloha"><code class="mgrs">{{ row.mgrs }}</code></td>
+    <td data-label="Baterie">{% if row.position.battery_percent is not None %}{{ row.position.battery_percent }} %{% else %}–{% endif %}</td>
+    <td data-label="Před">{{ row.minutes }} min</td>
+    <td data-label="Mapa"><a href="{{ row.map_url }}" target="_blank" rel="noopener noreferrer">Mapa</a></td>
   </tr>
   {% empty %}
   <tr><td colspan="6" class="muted">Žádný člen zatím polohu neposlal.</td></tr>
@@ -33,11 +33,11 @@
 </table></div>
 {% if recent_messages %}
 <h2>Poslední zprávy z panelu</h2>
-<div class="wrap"><table>
+<div class="wrap"><table class="stack">
   <tr><th>Čas</th><th>Skupina</th><th>Od</th><th>Zpráva</th></tr>
   {% for m in recent_messages %}
-  <tr><td>{{ m.created_at|date:"j. n. H:i" }}</td><td>{{ m.group_id }}</td><td>{{ m.author }}</td>
-    <td>{% if m.priority %}<span class="off">PRIORITNÍ</span> {% endif %}{{ m.text }}</td></tr>
+  <tr><td data-label="Čas">{{ m.created_at|date:"j. n. H:i" }}</td><td data-label="Skupina">{{ m.group_id }}</td><td data-label="Od">{{ m.author }}</td>
+    <td data-label="Zpráva">{% if m.priority %}<span class="off">PRIORITNÍ</span> {% endif %}{{ m.text }}</td></tr>
   {% endfor %}
 </table></div>
 {% endif %}

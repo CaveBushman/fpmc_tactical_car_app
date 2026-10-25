@@ -2,14 +2,15 @@
 {% block title %}Audit{% endblock %}
 {% block content %}
 <h1>Audit</h1>
-<div class="wrap"><table>
+<p class="muted">Posledních 200 záznamů. Červeně jsou odmítnuté a podezřelé pokusy.</p>
+<div class="wrap"><table class="stack">
   <tr><th>Čas</th><th>Událost</th><th>Uživatel</th><th>Podrobnosti</th></tr>
   {% for row in entries %}
   <tr>
-    <td>{{ row.entry.at|date:"j. n. H:i:s" }}</td>
-    <td>{{ row.entry.event }}</td>
-    <td>{{ row.entry.user|default:"" }}</td>
-    <td class="muted">{{ row.details }}</td>
+    <td data-label="Čas">{{ row.entry.at|date:"j. n. H:i:s" }}</td>
+    <td data-label="Událost">{% if row.alarm %}<span class="off">{{ row.label }}</span>{% else %}{{ row.label }}{% endif %} <span class="muted code">{{ row.entry.event }}</span></td>
+    <td data-label="Uživatel">{{ row.entry.user|default:"–" }}</td>
+    <td data-label="Podrobnosti" class="muted">{{ row.details|default:"–" }}</td>
   </tr>
   {% empty %}
   <tr><td colspan="4" class="muted">Žádné záznamy.</td></tr>

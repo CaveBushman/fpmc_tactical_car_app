@@ -15,17 +15,17 @@
   </select>
   <button type="submit">Filtrovat</button>
 </form>
-<div class="wrap"><table>
+<div class="wrap"><table class="stack">
   <tr><th>Uživatel</th><th>Jméno</th><th>Role</th><th>Skupiny</th><th>Zařízení</th><th>Naposledy</th><th></th></tr>
   {% for u in users %}
   <tr>
-    <td>{{ u.username }}{% if u.disabled %} <span class="off">ZABLOKOVÁN</span>{% endif %}</td>
-    <td>{{ u.display_name }}</td>
-    <td>{{ u.get_role_display }}</td>
-    <td>{% for g in u.groups.all %}<span class="tag">{{ g.name }}</span>{% empty %}<span class="muted">žádné</span>{% endfor %}</td>
-    <td>{{ u.devices.all|length }}</td>
-    <td>{% if u.last_active %}{{ u.last_active|date:"j. n. Y H:i" }}{% else %}<span class="muted">nikdy</span>{% endif %}</td>
-    <td><a href="{% url 'panel-user-edit' u.username %}">Upravit</a></td>
+    <td data-label="Uživatel">{{ u.username }}{% if u.disabled %} <span class="off">ZABLOKOVÁN</span>{% endif %}</td>
+    <td data-label="Jméno">{{ u.display_name }}</td>
+    <td data-label="Role">{{ u.get_role_display }}</td>
+    <td data-label="Skupiny">{% for g in u.groups.all %}<span class="tag">{{ g.name }}</span>{% empty %}<span class="muted">žádné</span>{% endfor %}</td>
+    <td data-label="Zařízení">{{ u.devices.all|length }}</td>
+    <td data-label="Naposledy">{% if u.last_active %}{{ u.last_active|date:"j. n. Y H:i" }}{% else %}<span class="muted">nikdy</span>{% endif %}</td>
+    <td class="actions"><a href="{% url 'panel-user-edit' u.username %}">Upravit</a></td>
   </tr>
   {% empty %}
   <tr><td colspan="7" class="muted">Nic nenalezeno.</td></tr>

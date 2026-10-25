@@ -5,6 +5,7 @@ from django.db import models
 from django.utils import timezone
 
 ROLES = ("commander", "medic", "operator")
+ROLE_LABELS = {"commander": "Velitel", "medic": "Zdravotník", "operator": "Operátor"}
 
 
 def iso(moment):
@@ -53,7 +54,7 @@ class User(AbstractBaseUser):
     username = models.CharField(max_length=32, unique=True)
     display_name = models.CharField(max_length=40, blank=True, default="")
     role = models.CharField(
-        max_length=16, choices=[(r, r) for r in ROLES], default="operator"
+        max_length=16, choices=[(r, ROLE_LABELS[r]) for r in ROLES], default="operator"
     )
     groups = models.ManyToManyField(TeamGroup, related_name="members", blank=True)
     disabled = models.BooleanField(default=False)
