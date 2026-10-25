@@ -547,6 +547,8 @@ STATUS_LABELS = {
 URGENT_STATUSES = {"wounded", "needSupport"}
 # Same as the app's LOST link status.
 STALE_AFTER = timedelta(minutes=15)
+# Same threshold as the app's T-Beam battery warning.
+LOW_BATTERY_PERCENT = 20
 
 
 @commander_required
@@ -576,6 +578,8 @@ def situation(request):
                 "urgent": position.status in URGENT_STATUSES,
                 "minutes": max(0, int(age.total_seconds() // 60)),
                 "stale": age > STALE_AFTER,
+                "low_battery": position.battery_percent is not None
+                and position.battery_percent <= LOW_BATTERY_PERCENT,
                 "map_url": (
                     "https://mapy.cz/zakladni?source=coor"
                     f"&id={position.longitude:.6f},{position.latitude:.6f}"
@@ -585,12 +589,21 @@ def situation(request):
         )
     # Urgent first, then fresh before stale, then by name.
     rows.sort(key=lambda r: (not r["urgent"], r["stale"], r["member"].username))
+    summary = {
+        "urgent": sum(r["urgent"] for r in rows),
+        "active": sum(not r["stale"] for r in rows),
+        "stale": sum(r["stale"] for r in rows),
+        "silent": len(silent),
+        "low_battery": sum(r["low_battery"] for r in rows),
+    }
     return render(
         request,
         "panel/situation.html",
         {
             "rows": rows,
             "silent": silent,
+            "summary": summary,
+            "low_battery_percent": LOW_BATTERY_PERCENT,
             "groups": TeamGroup.objects.all(),
             "group_id": group_id,
             "stale_minutes": int(STALE_AFTER.total_seconds() // 60),

@@ -783,7 +783,8 @@ class SituationTests(ApiTestCase):
         )
         MemberPosition.objects.create(
             user=medic, latitude=49.19506, longitude=16.606837,
-            status="wounded", reported_at=now - timedelta(minutes=2),
+            status="wounded", battery_percent=20,
+            reported_at=now - timedelta(minutes=2),
         )
         self.client.force_login(self.commander)
         page = self.client.get("/panel/situation")
@@ -795,6 +796,15 @@ class SituationTests(ApiTestCase):
         self.assertIn("silent", [m.username for m in page.context["silent"]])
         self.assertContains(page, "mapy.cz")
         self.assertContains(page, '<meta http-equiv="refresh" content="60">')
+        summary = page.context["summary"]
+        self.assertEqual(
+            (summary["urgent"], summary["active"], summary["stale"],
+             summary["low_battery"], summary["silent"]),
+            (1, 1, 1, 1, len(page.context["silent"])),
+        )
+        self.assertTrue(rows[0]["low_battery"])
+        self.assertFalse(rows[1]["low_battery"])
+        self.assertContains(page, "<title>(!1) Situace")
         only_med = self.client.get("/panel/situation", {"group": "med"})
         self.assertEqual([r["member"].username for r in only_med.context["rows"]],
                          ["medic"])

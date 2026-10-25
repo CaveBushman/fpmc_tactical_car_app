@@ -1,5 +1,5 @@
 {% extends "panel/base.html" %}
-{% block title %}Situace{% endblock %}
+{% block title %}{% if summary.urgent %}(!{{ summary.urgent }}) {% endif %}Situace{% endblock %}
 {% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
 {% block content %}
 <h1>Situace</h1>
@@ -12,6 +12,13 @@
   <button type="submit">Zobrazit</button>
   <a class="button secondary" href="">Obnovit</a>
 </form>
+<div class="summary">
+  <div class="stat{% if summary.urgent %} alarm{% endif %}"><b>{{ summary.urgent }}</b>potřebuje pomoc</div>
+  <div class="stat"><b>{{ summary.active }}</b>aktivních</div>
+  <div class="stat{% if summary.stale %} warn{% endif %}"><b>{{ summary.stale }}</b>bez hlášení &gt; {{ stale_minutes }} min</div>
+  <div class="stat{% if summary.silent %} warn{% endif %}"><b>{{ summary.silent }}</b>bez polohy</div>
+  <div class="stat{% if summary.low_battery %} warn{% endif %}"><b>{{ summary.low_battery }}</b>baterie ≤ {{ low_battery_percent }} %</div>
+</div>
 <a class="button" href="{% url 'panel-situation-message' %}{% if group_id %}?group={{ group_id }}{% endif %}">Poslat zprávu skupině</a>
 <p class="muted">Aktualizováno {% now "H:i:s" %}, stránka se obnovuje každou minutu.
   Poslední poloha, kterou aplikace člena poslala na server (každé 2 minuty, i když stojí).
@@ -19,11 +26,11 @@
 <div class="wrap"><table class="stack">
   <tr><th>Člen</th><th>Stav</th><th>Poloha (MGRS)</th><th>Baterie</th><th>Před</th><th></th></tr>
   {% for row in rows %}
-  <tr{% if row.stale %} class="muted"{% endif %}>
+  <tr class="{% if row.urgent %}urgent{% endif %}{% if row.stale %} muted{% endif %}">
     <td data-label="Člen"><strong>{{ row.member.display_name|default:row.member.username }}</strong> <span class="muted">{{ row.member.username }}</span></td>
     <td data-label="Stav">{% if row.urgent %}<span class="off">{{ row.status }}</span>{% else %}{{ row.status|default:"–" }}{% endif %}</td>
     <td data-label="Poloha"><code class="mgrs">{{ row.mgrs }}</code></td>
-    <td data-label="Baterie">{% if row.position.battery_percent is not None %}{{ row.position.battery_percent }} %{% else %}–{% endif %}</td>
+    <td data-label="Baterie">{% if row.position.battery_percent is not None %}<span{% if row.low_battery %} class="off"{% endif %}>{{ row.position.battery_percent }} %</span>{% else %}–{% endif %}</td>
     <td data-label="Před">{{ row.minutes }} min</td>
     <td data-label="Mapa"><a href="{{ row.map_url }}" target="_blank" rel="noopener noreferrer">Mapa</a></td>
   </tr>
@@ -43,6 +50,7 @@
 {% endif %}
 {% if silent %}
 <h2>Bez polohy</h2>
-<p>{% for m in silent %}<span class="tag">{{ m.username }}</span>{% endfor %}</p>
+<p class="muted">Přihlášení členové, jejichž aplikace zatím polohu neposlala (nemá GPS nebo ještě nebyla spuštěna).</p>
+<p>{% for m in silent %}<span class="tag">{{ m.display_name|default:m.username }}</span>{% endfor %}</p>
 {% endif %}
 {% endblock %}

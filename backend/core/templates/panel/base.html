@@ -30,12 +30,27 @@
   code.mgrs { white-space:nowrap; font-size:15px; }
   .code { font-family:ui-monospace, monospace; font-size:11px; }
   td.actions { white-space:nowrap; }
+  tr.urgent td:first-child { box-shadow:inset 4px 0 0 var(--danger); }
+  .summary { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  .stat { flex:1 1 120px; background:var(--panel); border:1px solid var(--line);
+          border-radius:8px; padding:8px 12px; color:var(--muted); font-size:13px; }
+  .stat b { display:block; font-size:24px; color:var(--text); }
+  .stat.warn b { color:var(--sand); }
+  .stat.alarm { border-color:var(--danger); }
+  .stat.alarm b { color:var(--danger); }
+  fieldset { border:1px solid var(--line); border-radius:6px; padding:6px 12px 10px; margin:10px 0 0; }
+  legend { font-weight:600; padding:0 4px; }
+  .helptext ul, ul.helptext { margin:2px 0; padding-left:0; list-style:none; }
   td.actions form.inline button { margin:2px 0 2px 6px; }
   /* Phones: each table row becomes a card with labelled fields. */
   @media (max-width: 640px) {
-    header strong { flex-basis:100%; }
-    nav { flex-basis:100%; }
-    header form.inline { margin-left:auto; }
+    header strong { flex:1; font-size:14px; }
+    nav { order:2; flex-basis:100%; }
+    header form.inline button { padding:6px 10px; }
+    .stat { flex-basis:90px; padding:6px 10px; }
+    .stat b { font-size:20px; }
+    table.stack tr.urgent { border-color:var(--danger); }
+    table.stack tr.urgent td:first-child { box-shadow:none; }
     table.stack, table.stack tbody, table.stack tr, table.stack td { display:block; width:100%; }
     table.stack { background:none; }
     table.stack tr:first-child:has(th) { display:none; }
