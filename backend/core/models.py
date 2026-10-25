@@ -164,6 +164,30 @@ class MemberPosition(models.Model):
         ordering = ["-reported_at"]
 
 
+class GroupMessage(models.Model):
+    """A message from the commanders' panel to a group, picked up by the
+    members' apps with their next position report."""
+
+    group_id = models.CharField(max_length=20, db_index=True)
+    text = models.CharField(max_length=500)
+    priority = models.BooleanField(default=False)
+    author = models.CharField(max_length=40)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "groupId": self.group_id,
+            "text": self.text,
+            "priority": self.priority,
+            "author": self.author,
+            "at": iso(self.created_at),
+        }
+
+
 class AuditEntry(models.Model):
     at = models.DateTimeField(default=timezone.now, db_index=True)
     event = models.CharField(max_length=40)

@@ -13,7 +13,15 @@ from django.test import TestCase
 from django.utils import timezone
 
 from . import security
-from .models import AuditEntry, Device, GroupKey, MemberPosition, TeamGroup, User
+from .models import (
+    AuditEntry,
+    Device,
+    GroupKey,
+    GroupMessage,
+    MemberPosition,
+    TeamGroup,
+    User,
+)
 from .passwords import hash_password, verify_password
 
 # A hash written by the former Dart server (password "operator-2026").
@@ -716,7 +724,7 @@ class SituationTests(ApiTestCase):
         token = self.login()
         ok = self.report(token, lat=50.087451, lon=14.420671, alt=240.6,
                          battery=101, status="wounded")
-        self.assertEqual(ok.json(), {"ok": True})
+        self.assertEqual(ok.json(), {"ok": True, "messages": []})
         position = self.operator.position
         self.assertEqual((position.battery_percent, position.altitude_m,
                           position.status), (100, 240, "wounded"))
@@ -808,3 +816,55 @@ class PasswordlessLoginTests(ApiTestCase):
             reloaded = importlib.reload(module)
             self.assertFalse(reloaded.DEV_PASSWORDLESS_LOGIN)
         importlib.reload(module)
+
+
+class GroupMessageTests(ApiTestCase):
+    def test_messages_ride_on_position_reports(self):
+        token = self.login()  # operator: alpha, bravo
+        old = GroupMessage.objects.create(group_id="alpha", text="staré",
+                                          author="HQ")
+        GroupMessage.objects.filter(pk=old.pk).update(
+            created_at=timezone.now() - timedelta(hours=2)
+        )
+        first = GroupMessage.objects.create(group_id="alpha", text="Přesun na RV-1",
+                                            priority=True, author="VELITEL")
+        GroupMessage.objects.create(group_id="command", text="jen velení",
+                                    author="VELITEL")
+        report = self.call("POST", "/report", {"lat": 50, "lon": 14}, token=token)
+        got = report.json()["messages"]
+        # First pickup: recent only, own groups only.
+        self.assertEqual([m["text"] for m in got], ["Přesun na RV-1"])
+        self.assertEqual(got[0]["groupId"], "alpha")
+        self.assertTrue(got[0]["priority"])
+        self.assertEqual(got[0]["author"], "VELITEL")
+
+        second = GroupMessage.objects.create(group_id="bravo", text="Druhá",
+                                             author="VELITEL")
+        again = self.call("POST", "/report",
+                          {"lat": 50, "lon": 14, "sinceMessageId": first.id},
+                          token=token).json()["messages"]
+        self.assertEqual([m["id"] for m in again], [second.id])
+        none = self.call("POST", "/report",
+                         {"lat": 50, "lon": 14, "sinceMessageId": second.id},
+                         token=token).json()["messages"]
+        self.assertEqual(none, [])
+
+    def test_panel_sends_to_a_group(self):
+        self.client.force_login(self.commander)
+        form = self.client.get("/panel/situation/message", {"group": "bravo"})
+        self.assertContains(form, 'value="bravo" selected')
+        response = self.client.post(
+            "/panel/situation/message",
+            {"group": "bravo", "text": "  Návrat   na základnu ", "priority": "on"},
+        )
+        self.assertRedirects(response, "/panel/situation?group=bravo",
+                             fetch_redirect_response=False)
+        message = GroupMessage.objects.get()
+        self.assertEqual((message.text, message.priority, message.author),
+                         ("Návrat na základnu", True, "COMMANDER"))
+        self.assertTrue(AuditEntry.objects.filter(event="group_message").exists())
+        self.client.post("/panel/situation/message", {"group": "bravo", "text": " "})
+        self.client.post("/panel/situation/message", {"group": "zulu", "text": "x"})
+        self.assertEqual(GroupMessage.objects.count(), 1)
+        page = self.client.get("/panel/situation")
+        self.assertContains(page, "Návrat na základnu")

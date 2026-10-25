@@ -1,0 +1,19 @@
+{% extends "panel/base.html" %}
+{% block title %}Zpráva skupině{% endblock %}
+{% block content %}
+<h1>Zpráva skupině</h1>
+<form method="post" class="card">
+  {% csrf_token %}
+  <label for="msg-group">Skupina</label>
+  <select id="msg-group" name="group" required>
+    {% for g in groups %}<option value="{{ g.id }}" {% if g.id == group_id %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+  </select>
+  <label for="msg-text">Text</label>
+  <textarea id="msg-text" name="text" rows="3" maxlength="500" required style="max-width:100%"></textarea>
+  <div class="check"><input type="checkbox" id="msg-priority" name="priority"> <label for="msg-priority">Prioritní</label></div>
+  <button type="submit">Odeslat</button>
+  <span class="helptext">Aplikace členů skupiny si zprávu vyzvednou s dalším hlášením polohy
+    (do 2 minut, v úsporném režimu do 5) a ukážou ji od VELITELSTVÍ.</span>
+</form>
+<p><a href="{% url 'panel-situation' %}">Zpět na situaci</a></p>
+{% endblock %}

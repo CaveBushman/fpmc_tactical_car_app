@@ -15,6 +15,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late List<Map<String, dynamic>> reports;
+  late List<Map<String, dynamic>> hqMessages;
   late int reportStatus;
   late Duration offset;
   late FakeLocationService location;
@@ -22,6 +23,7 @@ void main() {
 
   setUp(() async {
     reports = [];
+    hqMessages = [];
     reportStatus = 200;
     offset = Duration.zero;
     location = FakeLocationService();
@@ -47,8 +49,12 @@ void main() {
         if (path.endsWith('/report')) {
           expect(request.headers['authorization'], 'Bearer token-1');
           reports.add(jsonDecode(request.body) as Map<String, dynamic>);
-          return http.Response(
-            reportStatus == 200 ? '{"ok":true}' : '{"error":"x"}',
+          return http.Response.bytes(
+            utf8.encode(
+              reportStatus == 200
+                  ? jsonEncode({'ok': true, 'messages': hqMessages})
+                  : '{"error":"x"}',
+            ),
             reportStatus,
           );
         }
@@ -144,4 +150,46 @@ void main() {
       expect(reports.single, isNot(contains('battery')));
     },
   );
+
+  test('panel messages arrive with the report, once each', () async {
+    final at = DateTime.now().toUtc().toIso8601String();
+    hqMessages = [
+      {
+        'id': 7,
+        'groupId': 'alpha',
+        'text': 'Přesun na RV-1',
+        'priority': true,
+        'author': 'VELITEL',
+        'at': at,
+      },
+      {
+        'id': 8,
+        'groupId': 'command',
+        'text': 'cizí skupina',
+        'priority': false,
+        'author': 'VELITEL',
+        'at': at,
+      },
+    ];
+    await fix(50.0);
+    final message = controller.messages.first;
+    expect(message.sender, TacticalController.hqSender);
+    expect(message.body, 'Přesun na RV-1');
+    expect(message.priority, isTrue);
+    expect(message.groupId, 'alpha');
+    expect(controller.messages.where((m) => m.body == 'cizí skupina'), isEmpty);
+    expect(
+      controller.missionEvents.first.text,
+      'Zpráva z velitelství pro ALPHA: Přesun na RV-1',
+    );
+
+    // The next report asks only for newer ones; repeats are ignored.
+    offset = const Duration(minutes: 3);
+    await fix(50.001);
+    expect(reports.last['sinceMessageId'], 8);
+    expect(
+      controller.messages.where((m) => m.body == 'Přesun na RV-1'),
+      hasLength(1),
+    );
+  });
 }

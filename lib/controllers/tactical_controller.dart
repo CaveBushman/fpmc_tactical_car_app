@@ -462,6 +462,7 @@ class TacticalController extends ChangeNotifier {
     _navTarget = null;
     _peerTrails.clear();
     _knownNames.clear();
+    _lastHqMessageId = null;
     _rendezvous = null;
     _lastBackendReportAt = null;
     _contactWatch.clear();
@@ -1309,8 +1310,9 @@ class TacticalController extends ChangeNotifier {
     _lastBackendReportAt = now;
     try {
       final self = selfNode;
-      await backend.reportPosition(
+      final incoming = await backend.reportPosition(
         token,
+        sinceMessageId: _lastHqMessageId,
         latitude: fix.latitude,
         longitude: fix.longitude,
         at: fix.timestamp,
@@ -1320,10 +1322,67 @@ class TacticalController extends ChangeNotifier {
         batteryPercent: meshConnected ? self.batteryPercent : null,
         status: ownStatus?.name,
       );
+      _applyHqMessages(incoming);
     } on BackendException {
       _lastBackendReportAt = null; // try again with the next fix
     } finally {
       _backendReporting = false;
+    }
+  }
+
+  // --- Messages from the commanders' panel ------------------------------------------
+
+  /// Sender shown for panel messages.
+  static const hqSender = 'VELITELSTVÍ';
+  int? _lastHqMessageId;
+
+  void _applyHqMessages(List<HqMessage> incoming) {
+    var added = false;
+    for (final message in incoming) {
+      final last = _lastHqMessageId;
+      if (last != null && message.id <= last) {
+        continue;
+      }
+      _lastHqMessageId = message.id;
+      final group = allowedGroups
+          .where((g) => g.id == message.groupId)
+          .firstOrNull;
+      if (group == null) {
+        continue;
+      }
+      _messages.insert(
+        0,
+        MeshMessage(
+          sender: hqSender,
+          body: message.text,
+          sentAt: message.at,
+          groupId: group.id,
+          targetLabel: group.name,
+          priority: message.priority,
+          viaInternet: true,
+        ),
+      );
+      _countIncoming(group.id);
+      _log(
+        MissionEventKind.status,
+        'Zpráva z velitelství pro ${group.name}: ${message.text}',
+      );
+      if (!_appInForeground) {
+        unawaited(
+          _carBridge.notifyMessage(
+            groupId: group.id,
+            groupName: group.name,
+            sender: hqSender,
+            body: message.text,
+            sentAt: message.at,
+          ),
+        );
+      }
+      added = true;
+    }
+    if (added) {
+      _notify();
+      unawaited(_persistState());
     }
   }
 
@@ -2322,6 +2381,11 @@ class TacticalController extends ChangeNotifier {
     if (statuses != null) {
       _statuses.restore(statuses);
     }
+    final hqMessageId = extras['hqMessageId'];
+    if (hqMessageId is int &&
+        (_lastHqMessageId == null || hqMessageId > _lastHqMessageId!)) {
+      _lastHqMessageId = hqMessageId;
+    }
     final sos = map(extras['sos']);
     if (sos != null && _sos.restore(sos, now: _clock()) && !_sos.active) {
       // The app was killed or the phone restarted during our own distress
@@ -2374,6 +2438,7 @@ class TacticalController extends ChangeNotifier {
           'rendezvous': ?_rendezvous?.toJson(),
           'statuses': _statuses.toJson(),
           'sos': _sos.toJson(),
+          'hqMessageId': ?_lastHqMessageId,
         },
         owner: session.userName,
       );

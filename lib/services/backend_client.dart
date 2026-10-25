@@ -81,6 +81,43 @@ class GroupKeyMaterial {
   final List<int> bytes;
 }
 
+/// A message the commanders sent to a group from the web panel.
+class HqMessage {
+  const HqMessage({
+    required this.id,
+    required this.groupId,
+    required this.text,
+    required this.priority,
+    required this.author,
+    required this.at,
+  });
+
+  final int id;
+  final String groupId;
+  final String text;
+  final bool priority;
+  final String author;
+  final DateTime at;
+
+  static HqMessage? fromJson(Map<String, dynamic> json) {
+    final id = json['id'];
+    final groupId = json['groupId'];
+    final text = json['text'];
+    final at = DateTime.tryParse(json['at']?.toString() ?? '');
+    if (id is! int || groupId is! String || text is! String || at == null) {
+      return null;
+    }
+    return HqMessage(
+      id: id,
+      groupId: groupId,
+      text: text,
+      priority: json['priority'] == true,
+      author: json['author']?.toString() ?? '',
+      at: at.toLocal(),
+    );
+  }
+}
+
 /// Everything needed to join a group's PTT room.
 class PttJoinInfo {
   const PttJoinInfo({
@@ -183,7 +220,9 @@ class BackendClient {
   }
 
   /// Latest own position, status and battery for the commanders' panel.
-  Future<void> reportPosition(
+  /// Returns the panel messages for the member's groups after
+  /// [sinceMessageId] (they ride on this call instead of a separate poll).
+  Future<List<HqMessage>> reportPosition(
     String sessionToken, {
     required double latitude,
     required double longitude,
@@ -192,11 +231,13 @@ class BackendClient {
     double? accuracyM,
     int? batteryPercent,
     String? status,
+    int? sinceMessageId,
   }) async {
-    await _post(
+    final response = await _post(
       'report',
       sessionToken: sessionToken,
       body: {
+        'sinceMessageId': ?sinceMessageId,
         'lat': latitude,
         'lon': longitude,
         'at': at.toUtc().toIso8601String(),
@@ -206,6 +247,10 @@ class BackendClient {
         'status': ?status,
       },
     );
+    return [
+      for (final item in response['messages'] as List? ?? const [])
+        if (item is Map<String, dynamic>) ?HqMessage.fromJson(item),
+    ];
   }
 
   void close() => _http.close();

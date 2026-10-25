@@ -136,6 +136,13 @@ const helpTopics = [
   ),
   HelpTopic(
     'Zprávy a hlášení',
+    'Zprávy z velitelství',
+    'Velitelé mohou z webového panelu poslat zprávu skupině. Aplikace ji '
+        'vyzvedne s dalším hlášením polohy (do 2 minut, v úsporném režimu do '
+        '5) a ukáže ji ve skupině od VELITELSTVÍ, na pozadí i s upozorněním.',
+  ),
+  HelpTopic(
+    'Zprávy a hlášení',
     'Bez T-Beamu přes internet',
     'Když není T-Beam připojený, zprávy skupiny a poloha jdou přes '
         'internet (ikona mráčku). Soukromé zprávy a jiné skupiny potřebují '

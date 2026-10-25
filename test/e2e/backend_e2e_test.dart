@@ -54,8 +54,9 @@ void main() {
     expect(ptt.token.split('.'), hasLength(3));
     expect(ptt.keys.last.bytes, hasLength(32)); // decoded 256-bit key
 
-    // Position report for the commanders' situation page.
-    await client.reportPosition(
+    // Position report for the commanders' situation page; the panel's
+    // messages for the member's groups come back with it.
+    final hq = await client.reportPosition(
       refreshed.token,
       latitude: 50.087451,
       longitude: 14.420671,
@@ -64,6 +65,18 @@ void main() {
       batteryPercent: 76,
       status: 'holding',
     );
+    expect(hq.map((m) => m.text), ['Přesun na RV-1 – ihned']);
+    expect(hq.single.priority, isTrue);
+    expect(hq.single.author, 'VELITEL E2E');
+    final newer = await client.reportPosition(
+      refreshed.token,
+      latitude: 50.087451,
+      longitude: 14.420671,
+      at: DateTime.now(),
+      batteryPercent: 76,
+      sinceMessageId: hq.single.id,
+    );
+    expect(newer, isEmpty);
     final badReport = await failure(
       client.reportPosition(
         refreshed.token,

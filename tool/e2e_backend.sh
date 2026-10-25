@@ -62,6 +62,10 @@ user("e2e-operator", ["alpha", "recon"], display_name="OPERÁTOR E2E")
 user("e2e-disabled", ["alpha"], disabled=True)
 user("e2e-medic", ["med"], role="medic")
 user("e2e-lock", ["alpha"])
+from core.models import GroupMessage
+GroupMessage.objects.create(group_id="alpha", text="Přesun na RV-1 – ihned",
+                            priority=True, author="VELITEL E2E")
+GroupMessage.objects.create(group_id="command", text="jen velení", author="X")
 '
 )
 

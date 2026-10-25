@@ -17,6 +17,7 @@ from .models import (
     MEMBER_STATUSES,
     ROLES,
     Device,
+    GroupMessage,
     MemberPosition,
     TeamGroup,
     User,
@@ -286,9 +287,11 @@ def report_position(request):
     battery = _number(body.get("battery"))
     altitude = _number(body.get("alt"))
     accuracy = _number(body.get("accuracy"))
+    pending = _pending_messages(user, body.get("sinceMessageId"))
     previous = MemberPosition.objects.filter(user=user).first()
     if previous is not None and previous.reported_at > reported:
-        return _json(200, {"ok": True})  # an older report arrived late
+        # An older report arrived late: keep the newer position.
+        return _json(200, {"ok": True, "messages": pending})
     MemberPosition.objects.update_or_create(
         user=user,
         defaults={
@@ -305,7 +308,28 @@ def report_position(request):
             "received_at": now,
         },
     )
-    return _json(200, {"ok": True})
+    return _json(200, {"ok": True, "messages": pending})
+
+
+# Without a known last message id the app gets what it may have missed
+# recently, not the whole history.
+FIRST_PICKUP_WINDOW = timedelta(minutes=30)
+
+
+def _pending_messages(user, since):
+    """Panel messages for the member's groups after [since] (an id), oldest
+    first; capped so a long offline phone is not flooded."""
+    messages = GroupMessage.objects.filter(
+        group_id__in=user.groups.values_list("id", flat=True)
+    )
+    if type(since) is int and since > 0:
+        messages = messages.filter(id__gt=since)
+    else:
+        messages = messages.filter(
+            created_at__gte=timezone.now() - FIRST_PICKUP_WINDOW
+        )
+    latest = list(messages.order_by("-id")[:50])
+    return [message.to_json() for message in reversed(latest)]
 
 
 # --- Admin: users -------------------------------------------------------------

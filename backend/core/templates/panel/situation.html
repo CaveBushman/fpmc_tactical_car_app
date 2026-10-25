@@ -12,6 +12,7 @@
   <button type="submit">Zobrazit</button>
   <a class="button secondary" href="">Obnovit</a>
 </form>
+<a class="button" href="{% url 'panel-situation-message' %}{% if group_id %}?group={{ group_id }}{% endif %}">Poslat zprávu skupině</a>
 <p class="muted">Aktualizováno {% now "H:i:s" %}, stránka se obnovuje každou minutu.
   Poslední poloha, kterou aplikace člena poslala na server (každé 2 minuty, i když stojí).
   Údaje starší než {{ stale_minutes }} minut jsou šedé. Historie pohybu se neukládá.</p>
@@ -30,6 +31,16 @@
   <tr><td colspan="6" class="muted">Žádný člen zatím polohu neposlal.</td></tr>
   {% endfor %}
 </table></div>
+{% if recent_messages %}
+<h2>Poslední zprávy z panelu</h2>
+<div class="wrap"><table>
+  <tr><th>Čas</th><th>Skupina</th><th>Od</th><th>Zpráva</th></tr>
+  {% for m in recent_messages %}
+  <tr><td>{{ m.created_at|date:"j. n. H:i" }}</td><td>{{ m.group_id }}</td><td>{{ m.author }}</td>
+    <td>{% if m.priority %}<span class="off">PRIORITNÍ</span> {% endif %}{{ m.text }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
 {% if silent %}
 <h2>Bez polohy</h2>
 <p>{% for m in silent %}<span class="tag">{{ m.username }}</span>{% endfor %}</p>

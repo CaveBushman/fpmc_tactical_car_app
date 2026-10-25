@@ -18,13 +18,14 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import audit, keys, security
 from .api import GROUP_ID, MIN_PASSWORD_LENGTH, USER_NAME
 from .mgrs import to_mgrs
-from .models import ROLES, AuditEntry, TeamGroup, User
+from .models import ROLES, AuditEntry, GroupMessage, TeamGroup, User
 
 ROLE_CHOICES = [
     ("operator", "Operátor"),
@@ -597,8 +598,45 @@ def situation(request):
             "groups": TeamGroup.objects.all(),
             "group_id": group_id,
             "stale_minutes": int(STALE_AFTER.total_seconds() // 60),
+            "recent_messages": GroupMessage.objects.all()[:10],
         },
     )
+
+
+@commander_required
+def group_message_send(request):
+    if request.method != "POST":
+        return render(
+            request,
+            "panel/group_message.html",
+            {
+                "groups": TeamGroup.objects.all(),
+                "group_id": request.GET.get("group", ""),
+            },
+        )
+    group = TeamGroup.objects.filter(id=request.POST.get("group", "")).first()
+    text = " ".join(request.POST.get("text", "").split())
+    if group is None:
+        messages.error(request, "Vyberte skupinu.")
+    elif not text or len(text) > 500:
+        messages.error(request, "Zpráva musí mít 1 až 500 znaků.")
+    else:
+        priority = request.POST.get("priority") == "on"
+        GroupMessage.objects.create(
+            group_id=group.id,
+            text=text,
+            priority=priority,
+            author=request.user.display_name or request.user.username,
+        )
+        audit.record(
+            "group_message", request.user, group=group.id, priority=priority
+        )
+        messages.success(
+            request,
+            f"Zpráva pro {group.name} odeslána. Aplikace ji dostanou do 2 minut "
+            "(v úsporném režimu do 5).",
+        )
+    return redirect(f"{reverse('panel-situation')}?group={group.id if group else ''}")
 
 
 # --- Audit ---------------------------------------------------------------------
