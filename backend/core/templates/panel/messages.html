@@ -1,0 +1,39 @@
+{% extends "panel/base.html" %}
+{% block title %}Zprávy{% endblock %}
+{% block content %}
+<h1>Zprávy z panelu</h1>
+<form method="get" class="card">
+  <label for="group">Skupina</label>
+  <select id="group" name="group">
+    <option value="">všechny</option>
+    {% for g in groups %}<option value="{{ g.id }}" {% if g.id == group_id %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+  </select>
+  <p class="check"><input type="checkbox" id="priority" name="priority" value="1" {% if priority_only %}checked{% endif %}> <label for="priority">jen prioritní</label></p>
+  <button type="submit">Zobrazit</button>
+  <a class="button secondary" href="{% url 'panel-messages-csv' %}{% if query %}?{{ query }}{% endif %}">Stáhnout CSV</a>
+</form>
+<a class="button" href="{% url 'panel-situation-message' %}{% if group_id %}?group={{ group_id }}{% endif %}">Poslat zprávu skupině</a>
+<p class="muted">Celkem {{ page.paginator.count }}. „Převzalo“ potvrzuje aplikace člena s dalším hlášením,
+  „Rozumím“ člen tlačítkem u prioritní zprávy. Počty jsou vůči dnešním členům skupiny.</p>
+<div class="wrap"><table class="stack">
+  <tr><th>Čas</th><th>Skupina</th><th>Od</th><th>Zpráva</th><th>Převzalo</th></tr>
+  {% for row in rows %}{% with m=row.message %}
+  <tr><td data-label="Čas">{{ m.created_at|date:"j. n. Y H:i" }}</td><td data-label="Skupina">{{ m.group_id }}</td><td data-label="Od">{{ m.author }}</td>
+    <td data-label="Zpráva">{% if m.priority %}<span class="off">PRIORITNÍ</span> {% endif %}{{ m.text }}</td>
+    <td data-label="Převzalo"><span{% if row.missing %} class="{% if m.priority %}off{% else %}pending{% endif %}"{% endif %}>{{ row.received }}/{{ row.total }}</span>
+      {% if row.missing %}<br><span class="muted">čeká: {{ row.missing|join:", " }}</span>{% endif %}
+      {% if m.priority %}<br>Rozumím: <span class="{% if row.unacked %}off{% else %}ok{% endif %}">{{ row.acked }}/{{ row.total }}</span>
+        {% if row.unacked %}<br><span class="muted">nepotvrdil: {{ row.unacked|join:", " }}</span>{% endif %}{% endif %}</td></tr>
+  {% endwith %}
+  {% empty %}
+  <tr><td colspan="5" class="muted">Žádné zprávy.</td></tr>
+  {% endfor %}
+</table></div>
+{% if page.paginator.num_pages > 1 %}
+<p class="pager">
+  {% if page.has_previous %}<a href="?{% if query %}{{ query }}&amp;{% endif %}page={{ page.previous_page_number }}">← novější</a>{% endif %}
+  <span class="muted">strana {{ page.number }} z {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a href="?{% if query %}{{ query }}&amp;{% endif %}page={{ page.next_page_number }}">starší →</a>{% endif %}
+</p>
+{% endif %}
+{% endblock %}

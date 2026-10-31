@@ -83,6 +83,7 @@
   .off { color:var(--danger); font-weight:700; }
   .pending { color:var(--sand); font-weight:700; }
   .ok { color:#8fc77a; font-weight:700; }
+  .pager { display:flex; gap:16px; align-items:center; margin-top:12px; }
   form.inline { display:inline; }
   .card { background:var(--panel); border:1px solid var(--line); border-radius:8px;
           padding:14px; margin-bottom:16px; }
@@ -96,7 +97,7 @@
   button, .button { display:inline-block; padding:8px 14px; border:0; border-radius:6px;
            background:var(--accent); color:#fff; font:inherit; font-weight:700;
            cursor:pointer; text-decoration:none; margin-top:10px; }
-  button.secondary { background:#33402a; }
+  button.secondary, .button.secondary { background:#33402a; }
   button.danger { background:var(--danger); }
   .messages { list-style:none; padding:0; }
   .messages li { padding:8px 12px; border-radius:6px; margin-bottom:8px; background:#24301d; }
@@ -112,6 +113,7 @@
   <nav>
     <a href="{% url 'panel-situation' %}" {% if section == 'situation' %}class="active"{% endif %}>Situace</a>
     <a href="{% url 'panel-users' %}" {% if section == 'users' %}class="active"{% endif %}>Uživatelé</a>
+    <a href="{% url 'panel-messages' %}" {% if section == 'messages' %}class="active"{% endif %}>Zprávy</a>
     <a href="{% url 'panel-groups' %}" {% if section == 'groups' %}class="active"{% endif %}>Skupiny</a>
     <a href="{% url 'panel-audit' %}" {% if section == 'audit' %}class="active"{% endif %}>Audit</a>
     <a href="{% url 'panel-own-password' %}">Moje heslo</a>

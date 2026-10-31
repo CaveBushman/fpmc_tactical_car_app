@@ -6,6 +6,7 @@ def panel_section(request):
         ("panel-group", "groups"),
         ("panel-audit", "audit"),
         ("panel-situation", "situation"),
+        ("panel-messages", "messages"),
     ):
         if name.startswith(prefix):
             return {"section": section}

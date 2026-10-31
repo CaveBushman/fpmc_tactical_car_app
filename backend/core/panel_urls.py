@@ -24,5 +24,7 @@ urlpatterns = [
     path("groups/<str:group_id>/rotate", panel.group_rotate, name="panel-group-rotate"),
     path("situation", panel.situation, name="panel-situation"),
     path("situation/message", panel.group_message_send, name="panel-situation-message"),
+    path("messages", panel.message_log, name="panel-messages"),
+    path("messages.csv", panel.message_log_csv, name="panel-messages-csv"),
     path("audit", panel.audit_log, name="panel-audit"),
 ]

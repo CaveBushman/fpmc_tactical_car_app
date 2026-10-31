@@ -1087,6 +1087,53 @@ class GroupMessageTests(ApiTestCase):
         self.assertFalse(MemberPosition.objects.exists())
         self.assertEqual(self.call("POST", "/messages", {}).status_code, 401)
 
+    def test_message_log_filters_pages_and_exports(self):
+        token = self.login()
+        order = GroupMessage.objects.create(group_id="alpha", text="Stáhnout se",
+                                            priority=True, author="VELITEL")
+        GroupMessage.objects.create(group_id="bravo", text="=HYPERLINK(1)",
+                                    author="VELITEL")
+        for i in range(55):
+            GroupMessage.objects.create(group_id="med", text=f"m{i}", author="X")
+        self.call("POST", "/report",
+                  {"lat": 50, "lon": 14, "sinceMessageId": order.id,
+                   "ackMessageIds": [order.id]}, token=token)
+        self.client.force_login(self.commander)
+
+        page = self.client.get("/panel/messages")
+        self.assertEqual(page.context["page"].paginator.count, 57)
+        self.assertEqual(len(page.context["rows"]), 50)
+        self.assertContains(page, "starší →")
+        self.assertContains(page, 'class="active">Zprávy')
+        second = self.client.get("/panel/messages", {"page": 2})
+        self.assertEqual(len(second.context["rows"]), 7)
+
+        only = self.client.get("/panel/messages", {"group": "alpha", "priority": "1"})
+        [row] = only.context["rows"]
+        self.assertEqual((row["message"], row["acked"], row["unacked"]),
+                         (order, 1, ["COMMANDER"]))
+        self.assertContains(only, "group=alpha&amp;priority=1")
+
+        export = self.client.get("/panel/messages.csv", {"group": "bravo"})
+        self.assertEqual(export["Content-Type"], "text/csv; charset=utf-8")
+        self.assertIn("attachment;", export["Content-Disposition"])
+        text = export.content.decode("utf-8")
+        self.assertTrue(text.startswith("\ufeffčas;skupina;"))
+        # A formula-like message is neutralised for Excel.
+        self.assertIn(";'=HYPERLINK(1);", text)
+        self.assertEqual(len(text.strip().splitlines()), 2)
+        entry = AuditEntry.objects.get(event="messages_exported")
+        self.assertEqual(entry.details, {"group": "bravo", "count": 1})
+
+        alpha = self.client.get("/panel/messages.csv", {"group": "alpha"})
+        line = alpha.content.decode("utf-8").strip().splitlines()[1]
+        self.assertIn(";ano;Stáhnout se;1;2;COMMANDER;1;COMMANDER", line)
+
+    def test_message_log_needs_a_commander(self):
+        self.client.force_login(self.operator)
+        self.assertEqual(self.client.get("/panel/messages").status_code, 403)
+        self.assertEqual(self.client.get("/panel/messages.csv").status_code, 403)
+
     def test_panel_sends_to_a_group(self):
         self.client.force_login(self.commander)
         form = self.client.get("/panel/situation/message", {"group": "bravo"})

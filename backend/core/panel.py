@@ -15,8 +15,10 @@ from django.contrib.auth import logout, update_session_auth_hash
 from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm
 from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Max, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -757,6 +759,7 @@ AUDIT_LABELS = {
     "group_created": "Vytvořena skupina",
     "group_deleted": "Smazána skupina",
     "group_message": "Zpráva skupině",
+    "messages_exported": "Export zpráv (CSV)",
     "group_updated": "Upravena skupina",
     "key_rotated": "Nový klíč skupiny",
     "login": "Přihlášení v aplikaci",
@@ -792,7 +795,7 @@ AUDIT_KEYS = {
     "keyId": "klíč", "priority": "prioritní", "ip": "IP", "deviceName": "zařízení",
     "disabled": "zablokován", "imported": "hromadně", "path": "adresa",
     "id": "id", "name": "název", "channelIndex": "kanál", "pttEnabled": "vysílačka",
-    "description": "popis",
+    "description": "popis", "count": "počet",
 }
 
 
@@ -809,6 +812,79 @@ def audit_details(details):
         parts.append(f"{AUDIT_KEYS.get(key, key)}: {value}")
     return "; ".join(parts)
 
+
+
+MESSAGES_PER_PAGE = 50
+
+
+def _message_filter(request):
+    group_id = request.GET.get("group", "")
+    found = GroupMessage.objects.all()
+    if group_id:
+        found = found.filter(group_id=group_id)
+    if request.GET.get("priority") == "1":
+        found = found.filter(priority=True)
+    return found, group_id
+
+
+@commander_required
+def message_log(request):
+    """Every message sent from the panel, newest first, with who received
+    and who confirmed it: for the after-action review."""
+    found, group_id = _message_filter(request)
+    page = Paginator(found, MESSAGES_PER_PAGE).get_page(request.GET.get("page"))
+    query = request.GET.copy()
+    query.pop("page", None)
+    return render(
+        request,
+        "panel/messages.html",
+        {
+            "page": page,
+            "rows": _with_receipts(page.object_list),
+            "groups": TeamGroup.objects.all(),
+            "group_id": group_id,
+            "priority_only": request.GET.get("priority") == "1",
+            "query": query.urlencode(),
+        },
+    )
+
+
+@commander_required
+def message_log_csv(request):
+    """The filtered messages as CSV for Excel (semicolons, UTF-8 with BOM)."""
+    found, group_id = _message_filter(request)
+    out = io.StringIO()
+    out.write("\ufeff")
+    writer = csv.writer(out, delimiter=";")
+    writer.writerow([
+        "čas", "skupina", "od", "prioritní", "zpráva",
+        "převzalo", "členů", "nepřevzali", "rozumím", "nepotvrdili",
+    ])
+    for row in _with_receipts(found):
+        message = row["message"]
+        writer.writerow([
+            timezone.localtime(message.created_at).strftime("%Y-%m-%d %H:%M:%S"),
+            message.group_id,
+            _csv_safe(message.author),
+            "ano" if message.priority else "ne",
+            _csv_safe(message.text),
+            row["received"],
+            row["total"],
+            _csv_safe(", ".join(row["missing"])),
+            row.get("acked", ""),
+            _csv_safe(", ".join(row.get("unacked", []))),
+        ])
+    audit.record("messages_exported", request.user, group=group_id or "vše",
+                 count=found.count())
+    response = HttpResponse(out.getvalue(), content_type="text/csv; charset=utf-8")
+    stamp = timezone.localtime().strftime("%Y%m%d-%H%M")
+    response["Content-Disposition"] = f'attachment; filename="zpravy-{stamp}.csv"'
+    return response
+
+
+def _csv_safe(text):
+    """Keeps Excel from running a message that starts like a formula."""
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
 
 
 @commander_required
