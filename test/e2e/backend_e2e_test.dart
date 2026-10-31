@@ -79,6 +79,17 @@ void main() {
       acknowledgedMessageIds: [hq.single.id],
     );
     expect(newer, isEmpty);
+    // Without a GPS fix the same exchange goes without a position.
+    final noFix = await client.syncMessages(
+      refreshed.token,
+      sinceMessageId: hq.single.id,
+      acknowledgedMessageIds: [hq.single.id],
+    );
+    expect(noFix, isEmpty);
+    expect(
+      (await client.syncMessages(refreshed.token)).map((m) => m.id),
+      [hq.single.id],
+    );
     final badReport = await failure(
       client.reportPosition(
         refreshed.token,

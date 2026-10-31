@@ -315,6 +315,21 @@ def report_position(request):
     return _json(200, {"ok": True, "messages": pending})
 
 
+def sync_messages(request):
+    """Panel messages and "Rozumím" confirmations without a position, for a
+    member whose phone has no usable GPS fix (indoors, in a vehicle); the
+    same exchange as on /report."""
+    user, _, error = _require_user(request)
+    if error:
+        return error
+    body = _body(request)
+    since = body.get("sinceMessageId")
+    pending = _pending_messages(user, since)
+    _confirm_messages(user, since)
+    _acknowledge_messages(user, body.get("ackMessageIds"))
+    return _json(200, {"ok": True, "messages": pending})
+
+
 # Without a known last message id the app gets what it may have missed
 # recently, not the whole history.
 FIRST_PICKUP_WINDOW = timedelta(minutes=30)

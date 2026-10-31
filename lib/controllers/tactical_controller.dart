@@ -1294,9 +1294,7 @@ class TacticalController extends ChangeNotifier {
   }) async {
     final backend = _backend;
     final token = _session?.sessionToken;
-    // The fix itself: the location state stream may not have caught up yet.
-    final fix = latest ?? _locationState.lastFix;
-    if (backend == null || token == null || fix == null || _backendReporting) {
+    if (backend == null || token == null || _backendReporting) {
       return;
     }
     final now = _clock();
@@ -1307,31 +1305,65 @@ class TacticalController extends ChangeNotifier {
     if (!force && last != null && now.difference(last) < interval) {
       return;
     }
+    // The fix itself: the location state stream may not have caught up yet.
+    // Without a fresh one (indoors, no GPS yet) only the panel messages are
+    // exchanged, so orders still arrive.
+    var fix = latest ?? _locationState.lastFix;
+    if (fix != null && now.difference(fix.timestamp) > maxReportedFixAge) {
+      fix = null;
+    }
     _backendReporting = true;
     _lastBackendReportAt = now;
+    final acks = _pendingHqAcks.toList()..sort();
     try {
-      final self = selfNode;
-      final acks = _pendingHqAcks.toList()..sort();
-      final incoming = await backend.reportPosition(
-        token,
-        sinceMessageId: _lastHqMessageId,
-        acknowledgedMessageIds: acks,
-        latitude: fix.latitude,
-        longitude: fix.longitude,
-        at: fix.timestamp,
-        altitudeM: fix.altitudeM.round(),
-        accuracyM: fix.accuracyM,
-        // Only a connected T-Beam's own reading, never a stale or sample one.
-        batteryPercent: meshConnected ? self.batteryPercent : null,
-        status: ownStatus?.name,
-      );
+      List<HqMessage> incoming;
+      if (fix == null) {
+        incoming = await backend.syncMessages(
+          token,
+          sinceMessageId: _lastHqMessageId,
+          acknowledgedMessageIds: acks,
+        );
+      } else {
+        try {
+          final self = selfNode;
+          incoming = await backend.reportPosition(
+            token,
+            sinceMessageId: _lastHqMessageId,
+            acknowledgedMessageIds: acks,
+            latitude: fix.latitude,
+            longitude: fix.longitude,
+            at: fix.timestamp,
+            altitudeM: fix.altitudeM.round(),
+            accuracyM: fix.accuracyM,
+            // Only a connected T-Beam's own reading, never a stale or sample
+            // one.
+            batteryPercent: meshConnected ? self.batteryPercent : null,
+            status: ownStatus?.name,
+          );
+        } on BackendException catch (error) {
+          if (error.statusCode != 400) {
+            rethrow;
+          }
+          // The server refused the position (say, the phone's clock is far
+          // off): the messages must not be held up by it.
+          incoming = await backend.syncMessages(
+            token,
+            sinceMessageId: _lastHqMessageId,
+            acknowledgedMessageIds: acks,
+          );
+        }
+      }
       if (acks.isNotEmpty) {
         _pendingHqAcks.removeAll(acks);
         unawaited(_persistState());
       }
       _applyHqMessages(incoming);
-    } on BackendException {
-      _lastBackendReportAt = null; // try again with the next fix
+    } on BackendException catch (error) {
+      // Unreachable or failing server: try again with the next fix or tick.
+      // Anything else would only fail again, so wait the normal interval.
+      if (error.statusCode == 0 || error.statusCode >= 500) {
+        _lastBackendReportAt = null;
+      }
       return;
     } finally {
       _backendReporting = false;
@@ -1342,6 +1374,10 @@ class TacticalController extends ChangeNotifier {
       unawaited(_reportToBackend(force: true));
     }
   }
+
+  /// The server keeps only recent positions (it refuses fixes older than an
+  /// hour); an older last fix is not reported.
+  static const maxReportedFixAge = Duration(minutes: 50);
 
   // --- Messages from the commanders' panel ------------------------------------------
 

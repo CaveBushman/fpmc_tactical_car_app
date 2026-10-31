@@ -251,11 +251,33 @@ class BackendClient {
         'status': ?status,
       },
     );
-    return [
-      for (final item in response['messages'] as List? ?? const [])
-        if (item is Map<String, dynamic>) ?HqMessage.fromJson(item),
-    ];
+    return _hqMessages(response);
   }
+
+  /// Panel messages and "Rozumím" confirmations without a position, for a
+  /// phone without a usable GPS fix; otherwise they ride on
+  /// [reportPosition].
+  Future<List<HqMessage>> syncMessages(
+    String sessionToken, {
+    int? sinceMessageId,
+    List<int> acknowledgedMessageIds = const [],
+  }) async {
+    final response = await _post(
+      'messages',
+      sessionToken: sessionToken,
+      body: {
+        'sinceMessageId': ?sinceMessageId,
+        if (acknowledgedMessageIds.isNotEmpty)
+          'ackMessageIds': acknowledgedMessageIds,
+      },
+    );
+    return _hqMessages(response);
+  }
+
+  static List<HqMessage> _hqMessages(Map<String, dynamic> response) => [
+    for (final item in response['messages'] as List? ?? const [])
+      if (item is Map<String, dynamic>) ?HqMessage.fromJson(item),
+  ];
 
   void close() => _http.close();
 

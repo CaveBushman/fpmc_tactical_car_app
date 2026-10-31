@@ -1069,6 +1069,24 @@ class GroupMessageTests(ApiTestCase):
         self.assertNotIn("acked", rows["Info"])
         self.assertContains(page, "nepotvrdil: COMMANDER")
 
+    def test_messages_and_acks_without_a_position(self):
+        token = self.login()
+        order = GroupMessage.objects.create(group_id="alpha", text="Stáhnout se",
+                                            priority=True, author="VELITEL")
+        got = self.call("POST", "/messages", {}, token=token).json()
+        self.assertEqual([m["id"] for m in got["messages"]], [order.id])
+        again = self.call(
+            "POST", "/messages",
+            {"sinceMessageId": order.id, "ackMessageIds": [order.id]}, token=token,
+        ).json()
+        self.assertEqual(again["messages"], [])
+        self.assertTrue(MessageAck.objects.filter(message=order).exists())
+        self.operator.refresh_from_db()
+        self.assertEqual(self.operator.messages_seen_id, order.id)
+        # No position was stored, and the call needs a session.
+        self.assertFalse(MemberPosition.objects.exists())
+        self.assertEqual(self.call("POST", "/messages", {}).status_code, 401)
+
     def test_panel_sends_to_a_group(self):
         self.client.force_login(self.commander)
         form = self.client.get("/panel/situation/message", {"group": "bravo"})

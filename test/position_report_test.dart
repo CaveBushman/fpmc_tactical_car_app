@@ -16,6 +16,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late List<Map<String, dynamic>> reports;
+  late List<Map<String, dynamic>> syncs;
   late List<Map<String, dynamic>> hqMessages;
   late int reportStatus;
   late Duration offset;
@@ -24,6 +25,7 @@ void main() {
 
   setUp(() async {
     reports = [];
+    syncs = [];
     hqMessages = [];
     reportStatus = 200;
     offset = Duration.zero;
@@ -44,6 +46,13 @@ void main() {
                 'groups': ['alpha'],
               },
             }),
+            200,
+          );
+        }
+        if (path.endsWith('/messages')) {
+          syncs.add(jsonDecode(request.body) as Map<String, dynamic>);
+          return http.Response.bytes(
+            utf8.encode(jsonEncode({'ok': true, 'messages': hqMessages})),
             200,
           );
         }
@@ -270,5 +279,63 @@ void main() {
       ).needsAcknowledgement,
       isTrue,
     );
+  });
+
+  Map<String, Object> order(int id) => {
+    'id': id,
+    'groupId': 'alpha',
+    'text': 'Stáhnout se',
+    'priority': true,
+    'author': 'VELITEL',
+    'at': DateTime.now().toUtc().toIso8601String(),
+  };
+
+  test('without a GPS fix the orders still arrive and get confirmed', () async {
+    hqMessages = [order(7)];
+    // No fix at all: the aging tick exchanges only the messages.
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    expect(reports, isEmpty);
+    expect(syncs, hasLength(1));
+    expect(syncs.single, isEmpty);
+    final message = controller.messages.firstWhere((m) => m.hqMessageId == 7);
+
+    hqMessages = [];
+    controller.acknowledgeHqMessage(message);
+    await pumpEventQueue();
+    expect(syncs.last, {
+      'sinceMessageId': 7,
+      'ackMessageIds': [7],
+    });
+    expect(reports, isEmpty);
+  });
+
+  test('a fix older than the server accepts is not reported', () async {
+    location.emit(
+      LocationFix(
+        latitude: 50,
+        longitude: 14.4,
+        altitudeM: 240,
+        accuracyM: 6,
+        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
+      ),
+    );
+    await pumpEventQueue();
+    expect(reports, isEmpty);
+    expect(syncs, hasLength(1));
+  });
+
+  test('a refused position does not hold up the orders', () async {
+    hqMessages = [order(7)];
+    reportStatus = 400; // e.g. the phone's clock is far off
+    await fix(50.0);
+    expect(reports, hasLength(1));
+    expect(syncs, hasLength(1));
+    expect(controller.messages.where((m) => m.hqMessageId == 7), hasLength(1));
+    // It is not retried on every tick, only after the normal interval.
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    expect(reports, hasLength(1));
+    offset = const Duration(minutes: 3);
+    await fix(50.001);
+    expect(reports, hasLength(2));
   });
 }
