@@ -1388,6 +1388,20 @@ class TacticalController extends ChangeNotifier {
   /// Confirmed priority messages not yet reported to the server.
   final Set<int> _pendingHqAcks = {};
 
+  /// Priority panel orders still waiting for "Rozumím", newest first; older
+  /// ones keep their button in the messages but no longer take the banner.
+  List<MeshMessage> get pendingOrders {
+    final now = _clock();
+    return [
+      for (final message in _messages)
+        if (message.needsAcknowledgement &&
+            now.difference(message.sentAt) < orderBannerMaxAge)
+          message,
+    ];
+  }
+
+  static const orderBannerMaxAge = Duration(hours: 12);
+
   /// Confirms a priority panel message ("Rozumím"); the confirmation goes
   /// to the server right away, or with the next report when offline.
   void acknowledgeHqMessage(MeshMessage message) {

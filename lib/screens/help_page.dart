@@ -141,7 +141,8 @@ const helpTopics = [
         'vyzvedne s dalším hlášením polohy (do 2 minut, v úsporném režimu do '
         '5), i bez signálu GPS, a ukáže ji ve skupině od VELITELSTVÍ, na '
         'pozadí i s upozorněním. '
-        'U prioritní zprávy potvrďte tlačítkem Rozumím – velitel v panelu '
+        'Nepotvrzený prioritní rozkaz svítí žlutě nad každou obrazovkou, i nad '
+        'mapou, dokud ho nepotvrdíte tlačítkem Rozumím – velitel v panelu '
         'vidí, kdo rozkaz potvrdil.',
   ),
   HelpTopic(

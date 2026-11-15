@@ -22,6 +22,7 @@ import 'services/mesh_radio.dart';
 import 'services/offline_tiles/tile_math.dart';
 import 'theme.dart';
 import 'widgets/common_widgets.dart';
+import 'widgets/hq_order_banner.dart';
 import 'widgets/rendezvous_banner.dart';
 import 'widgets/sos_widgets.dart';
 
@@ -473,6 +474,19 @@ class _TacticalHomeScreenState extends State<TacticalHomeScreen>
                 onCancelOwn: () => unawaited(controller.stopSos()),
                 onAcknowledge: (alert) =>
                     unawaited(controller.acknowledgeSos(alert)),
+              ),
+              HqOrderBanner(
+                orders: controller.pendingOrders,
+                onAcknowledge: controller.acknowledgeHqMessage,
+                onShow: (order) {
+                  final group = controller.allowedGroups.indexWhere(
+                    (g) => g.id == order.groupId,
+                  );
+                  if (group != -1) {
+                    controller.selectGroup(group);
+                  }
+                  _selectTab(messagesTabIndex);
+                },
               ),
               MemberStatusBanners(
                 alerts: controller.urgentStatuses,
